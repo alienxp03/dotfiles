@@ -55,6 +55,8 @@ keymap("n", "<leader>q", ":Bdelete<cr>", { desc = "Close current buffer" })
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts)
+-- Normal paste
+keymap("v", "p", '"_dP', opts)
 
 -- Keep things in the middle 
 keymap("n", "<C-d>", "<C-d>zz", opts)
@@ -69,8 +71,6 @@ keymap("n", "pp", '"0p', opts)
 keymap("v", "<", "<gv", opts)
 keymap("v", ">", ">gv", opts)
 
--- Normal paste
-keymap("v", "p", '"_dP', opts)
 
 -- Visual Block --
 -- Move text up and down
@@ -85,4 +85,8 @@ keymap("n", "<leader>rp", ":lua require('spectre').open()<cr>", { desc = "Find a
 keymap("n", "<leader>rf", ":lua require('spectre').open_file_search()<cr>", { desc = "Find and replace in file" })
 
 -- Copy path
-keymap("n", "<leader>cp", ":let @+ = expand('%:p')<cr>", { desc = "Copy path" })
+keymap("n", "<leader>cp", ":let @+=@%<cr>", { desc = "Copy relative path" })
+keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", { desc = "Copy full path" })
+
+-- Replace word on current cursor
+keymap("n", "<leader>s", ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>", { desc = "Replace current word" })

@@ -1,7 +1,6 @@
 local lspkind = require('lspkind')
 local luasnip = require("luasnip")
 local cmp = require("cmp")
--- local luasnip = require 'luasnip'
 
 require("luasnip.loaders.from_vscode").load({ paths = "~/.config/nvim/snippets" })
 
@@ -23,24 +22,5 @@ cmp.setup {
     ['<S-Tab>'] = cmp.mapping.select_prev_item(),
     ['<C-j>'] = cmp.mapping.select_next_item(),
     ['<C-k>'] = cmp.mapping.select_prev_item(),
-  },
-  sources = {
-    { name = 'nvim_lsp' },
-    { name = 'buffer' },
-    { name = 'path' },
-    { name = 'luasnip' },
-    { name = 'ruby_lsp' },
-  },
-  formatting = {
-    format = lspkind.cmp_format({
-      mode = "symbol_text",
-      menu = ({
-        buffer = "[Buffer]",
-        nvim_lsp = "[LSP Nvim]",
-        ruby_lsp = "[LSP Ruby]",
-        luasnip = "[LuaSnip]",
-        nvim_lua = "[Lua]",
-      })
-    }),
   },
 }

@@ -1,23 +1,32 @@
 -- Install packer
--- local install_path = vim.fn.stdpath 'data' .. '/site/pack/packer/start/packer.nvim'
--- if vim.fn.empty(vim.fn.glob(install_path)) > 0 then
---   vim.fn.execute('!git clone https://github.com/wbthomason/packer.nvim ' .. install_path)
---   vim.cmd [[packadd packer.nvim]]
--- end
+local install_path = vim.fn.stdpath 'data' .. '/site/pack/packer/start/packer.nvim'
+if vim.fn.empty(vim.fn.glob(install_path)) > 0 then
+  vim.fn.execute('!git clone https://github.com/wbthomason/packer.nvim ' .. install_path)
+  vim.cmd [[packadd packer.nvim]]
+end
 
 require('packer').startup(function(use)
   -- Package manager
   use("wbthomason/packer.nvim")
-  use { -- LSP Configuration & Plugins
-    'neovim/nvim-lspconfig',
+  use {
+    'VonHeikemen/lsp-zero.nvim',
+    branch = 'v2.x',
     requires = {
-      -- Automatically install LSPs to stdpath for neovim
-      'williamboman/mason.nvim',
-      'williamboman/mason-lspconfig.nvim',
+      -- LSP Support
+      {'neovim/nvim-lspconfig'},             -- Required
+      {                                      -- Optional
+        'williamboman/mason.nvim',
+        run = function()
+          pcall(vim.cmd, 'MasonUpdate')
+        end,
+      },
+      {'williamboman/mason-lspconfig.nvim'}, -- Optional
 
-      -- Useful status updates for LSP
-      'j-hui/fidget.nvim',
-    },
+      -- Autocompletion
+      {'hrsh7th/nvim-cmp'},     -- Required
+      {'hrsh7th/cmp-nvim-lsp'}, -- Required
+      {'L3MON4D3/LuaSnip'},     -- Required
+    }
   }
 
   -- Github Copilot
