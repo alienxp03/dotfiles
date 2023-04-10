@@ -90,3 +90,6 @@ keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", { desc = "Copy full path"
 
 -- Replace word on current cursor
 keymap("n", "<leader>s", ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>", { desc = "Replace current word" })
+
+-- Lazygit
+keymap("n", "<leader>gl", ":LazyGit<cr>", { desc = "LazyGit" })

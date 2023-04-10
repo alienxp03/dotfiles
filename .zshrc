@@ -5,14 +5,15 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-# For cross-platform logics
-if [ "$(uname -s)" = "Darwin" ]; then
-elif [ "$(uname -s)" = "Linux" ]; then
-fi
-
 unsetopt INTERACTIVE_COMMENTS
 unsetopt BAD_PATTERN
 
+# For cross-platform logics
+if [ "$(uname -s)" = "Darwin" ]; then
+  source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
+elif [ "$(uname -s)" = "Linux" ]; then
+  source "$HOME/.dotfiles/zshrc/env.linux.zsh"
+fi
 source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 source "$HOME/.dotfiles/zshrc/aliases.zsh"

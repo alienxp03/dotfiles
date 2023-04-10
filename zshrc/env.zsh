@@ -1,6 +1,3 @@
-# Set Homebrew
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_THEME="powerlevel10k/powerlevel10k"
 export EDITOR='nvim'

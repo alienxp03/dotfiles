@@ -105,6 +105,8 @@ require('packer').startup(function(use)
       }
     end
   }
+  use 'tpope/vim-fugitive' -- Git related plugins
+  use 'kdheepak/lazygit.nvim'
 
   use {
     'nvim-telescope/telescope.nvim', tag = '0.1.1',
@@ -113,7 +115,6 @@ require('packer').startup(function(use)
   use {'nvim-telescope/telescope-fzf-native.nvim', run = 'make' }
   use 'tpope/vim-rhubarb'
   use "tpope/vim-surround" -- Change surrounding words
-  use 'tpope/vim-fugitive' -- Git related plugins
   use "nathom/filetype.nvim" -- Faster filetype
   use 'nvim-lualine/lualine.nvim' -- Fancier statusline
   use 'tpope/vim-sleuth' -- Detect tabstop and shiftwidth automatically
