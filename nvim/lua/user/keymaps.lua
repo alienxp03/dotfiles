@@ -40,7 +40,7 @@ keymap("n", "<S-h>", ":bprevious<CR>", opts)
 -- fzf-lua
 keymap("n", "<C-p>", ":FzfLua files<CR>", { desc = "Find files" } )
 keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", { desc = "Search text current" } )
-keymap("n", "<leader>ff", ":FzfLua blines<CR>", { desc = "Live grep current buffer" } )
+keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", { desc = "Live grep current buffer" } )
 keymap("n", "<leader>gd", ":FzfLua lsp_definitions<CR>", { desc = "Search text current" } )
 keymap("n", "<leader>ds", ":FzfLua lsp_document_symbols<CR>", { desc = "Document symbols" } )
 

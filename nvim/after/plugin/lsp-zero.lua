@@ -32,6 +32,7 @@ local servers = {
 
 lsp.ensure_installed({
   "bashls",
+  "tsserver",
   "solargraph",
   "docker_compose_language_service",
   "jsonls",
