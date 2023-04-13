@@ -7,12 +7,18 @@ lsp.on_attach(function(_, bufnr)
 end)
 
 local servers = {
+  bashls = {},
+  tsserver = {},
+  docker_compose_language_service = {},
+  jsonls = {},
+  yamlls = {},
   html = {
     filetypes = { "html", "slim" }
   },
-  ruby_ls = {
-    cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
-  },
+  lua_ls = lsp.nvim_lua_ls(),
+  dockerls = {},
+  gopls = {},
+  cssls = {},
   solargraph = {
     cmd = { home_path .. "/.rbenv/shims/solargraph", 'stdio' },
     root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
@@ -22,6 +28,10 @@ local servers = {
         completion = true,
         diagnostic = true,
         folding = true,
+        logLevel = 'warn',
+        hover = true,
+        formatting = true,
+        checkGemVersion = true,
         references = true,
         rename = true,
         symbols = true
@@ -30,19 +40,12 @@ local servers = {
   }
 }
 
-lsp.ensure_installed({
-  "bashls",
-  "tsserver",
-  "solargraph",
-  "docker_compose_language_service",
-  "jsonls",
-  "yamlls",
-  "lua_ls",
-  "html",
-  "dockerls",
-  "gopls",
-  "cssls"
-})
+local server_names = {}
+for name, _ in pairs(servers) do
+  table.insert(server_names, name)
+end
+
+lsp.ensure_installed(server_names)
 
 --  This function gets run when an LSP connects to a particular buffer.
 local on_attach = function(_, bufnr)
@@ -72,8 +75,5 @@ for name, config in pairs(servers) do
 
   lsp.configure(name, config)
 end
-
--- (Optional) Configure lua language server for neovim
-require('lspconfig').lua_ls.setup(lsp.nvim_lua_ls())
 
 lsp.setup()

@@ -38,7 +38,5 @@ alias tn="tmux new -s $(pwd | sed 's/.*\///g')"
 alias v='nvim'
 alias xx='exit'
 
-alias hs='history | fzf'
-
 # misc
 alias kll='kill -9'
