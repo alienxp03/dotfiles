@@ -89,3 +89,10 @@ keymap("n", "<leader>s", ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>",
 
 -- Lazygit
 keymap("n", "<leader>gl", ":LazyGit<cr>", { desc = "LazyGit" })
+
+-- Tmux navigation
+-- Temporary fix. Seems to be a bug, had to manually declare these bindings for now
+keymap("n", "<C-h>", ":TmuxNavigateLeft<cr>", opts)
+keymap("n", "<C-j>", ":TmuxNavigateDown<cr>", opts)
+keymap("n", "<C-k>", ":TmuxNavigateUp<cr>", opts)
+keymap("n", "<C-l>", ":TmuxNavigateRight<cr>", opts)

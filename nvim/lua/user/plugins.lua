@@ -84,7 +84,7 @@ require('lazy').setup({
     },
   },
   {
-    'akinsho/bufferline.nvim', tag = 'v3.*', dependencies = 'nvim-tree/nvim-web-devicons'
+    'akinsho/bufferline.nvim', dependencies = 'nvim-tree/nvim-web-devicons'
   },
   'akinsho/toggleterm.nvim',
   'moll/vim-bbye', -- Bdelete
