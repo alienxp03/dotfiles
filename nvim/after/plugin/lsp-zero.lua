@@ -10,9 +10,6 @@ local servers = {
   html = {
     filetypes = { "html", "slim" }
   },
-  ruby_ls = {
-    cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
-  },
   solargraph = {
     cmd = { home_path .. "/.rbenv/shims/solargraph", 'stdio' },
     root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
