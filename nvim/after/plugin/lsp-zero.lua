@@ -2,10 +2,6 @@ local lsp = require('lsp-zero').preset({})
 local lspconfig = require("lspconfig")
 local home_path = os.getenv("HOME")
 
-lsp.on_attach(function(_, bufnr)
-  lsp.default_keymaps({buffer = bufnr})
-end)
-
 local servers = {
   html = {
     filetypes = { "html", "slim" }
@@ -40,6 +36,21 @@ lsp.ensure_installed({
   "gopls",
   "cssls"
 })
+
+local on_attach = function(_, bufnr)
+  -- Create a command `:Format` local to the LSP buffer
+  vim.api.nvim_buf_create_user_command(bufnr, 'Format', function(_)
+    if vim.lsp.buf.format then
+      vim.lsp.buf.format()
+    elseif vim.lsp.buf.formatting then
+      vim.lsp.buf.formatting()
+    end
+  end, { desc = 'Format current buffer with LSP' })
+end
+
+local capabilities = vim.lsp.protocol.make_client_capabilities()
+capabilities.textDocument.completion.completionItem.snippetSupport = true
+capabilities = require('cmp_nvim_lsp').default_capabilities(capabilities)
 
 for name, config in pairs(servers) do
   if type(config) ~= "table" then

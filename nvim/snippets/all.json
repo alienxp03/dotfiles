@@ -4,5 +4,5 @@
 		"body": [
 			"expands? jumps? $1 $2 !"
 		]
-	},
+	}
 }
