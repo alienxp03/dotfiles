@@ -49,7 +49,12 @@ require('lazy').setup({
   'onsails/lspkind.nvim',
   'saadparwaiz1/cmp_luasnip',
   'rafamadriz/friendly-snippets',
+  'sbdchd/neoformat',
 
+  -- null-ls
+  {
+    'jose-elias-alvarez/null-ls.nvim',
+  },
   -- Highlight, edit, and navigate code
   {
     'nvim-treesitter/nvim-treesitter', build = ':TSUpdate',
