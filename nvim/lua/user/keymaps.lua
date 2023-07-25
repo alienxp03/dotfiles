@@ -37,8 +37,10 @@ keymap("n", "<S-h>", ":bprevious<CR>", opts)
 keymap("n", "<C-p>", ":FzfLua files<CR>", { desc = "Find files" } )
 keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", { desc = "Search text current" } )
 keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", { desc = "Live grep current buffer" } )
-keymap("n", "<leader>gd", ":FzfLua lsp_definitions<CR>", { desc = "Search text current" } )
-keymap("n", "<leader>ds", ":FzfLua lsp_document_symbols<CR>", { desc = "Document symbols" } )
+keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", { desc = "Definitions" } )
+keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", { desc = "Document symbols" } )
+keymap("n", "<leader>lr", ":FzfLua lsp_references<CR>", { desc = "References" } )
+keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", { desc = "Implementations" } )
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts)
@@ -66,7 +68,6 @@ keymap("n", "pp", '"0p', opts)
 -- Indent
 keymap("v", "<", "<gv", opts)
 keymap("v", ">", ">gv", opts)
-
 
 -- Visual Block --
 -- Move text up and down
@@ -96,3 +97,7 @@ keymap("n", "<C-h>", ":TmuxNavigateLeft<cr>", opts)
 keymap("n", "<C-j>", ":TmuxNavigateDown<cr>", opts)
 keymap("n", "<C-k>", ":TmuxNavigateUp<cr>", opts)
 keymap("n", "<C-l>", ":TmuxNavigateRight<cr>", opts)
+
+-- Harpoon
+keymap("n", "<leader>ha", ":lua require('harpoon.mark').add_file()<cr>", { desc = "Add file to harpoon" })
+keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", { desc = "Toggle harpoon menu" })

@@ -38,6 +38,18 @@ require('lazy').setup({
     }
   },
 
+  -- Go debugger
+  'mfussenegger/nvim-dap',
+  {
+    'leoluz/nvim-dap-go',
+    ft = 'go',
+    dependencies = {
+      'mfussenegger/nvim-dap',
+      'rcarriga/nvim-dap-ui',
+      'theHamsta/nvim-dap-virtual-text'
+    }
+  },
+
   -- Github Copilot
   'github/copilot.vim',
 
@@ -95,6 +107,7 @@ require('lazy').setup({
 
   -- Navigation
   'christoomey/vim-tmux-navigator',
+  'ThePrimeagen/harpoon',
 
   -- Comments
   {
@@ -122,6 +135,7 @@ require('lazy').setup({
         char = '┊',
         show_trailing_blankline_indent = false,
       }
+      require('gitsigns').setup()
     end
   },
   'tpope/vim-fugitive', -- Git related plugins
@@ -133,6 +147,19 @@ require('lazy').setup({
   },
   {
     'nvim-telescope/telescope-fzf-native.nvim', build = 'make'
+  },
+  {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+    init = function()
+      vim.o.timeout = true
+      vim.o.timeoutlen = 300
+    end,
+    opts = {
+      -- your configuration comes here
+      -- or leave it empty to use the default settings
+      -- refer to the configuration section below
+    }
   },
   'tpope/vim-rhubarb',
   'tpope/vim-surround', -- Change surrounding words
@@ -147,6 +174,7 @@ require('lazy').setup({
   'sbdchd/neoformat', -- Indent
   'mg979/vim-visual-multi',
   'wakatime/vim-wakatime', -- Wakatime
+  'folke/neodev.nvim', -- Neovim development
 
   -- Themes
   'folke/tokyonight.nvim',

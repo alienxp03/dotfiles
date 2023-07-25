@@ -2,6 +2,7 @@ local slim_group = vim.api.nvim_create_augroup('SlimGroup', { clear = true })
 local patterns = {
   { pattern = "*.html.erb", filetype = "eruby.html" },
   { pattern = "*.js.erb", filetype = "javascript.html" },
+  { pattern = "*.jmx", filetype = "xml" },
 }
 
 for _, config in pairs(patterns) do

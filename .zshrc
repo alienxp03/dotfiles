@@ -8,15 +8,16 @@ fi
 unsetopt INTERACTIVE_COMMENTS
 unsetopt BAD_PATTERN
 
+source "$HOME/.dotfiles/zshrc/env.zsh"
 # For cross-platform logics
 if [ "$(uname -s)" = "Darwin" ]; then
   source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
 elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
 fi
-source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
+source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
 source "$HOME/.dotfiles/zshrc/functions.zsh"
 
 plugins=(git zsh-autosuggestions tmux zsh-fzf-history-search asdf)

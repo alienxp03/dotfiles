@@ -1,3 +1,4 @@
+export WORKSPACE="$HOME/Workspace"
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_THEME="powerlevel10k/powerlevel10k"
 export EDITOR='nvim'
@@ -10,21 +11,29 @@ export JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
 export PATH="$WORKSPACE/bin/apache-maven-3.8.6/bin:$PATH"
 export PATH="$WORKSPACE/bin/AssetRipperConsole_linux64:$PATH"
 export PATH="$WORKSPACE/bin/:$PATH"
+export PATH="/Applications/Sublime Text.app/Contents/SharedSupport/bin:$PATH"
+export PATH="$HOME/.tmux/plugins/tmuxifier/bin:$PATH"
+export TMUXIFIER_LAYOUT_PATH="$HOME/.tmux-layouts"
 export DOCKER_BUILDKIT=1
+export DOTFILES=~/.dotfiles
+
+# Golang
+export CGO_CFLAGS=-Wno-undef-prefix
 
 # golang
 export GOROOT="/usr/local/go"
 export PATH="$PATH:$GOROOT/bin"
-export GOPATH="$WORKSPACE/go"
+export GOPATH="$HOME/go"
 export PATH="$PATH:$GOPATH/bin"
 
 # FZF fuzzy search
 export FZF_DEFAULT_COMMAND="rg --files --follow --no-ignore-vcs --hidden -g '!{**/node_modules/*,**/.git/*,**/tmp/*}'"
 
-# . $HOME/.asdf/asdf.sh
+. $HOME/.asdf/asdf.sh
 
-eval "$(zoxide init zsh)"
+# eval "$(zoxide init zsh)"
 eval "$(rbenv init - zsh)"
+eval "$(tmuxifier init -)"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
