@@ -34,6 +34,7 @@ keymap("n", "<S-l>", ":bnext<CR>", opts)
 keymap("n", "<S-h>", ":bprevious<CR>", opts)
 
 -- fzf-lua
+keymap("n", "<C-f>", ":FzfLua live_grep_glob<CR>", { desc = "Find files" } )
 keymap("n", "<C-p>", ":FzfLua files<CR>", { desc = "Find files" } )
 keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", { desc = "Search text current" } )
 keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", { desc = "Live grep current buffer" } )

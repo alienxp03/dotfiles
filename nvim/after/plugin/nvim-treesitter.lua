@@ -8,7 +8,11 @@ require('nvim-treesitter.configs').setup {
     enable = true,
     filetypes = { "html", "slim", "xml" }
   },
-  highlight = { enable = true },
+  highlight = {
+    enable = true,
+    -- Hardcoded to disable json for now. Ideally, disable it based on file size
+    disable = { 'json' },
+  },
   incremental_selection = {
     enable = true,
     keymaps = {
