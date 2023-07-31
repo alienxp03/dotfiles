@@ -17,9 +17,21 @@ cmp.setup {
       behavior = cmp.ConfirmBehavior.Replace,
       select = false,
     },
-    -- ['<Tab>'] = cmp.mapping.select_next_item(),
-    -- ['<S-Tab>'] = cmp.mapping.select_prev_item(),
     ['<C-j>'] = cmp.mapping.select_next_item(),
     ['<C-k>'] = cmp.mapping.select_prev_item(),
+    ["<Tab>"] = cmp.mapping(function(fallback)
+      if require("copilot.suggestion").is_visible() then
+        require("copilot.suggestion").accept()
+      elseif cmp.visible() then
+        cmp.select_next_item({ behavior = cmp.SelectBehavior.Insert })
+      elseif luasnip.expandable() then
+        luasnip.expand()
+      else
+        fallback()
+      end
+    end, {
+      "i",
+      "s",
+    }),
   },
 }

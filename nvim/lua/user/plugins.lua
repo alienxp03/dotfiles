@@ -46,12 +46,26 @@ require('lazy').setup({
     dependencies = {
       'mfussenegger/nvim-dap',
       'rcarriga/nvim-dap-ui',
-      'theHamsta/nvim-dap-virtual-text'
+      'theHamsta/nvim-dap-virtual-text',
     }
   },
 
   -- Github Copilot
-  'github/copilot.vim',
+  {
+    'zbirenbaum/copilot.lua',
+    cmd = "Copilot",
+    event = "InsertEnter",
+    config = function()
+      require("copilot").setup({
+        suggestion = {
+          auto_trigger = true,
+          keymap = {
+            accept = false,
+          }
+        }
+      })
+    end,
+  },
 
   -- Autocompletions & snippets
   'hrsh7th/nvim-cmp',
