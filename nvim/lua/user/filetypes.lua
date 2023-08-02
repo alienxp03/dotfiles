@@ -3,6 +3,11 @@ local patterns = {
   { pattern = "*.html.erb", filetype = "eruby.html" },
   { pattern = "*.js.erb", filetype = "javascript.html" },
   { pattern = "*.jmx", filetype = "xml" },
+  -- Terraform
+  { pattern = "*.hcl", filetype = "hcl" },
+  { pattern = ".terraformrc,.terraform.rc", filetype = "hcl" },
+  { pattern = "*.tf,*.tfvars", filetype = "hcl" },
+  { pattern = "*.tfstate,*.tfstate.backup", filetype = "hcl" },
 }
 
 for _, config in pairs(patterns) do

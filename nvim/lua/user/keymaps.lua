@@ -51,6 +51,7 @@ keymap("n", "<leader>e", ":NvimTreeToggle<cr>", opts)
 
 -- Buffers
 keymap("n", "<leader>q", ":Bdelete<cr>", { desc = "Close current buffer" })
+keymap("n", "<C-w>", ":Bdelete<cr>", { desc = "Close current buffer" })
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts)

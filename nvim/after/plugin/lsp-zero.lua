@@ -26,15 +26,17 @@ local servers = {
 lsp.ensure_installed({
   "bashls",
   "tsserver",
-  "solargraph",
+  -- "solargraph",
   "docker_compose_language_service",
   "jsonls",
-  "yamlls",
+  -- "yamlls",
   "lua_ls",
   "html",
   "dockerls",
   "gopls",
-  "cssls"
+  "cssls",
+  "terraformls",
+  "tflint",
 })
 
 local on_attach = function(_, bufnr)
