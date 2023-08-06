@@ -34,8 +34,9 @@ keymap("n", "<S-l>", ":bnext<CR>", opts)
 keymap("n", "<S-h>", ":bprevious<CR>", opts)
 
 -- fzf-lua
-keymap("n", "<C-f>", ":FzfLua live_grep_glob<CR>", { desc = "Find files" } )
+keymap("n", "<C-f>", ":FzfLua live_grep_native<CR>", { desc = "Find files" } )
 keymap("n", "<C-p>", ":FzfLua files<CR>", { desc = "Find files" } )
+keymap("n", "<C-b>", ":FzfLua buffers<CR>", { desc = "Open buffers" } )
 keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", { desc = "Search text current" } )
 keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", { desc = "Live grep current buffer" } )
 keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", { desc = "Definitions" } )
@@ -70,11 +71,6 @@ keymap("n", "pp", '"0p', opts)
 -- Indent
 keymap("v", "<", "<gv", opts)
 keymap("v", ">", ">gv", opts)
-
--- Visual Block --
--- Move text up and down
-keymap("v", "J", ":m '>+1<CR>gv=gv", opts)
-keymap("v", "K", ":m '<-2<CR>gv=gv", opts)
 
 keymap("n", "<A-j>", "<Esc>:m .+1<CR>==gi", opts)
 keymap("n", "<A-k>", "<Esc>:m .-2<CR>==gi", opts)

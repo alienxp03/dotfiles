@@ -10,5 +10,8 @@ require('fzf-lua').setup {
     fzf_opts = {
       ["-i"] = "" -- case insensitive
     }
+  },
+  grep = {
+    rg_opts = "--hidden -S -g '!{.git,node_modules}/*'",
   }
 }

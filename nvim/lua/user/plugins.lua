@@ -86,17 +86,12 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter', build = ':TSUpdate',
     dependencies = {
       'nvim-treesitter/nvim-treesitter-textobjects',
-    }
+      'nvim-treesitter/nvim-treesitter-context',
+    },
+    config = function()
+      require'treesitter-context'.setup()
+    end
   },
-  -- { 'nvim-treesitter/nvim-treesitter',
-  --   build = function()
-  --     pcall(require('nvim-treesitter.install').update { with_sync = true })
-  --   end,
-  --   dependencies = {
-  --     'nvim-treesitter/nvim-treesitter-textobjects',
-  --   }
-  -- },
-
   {
     'windwp/nvim-autopairs',
     config = function()
@@ -115,6 +110,12 @@ require('lazy').setup({
   },
   {
     'akinsho/bufferline.nvim', dependencies = 'nvim-tree/nvim-web-devicons'
+  },
+  {
+    'echasnovski/mini.move', version = '*',
+    config = function()
+      require('mini.move').setup()
+    end
   },
   'akinsho/toggleterm.nvim',
   'moll/vim-bbye', -- Bdelete

@@ -26,9 +26,6 @@ export PATH="$PATH:$GOROOT/bin"
 export GOPATH="$HOME/go"
 export PATH="$PATH:$GOPATH/bin"
 
-# FZF fuzzy search
-export FZF_DEFAULT_COMMAND="rg --files --follow --no-ignore-vcs --hidden -g '!{**/node_modules/*,**/.git/*,**/tmp/*}'"
-
 . $HOME/.asdf/asdf.sh
 
 # eval "$(zoxide init zsh)"
