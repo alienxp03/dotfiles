@@ -6,11 +6,6 @@ require('fzf-lua').setup {
       horizontal = 'right:75%'
     },
   },
-  files = {
-    fzf_opts = {
-      ["-i"] = "" -- case insensitive
-    }
-  },
   grep = {
     rg_opts = "--hidden -S -g '!{.git,node_modules}/*'",
   }

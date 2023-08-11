@@ -26,10 +26,9 @@ export PATH="$PATH:$GOROOT/bin"
 export GOPATH="$HOME/go"
 export PATH="$PATH:$GOPATH/bin"
 
-. $HOME/.asdf/asdf.sh
+. $(brew --prefix asdf)/libexec/asdf.sh
+. ~/.asdf/plugins/golang/set-env.zsh
 
-# eval "$(zoxide init zsh)"
-eval "$(rbenv init - zsh)"
 eval "$(tmuxifier init -)"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
