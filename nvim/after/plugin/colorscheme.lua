@@ -1,6 +1,7 @@
-vim.cmd [[colorscheme catppuccin]]
+vim.cmd [[colorscheme tokyonight]]
+-- transparent background
 -- vim.cmd("highlight Normal guibg=none ctermbg=none")
 
-require("catppuccin").setup({
-  flavour = "macchiato",
+require("tokyonight").setup({
+  style = "storm"
 })

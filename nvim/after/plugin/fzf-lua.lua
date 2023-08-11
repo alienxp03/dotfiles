@@ -7,6 +7,6 @@ require('fzf-lua').setup {
     },
   },
   grep = {
-    rg_opts = "--hidden -S -g '!{.git,node_modules}/*'",
+    rg_opts = "--hidden --column -S -g '!{.git,node_modules}/*'",
   }
 }
