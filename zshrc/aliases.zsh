@@ -8,7 +8,6 @@ alias t='bin/rspec'
 alias n='bundle exec next rspec'
 alias cop='bin/rubocop'
 alias dstop='docker stop $(docker ps -q)'
-alias go='grc go'
 
 # Git
 alias gp='git push'
