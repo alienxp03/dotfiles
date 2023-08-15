@@ -37,6 +37,7 @@ local options = {
   guifont = "monospace:h17",               -- the font used in graphical neovim applications
   whichwrap = "bs<>[]hl",                  -- which "horizontal" keys are allowed to travel to prev/next line
   colorcolumn = "80,120",                  -- columns line
+  wildmenu = true,                         -- wildcard auto-complete by default in command-line
 }
 
 for k, v in pairs(options) do
