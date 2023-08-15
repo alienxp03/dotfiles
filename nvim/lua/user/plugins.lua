@@ -80,10 +80,6 @@ require('lazy').setup({
   -- null-ls
   {
     'jose-elias-alvarez/null-ls.nvim',
-    ft = 'go',
-    opts = function()
-      return require 'configs.null-ls'
-    end,
   },
   -- Highlight, edit, and navigate code
   {
