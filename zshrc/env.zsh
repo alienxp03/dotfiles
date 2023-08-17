@@ -26,6 +26,10 @@ export PATH="$PATH:$GOROOT/bin"
 export GOPATH="$HOME/go"
 export PATH="$PATH:$GOPATH/bin"
 
+# forgit
+export PATH="$PATH:$FORGIT_INSTALL_DIR/bin"
+export FORGIT_NO_ALIASES=1
+
 . $(brew --prefix asdf)/libexec/asdf.sh
 . ~/.asdf/plugins/golang/set-env.zsh
 

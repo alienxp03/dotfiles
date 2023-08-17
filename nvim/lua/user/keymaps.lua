@@ -99,3 +99,7 @@ keymap("n", "<C-l>", ":TmuxNavigateRight<cr>", opts)
 -- Harpoon
 keymap("n", "<leader>ha", ":lua require('harpoon.mark').add_file()<cr>", { desc = "Add file to harpoon" })
 keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", { desc = "Toggle harpoon menu" })
+
+-- trouble
+keymap("n", "<leader>xx", ":TroubleToggle<cr>", { desc = "Toggle trouble view", noremap = true, silent = true })
+
