@@ -34,6 +34,7 @@ export FORGIT_NO_ALIASES=1
 . ~/.asdf/plugins/golang/set-env.zsh
 
 eval "$(tmuxifier init -)"
+eval "$(zoxide init zsh)"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
