@@ -13,6 +13,7 @@ export PATH="$WORKSPACE/bin/AssetRipperConsole_linux64:$PATH"
 export PATH="$WORKSPACE/bin/:$PATH"
 export PATH="/Applications/Sublime Text.app/Contents/SharedSupport/bin:$PATH"
 export PATH="$HOME/.tmux/plugins/tmuxifier/bin:$PATH"
+export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export TMUXIFIER_LAYOUT_PATH="$HOME/.tmux-layouts"
 export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles

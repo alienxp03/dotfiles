@@ -3,7 +3,7 @@ local patterns = {
   { pattern = "*.html.erb", filetype = "eruby.html" },
   { pattern = "*.js.erb", filetype = "javascript.html" },
   { pattern = "*.jmx", filetype = "xml" },
-  { pattern = "*.zsh,*.zshrc", filetype = "bash" },
+  { pattern = "*.zsh,*.zshrc,*.tmux.conf", filetype = "bash" },
   -- Terraform
   { pattern = "*.hcl", filetype = "hcl" },
   { pattern = ".terraformrc,.terraform.rc", filetype = "hcl" },
