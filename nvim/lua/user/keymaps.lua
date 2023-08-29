@@ -68,6 +68,9 @@ keymap("n", "N", "Nzzzv", opts)
 -- Copy paste
 keymap("n", "pp", '"0p', opts)
 
+-- split
+keymap("n", "<leader>vs", ":vsplit<cr>", opts)
+
 -- Indent
 keymap("v", "<", "<gv", opts)
 keymap("v", ">", ">gv", opts)
