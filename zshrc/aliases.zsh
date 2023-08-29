@@ -45,3 +45,6 @@ alias kll='kill -9'
 
 # golang
 alias gotest='grc go test -cover -race -count=1 -v ./...'
+
+# terraform
+alias tf='terraform'
