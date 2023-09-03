@@ -3,6 +3,10 @@ function opts(options)
   return vim.tbl_deep_extend("force", opts, options or {})
 end
 
+--Remap space as leader key
+vim.api.nvim_set_keymap('', '<Space>', '<Nop>', { noremap = true, silent = true })
+vim.g.mapleader = ' '
+
 -- Shorten function name
 local keymap = vim.api.nvim_set_keymap
 
@@ -46,6 +50,10 @@ keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definiti
 keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }) )
 keymap("n", "<leader>lr", ":FzfLua lsp_references<CR>", opts({ desc = "References" }) )
 keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }) )
+keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
+keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
+keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation"}))
+keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
@@ -72,7 +80,7 @@ keymap("n", "N", "Nzzzv", opts())
 keymap("n", "pp", '"0p', opts())
 
 -- split
-keymap("n", "<leader>vs", ":vsplit<cr>", opts)
+keymap("n", "<leader>vs", ":vsplit<cr>", opts())
 
 -- Indent
 keymap("v", "<", "<gv", opts())

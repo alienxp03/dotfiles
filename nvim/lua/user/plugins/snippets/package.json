@@ -3,16 +3,16 @@
 	"contributes": {
 		"snippets": [
 			{
-				"language": [
-					"all"
-				],
+				"language": "all",
 				"path": "./all.json"
 			},
 			{
-				"language": [
-					"ruby"
-				],
+				"language": "ruby",
 				"path": "./ruby.json"
+			},
+			{
+				"language": "go",
+				"path": "./go.json"
 			}
 		]
 	}

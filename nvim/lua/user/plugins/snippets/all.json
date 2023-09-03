@@ -1,6 +1,6 @@
 {
 	"snip1": {
-		"prefix": "all1",
+		"prefix": "all1xxxx",
 		"body": [
 			"expands? jumps? $1 $2 !"
 		]

@@ -23,8 +23,9 @@ export CGO_CFLAGS=-Wno-undef-prefix
 
 # golang
 export GOROOT="/usr/local/go"
-export PATH="$PATH:$GOROOT/bin"
 export GOPATH="$HOME/go"
+export GOBIN="$GOPATH/bin"
+export PATH="$PATH:$GOROOT/bin"
 export PATH="$PATH:$GOPATH/bin"
 
 # forgit
