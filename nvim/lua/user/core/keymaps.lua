@@ -117,3 +117,4 @@ keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", 
 -- trouble
 keymap("n", "<leader>xx", ":TroubleToggle<cr>", opts({ desc = "Toggle trouble view", noremap = true, silent = true }))
 
+keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))

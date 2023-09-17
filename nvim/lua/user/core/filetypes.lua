@@ -5,10 +5,7 @@ local patterns = {
   { pattern = "*.jmx", filetype = "xml" },
   { pattern = "*.zsh,*.zshrc,*.tmux.conf,*.sh", filetype = "bash" },
   -- Terraform
-  { pattern = "*.hcl", filetype = "hcl" },
-  { pattern = ".terraformrc,.terraform.rc", filetype = "hcl" },
-  { pattern = "*.tf,*.tfvars", filetype = "hcl" },
-  { pattern = "*.tfstate,*.tfstate.backup", filetype = "hcl" },
+  { pattern = "*.hcl,*.terraformrc,*.terraform.rc,*.tf,*.tfvars,*.tfstate,*.tfstate.backup", filetype = "hcl" },
 }
 
 for _, config in pairs(patterns) do

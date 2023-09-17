@@ -48,3 +48,7 @@ alias gotest='grc go test -cover -race -count=1 -v '
 
 # terraform
 alias tf='terraform'
+
+# why not
+alias ls='eza'
+alias cat='bat'
