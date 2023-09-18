@@ -20,7 +20,7 @@ source "$HOME/.dotfiles/zshrc/aliases.zsh"
 source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
 source "$HOME/.dotfiles/zshrc/functions.zsh"
 
-plugins=(git zsh-autosuggestions tmux zsh-fzf-history-search asdf fzf-tab forgit)
+plugins=(zsh-autosuggestions tmux zsh-fzf-history-search asdf fzf-tab forgit)
 source $ZSH/oh-my-zsh.sh
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
@@ -31,4 +31,3 @@ source $ZSH/oh-my-zsh.sh
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-

@@ -15,6 +15,9 @@ alias gaa='git add .'
 alias gcma='git commit --amend --no-edit'
 alias gcmsg='git commit -m'
 alias gst='git reset --hard'
+alias gco='git checkout'
+alias gb='git branch'
+alias gd='git diff'
 alias glo="git log --pretty=format:'%C(yellow)%h %C(green)%ad %C(yellow)%an%Cgreen%d %Creset%s' --date=format:'%I:%M:%p %d-%b-%Y'"
 alias git-delete-merged-branches='git branch --merged | egrep -v "(^\*|master|dev)" | xargs git branch -d'
 alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format=format:'\''%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)'\'' --all'''"
