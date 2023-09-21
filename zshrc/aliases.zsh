@@ -11,6 +11,7 @@ alias dstop='docker stop $(docker ps -q)'
 # Git
 alias gp='git push'
 alias gs='git status -u'
+alias gcm='git checkout master'
 alias gaa='git add .'
 alias gcma='git commit --amend --no-edit'
 alias gcmsg='git commit -m'
