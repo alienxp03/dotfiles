@@ -82,7 +82,6 @@ return {
       end
 
       config = vim.tbl_deep_extend("force", {
-        on_attach = on_attach,
         capabilities = capabilities
       }, config)
 

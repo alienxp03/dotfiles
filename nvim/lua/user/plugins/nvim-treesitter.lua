@@ -12,6 +12,7 @@ return {
       ensure_installed = { 'lua', 'ruby', 'html', 'javascript', 'json', 'help', 'bash', 'css', 'go', 'java', 'scss', 'sql', 'vim', 'yaml' },
       ignore_install = { 'help' },
       auto_install = true,
+      indent = { enable = true },
       -- autotag
       autotag = {
         enable = true,
