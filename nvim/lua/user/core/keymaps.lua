@@ -1,11 +1,11 @@
 function opts(options)
-  local opts = { noremap = true, silent = true }
-  return vim.tbl_deep_extend("force", opts, options or {})
+	local opts = { noremap = true, silent = true }
+	return vim.tbl_deep_extend("force", opts, options or {})
 end
 
 --Remap space as leader key
-vim.api.nvim_set_keymap('', '<Space>', '<Nop>', { noremap = true, silent = true })
-vim.g.mapleader = ' '
+vim.api.nvim_set_keymap("", "<Space>", "<Nop>", { noremap = true, silent = true })
+vim.g.mapleader = " "
 
 -- Shorten function name
 local keymap = vim.api.nvim_set_keymap
@@ -41,18 +41,18 @@ keymap("n", "<S-l>", ":BufferNext<CR>", opts())
 keymap("n", "<S-h>", ":BufferPrevious<CR>", opts())
 
 -- fzf-lua
-keymap("n", "<C-f>", ":FzfLua live_grep_native<CR>", opts({ desc = "Find files" }) )
-keymap("n", "<C-p>", ":FzfLua files<CR>", opts({ desc = "Find files" }) )
-keymap("n", "<C-b>", ":FzfLua buffers<CR>", opts({ desc = "Open buffers" }) )
-keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", opts({ desc = "Search text current" }) )
-keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", opts({ desc = "Live grep current buffer" }) )
-keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definitions" }) )
-keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }) )
-keymap("n", "<leader>lr", ":FzfLua lsp_references<CR>", opts({ desc = "References" }) )
-keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }) )
+keymap("n", "<C-f>", ":FzfLua live_grep_native<CR>", opts({ desc = "Find files" }))
+keymap("n", "<C-p>", ":FzfLua files<CR>", opts({ desc = "Find files" }))
+keymap("n", "<C-b>", ":FzfLua buffers<CR>", opts({ desc = "Open buffers" }))
+keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", opts({ desc = "Search text current" }))
+keymap("n", "<leader>fw", ":FzfLua lgrep_curbuf<CR>", opts({ desc = "Live grep current buffer" }))
+keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definitions" }))
+keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }))
+keymap("n", "<leader>lr", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
+keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
-keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation"}))
+keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation" }))
 keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
 
 -- nvim-spectre
@@ -70,7 +70,7 @@ keymap("x", "<leader>p", [["_dP]], opts())
 -- Normal paste
 keymap("v", "p", '"_dP', opts())
 
--- Keep things in the middle 
+-- Keep things in the middle
 keymap("n", "<C-d>", "<C-d>zz", opts())
 keymap("n", "<C-u>", "<C-u>zz", opts())
 keymap("n", "n", "nzzzv", opts())
@@ -98,7 +98,12 @@ keymap("n", "<leader>cp", ":let @+=@%<cr>", opts({ desc = "Copy relative path" }
 keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", opts({ desc = "Copy full path" }))
 
 -- Replace word on current cursor
-keymap("n", "<leader>s", ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>", opts({ desc = "Replace current word" }))
+keymap(
+	"n",
+	"<leader>s",
+	":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>",
+	opts({ desc = "Replace current word" })
+)
 
 -- Lazygit
 keymap("n", "<leader>gl", ":LazyGit<cr>", opts({ desc = "LazyGit" }))
