@@ -1,6 +1,6 @@
 function opts(options)
-	local opts = { noremap = true, silent = true }
-	return vim.tbl_deep_extend("force", opts, options or {})
+  local opts = { noremap = true, silent = true }
+  return vim.tbl_deep_extend("force", opts, options or {})
 end
 
 --Remap space as leader key
@@ -81,6 +81,7 @@ keymap("n", "pp", '"0p', opts())
 
 -- split
 keymap("n", "<leader>vs", ":vsplit<cr>", opts())
+keymap("n", "<leader>hs", ":split<cr>", opts())
 
 -- Indent
 keymap("v", "<", "<gv", opts())
@@ -99,10 +100,10 @@ keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", opts({ desc = "Copy full 
 
 -- Replace word on current cursor
 keymap(
-	"n",
-	"<leader>s",
-	":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>",
-	opts({ desc = "Replace current word" })
+  "n",
+  "<leader>s",
+  ":%s/\\<<C-r><C-w>\\>/<C-r><C-w>/gI<Left><Left><Left>",
+  opts({ desc = "Replace current word" })
 )
 
 -- Lazygit
