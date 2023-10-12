@@ -77,7 +77,7 @@ keymap("n", "n", "nzzzv", opts())
 keymap("n", "N", "Nzzzv", opts())
 
 -- Copy paste
-keymap("n", "pp", '"0p', opts())
+-- keymap("n", "pp", '"0p', opts())
 
 -- split
 keymap("n", "<leader>vs", ":vsplit<cr>", opts())
@@ -87,8 +87,11 @@ keymap("n", "<leader>hs", ":split<cr>", opts())
 keymap("v", "<", "<gv", opts())
 keymap("v", ">", ">gv", opts())
 
-keymap("n", "<A-j>", "<Esc>:m .+1<CR>==gi", opts())
-keymap("n", "<A-k>", "<Esc>:m .-2<CR>==gi", opts())
+-- Move block of code
+keymap("n", "<S-j>", ":m .+1<CR>==", opts())
+keymap("n", "<S-k>", ":m .-2<CR>==", opts())
+keymap("v", "<S-j>", ":m '>+1<CR>gv=gv", opts())
+keymap("v", "<S-k>", ":m '<-2<CR>gv=gv", opts())
 
 -- Search and replace
 keymap("n", "<leader>rp", ":lua require('spectre').open()<cr>", opts({ desc = "Find and replace in project" }))
