@@ -18,6 +18,7 @@ export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export TMUXIFIER_LAYOUT_PATH="$HOME/.tmux-layouts"
 export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles
+export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
 
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix
