@@ -16,3 +16,7 @@ selection:
 key_bindings:
   - { key: Right, mods: Alt, chars: "\x1BF" }
   - { key: Left,  mods: Alt, chars: "\x1BB" }
+  # preview all windows
+  - { key: L, mods: Command, chars: "\x01\x77" }
+  # preview all sessions
+  - { key: K, mods: Command, chars: "\x01\x73" }
