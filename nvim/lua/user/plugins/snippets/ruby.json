@@ -1,0 +1,8 @@
+{
+	"debugger": {
+		"prefix": "db",
+		"body": [
+			"debugger"
+		]
+	}
+}

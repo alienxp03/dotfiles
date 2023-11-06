@@ -48,6 +48,8 @@ alias hs='history | fzf'
 alias kll='kill -9'
 
 # golang
+alias gmt='go mod tidy -v'
+alias gmv='go mod vendor -v'
 
 # terraform
 alias tf='terraform'

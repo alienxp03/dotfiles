@@ -14,9 +14,10 @@ shell:
 selection:
   save_to_clipboard: true
 key_bindings:
+  # move word using Alt/Opt key
   - { key: Right, mods: Alt, chars: "\x1BF" }
   - { key: Left,  mods: Alt, chars: "\x1BB" }
-  # preview all windows
+  # tmux preview all windows
   - { key: L, mods: Command, chars: "\x01\x77" }
-  # preview all sessions
+  # tmux preview all sessions
   - { key: K, mods: Command, chars: "\x01\x73" }
