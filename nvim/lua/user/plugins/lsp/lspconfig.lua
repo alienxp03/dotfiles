@@ -40,6 +40,7 @@ return {
         settings = {
           yaml = {
             validate = false,
+            keyOrdering = false,
           },
         },
       },
