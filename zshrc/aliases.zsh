@@ -22,6 +22,8 @@ alias gd='git diff'
 alias glo="git log --pretty=format:'%C(yellow)%h %C(green)%ad %C(yellow)%an%Cgreen%d %Creset%s' --date=format:'%I:%M:%p %d-%b-%Y'"
 alias git-delete-merged-branches='git branch --merged | egrep -v "(^\*|master|dev)" | xargs git branch -d'
 alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format=format:'\''%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)'\'' --all'''"
+alias lz='lazygit'
+# alias greset="git reset $(git merge-base master $(git rev-parse --abbrev-ref HEAD)) " # reset all commits in branch
 
 # Docker
 alias dc='docker compose'
