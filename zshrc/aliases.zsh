@@ -28,6 +28,8 @@ alias lz='lazygit'
 # Docker
 alias dc='docker compose'
 alias dstop='docker stop $(docker ps -a -q)'
+alias mk='minikube'
+alias kl='kubectl'
 
 # Bateriku
 alias get_bateriku_backups='scp -r deploy@ec2-52-77-221-41.ap-southeast-1.compute.amazonaws.com:~/Backup/backups/bateriku_backup bateriku_backups'
@@ -57,5 +59,5 @@ alias gmv='go mod vendor -v'
 alias tf='terraform'
 
 # why not
-alias ls='eza'
+alias ls='eza --group-directories-first --sort extension'
 alias cat='bat'

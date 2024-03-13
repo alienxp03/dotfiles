@@ -1,9 +1,8 @@
 -- debugger
 return {
-  "leoluz/nvim-dap-go",
-  ft = "go",
+  "mfussenegger/nvim-dap",
   dependencies = {
-    "mfussenegger/nvim-dap",
+    "leoluz/nvim-dap-go",
     "rcarriga/nvim-dap-ui",
     "theHamsta/nvim-dap-virtual-text",
   },
@@ -55,7 +54,7 @@ return {
           -- program = "${file}", -- The buffer you are focused on when running nvim-dap
           program = "${workspaceFolder}/cmd/${workspaceFolderBasename}",
           env = {
-            SERVICE_CONF = "${workspaceFolder}/config_files/service-conf-dbmy.json",
+            SERVICE_CONF = "${workspaceFolder}/config_files/service-conf.json",
             SECRET_CONF = "${workspaceFolder}/vault/secrets",
             SERVICE_NAME = "${workspaceFolderBasename}",
             ALL_DEPRECATED_INITS_MIGRATED = "true",

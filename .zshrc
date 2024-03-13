@@ -16,14 +16,19 @@ elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
 fi
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
-source "$HOME/.dotfiles/zshrc/aliases.zsh"
-source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
-source "$HOME/.dotfiles/zshrc/functions.zsh"
 
 plugins=(zsh-autosuggestions tmux zsh-fzf-history-search asdf fzf-tab forgit)
 source $ZSH/oh-my-zsh.sh
+
+source "$HOME/.dotfiles/zshrc/aliases.zsh"
+source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
+source "$HOME/.dotfiles/zshrc/functions.zsh"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="/Users/azuan.zairein/.rd/bin:$PATH"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
