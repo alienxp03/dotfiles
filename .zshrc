@@ -29,6 +29,8 @@ source "$HOME/.dotfiles/zshrc/functions.zsh"
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
+eval "$(atuin init zsh)"
+
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 export PATH="/Users/azuan.zairein/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)

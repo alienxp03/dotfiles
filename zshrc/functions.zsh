@@ -22,7 +22,7 @@ function gotest() {
   CODE_FILE="${TEST_FILE/_test.go/.go}"
 
   if [[ $TEST_FILE == *"_test.go"* ]]; then
-    grc go test -cover -count=1 $CODE_FILE $TEST_FILE
+    grc go test -cover -count=1 -v $CODE_FILE $TEST_FILE
   else
     grc go test -cover -race -count=1 -v $@
   fi
