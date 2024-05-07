@@ -32,7 +32,6 @@ alias mk='minikube'
 alias kl='kubectl'
 
 # Bateriku
-alias get_bateriku_backups='scp -r deploy@ec2-52-77-221-41.ap-southeast-1.compute.amazonaws.com:~/Backup/backups/bateriku_backup bateriku_backups'
 alias bateriku_production='ssh deploy@$(bundle exec cap production ec2:status | grep "bateriku-production-1" -m 1| tr -s " " | cut -d " " -f6)'
 alias bateriku_production2='ssh deploy@$(bundle exec cap production ec2:status | grep "bateriku-production-2" -m 1| tr -s " " | cut -d " " -f6)'
 alias bateriku_staging='ssh -t deploy@$(bundle exec cap staging ec2:status | grep "bateriku-staging" -m 1| tr -s " " | cut -d " " -f6) "cd /var/www/bateriku/current; bash --login" '
@@ -45,8 +44,6 @@ alias tx='tmux attach-session'
 alias tn="tmux new -s $(pwd | sed 's/.*\///g')"
 alias v='nvim'
 alias xx='exit'
-
-alias hs='history | fzf'
 
 # misc
 alias kll='kill -9'

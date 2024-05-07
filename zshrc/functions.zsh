@@ -7,15 +7,6 @@ function loop() {
   done
 }
 
-function s() {
-  DIR="$(find ~/Workspace/ -maxdepth 2 -type d -print | cut -c 1- | fzf-tmux | head -1)"
-  FOLDER="$(echo $DIR | sed 's/.*\///g')"
-  echo $DIR
-  echo $FOLDER
-  cd $DIR
-  tmux new -s $FOLDER
-}
-
 function gotest() {
   DIR="$(PWD)"
   TEST_FILE=$1
