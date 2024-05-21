@@ -40,20 +40,45 @@ keymap("n", "<C-Right>", ":vertical resize +2<CR>", opts())
 keymap("n", "<S-l>", ":BufferNext<CR>", opts())
 keymap("n", "<S-h>", ":BufferPrevious<CR>", opts())
 
--- fzf-lua
-keymap("n", "<C-f>", ":FzfLua live_grep_native<CR>", opts({ desc = "Find files" }))
-keymap("n", "<C-p>", ":FzfLua files<CR>", opts({ desc = "Find files" }))
-keymap("n", "<C-t>", ":FzfLua lgrep_curbuf<CR>", opts({ desc = "Live grep current buffer" }))
-keymap("n", "<C-b>", ":FzfLua buffers<CR>", opts({ desc = "Open buffers" }))
-keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", opts({ desc = "Search text current" }))
-keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definitions" }))
-keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }))
-keymap("n", "<leader>lf", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
-keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
 keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation" }))
 keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
+
+-- fzf-lua
+-- keymap("n", "<C-f>", ":FzfLua live_grep_native<CR>", opts({ desc = "Find files" }))
+-- keymap("n", "<C-p>", ":FzfLua files<CR>", opts({ desc = "Find files" }))
+-- keymap("n", "<C-t>", ":FzfLua lgrep_curbuf<CR>", opts({ desc = "Live grep current buffer" }))
+-- keymap("n", "<C-b>", ":FzfLua buffers<CR>", opts({ desc = "Open buffers" }))
+-- keymap("n", "<leader>fp", ":FzfLua live_grep_glob<CR>", opts({ desc = "Search text current" }))
+-- keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definitions" }))
+-- keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }))
+-- keymap("n", "<leader>lf", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
+-- keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
+
+-- Telescope
+keymap(
+  "n",
+  "<C-p>",
+  ":Telescope find_files find_command=rg,--ignore,--hidden,--files prompt_prefix=🔍<cr>",
+  opts({ desc = "Find files" })
+)
+keymap(
+  "n",
+  "<C-o>",
+  ":Telescope find_files find_command=rg,--no-ignore,--hidden,--files prompt_prefix=🔍<cr>",
+  opts({ desc = "Find files (including .gitignore)" })
+)
+keymap("n", "<C-f>", ":Telescope live_grep<cr>", opts({ desc = "Find words in project" }))
+keymap("n", "<C-t>", ":Telescope current_buffer_fuzzy_find<cr>", opts({ desc = "Find words in current buffer" }))
+keymap("n", "<C-b>", ":Telescope buffers<cr>", opts({ desc = "Find words in current buffer" }))
+keymap("n", "<leader>ld", ":Telescope lsp_definitions<cr>", opts({ desc = "LSP definitions of word under the cursor" }))
+keymap("n", "<leader>ls", ":Telescope lsp_document_symbols<cr>", opts({ desc = "Symbols in current buffer" }))
+keymap("n", "<leader>lf", ":Telescope lsp_references<cr>", opts({ desc = "References" }))
+keymap("n", "<leader>lm", ":Telescope lsp_implementations<cr>", opts({ desc = "LSP implementations" }))
+keymap("n", "<leader>lt", ":Telescope diagnostics<cr>", opts({ desc = "LSP diagnostics" }))
+keymap("n", "<leader>gm", ":Telescope git_commits<cr>", opts({ desc = "Git commits" }))
+keymap("n", "<leader>gb", ":Telescope git_commits<cr>", opts({ desc = "Git branches" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
@@ -131,4 +156,4 @@ keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", 
 -- trouble
 keymap("n", "<leader>xx", ":TroubleToggle<cr>", opts({ desc = "Toggle trouble view", noremap = true, silent = true }))
 
-keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
+-- keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
