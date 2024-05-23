@@ -12,7 +12,7 @@ return {
 
     telescope.setup({
       defaults = {
-        file_ignore_patterns = { ".git", "node_modules" },
+        file_ignore_patterns = { "%.git", "node_modules" },
         sorting_strategy = "ascending",
         layout_config = {
           prompt_position = "top",
