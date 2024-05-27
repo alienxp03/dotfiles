@@ -72,13 +72,19 @@ keymap(
 keymap("n", "<C-f>", ":Telescope live_grep<cr>", opts({ desc = "Find words in project" }))
 keymap("n", "<C-t>", ":Telescope current_buffer_fuzzy_find<cr>", opts({ desc = "Find words in current buffer" }))
 keymap("n", "<C-b>", ":Telescope buffers<cr>", opts({ desc = "Find words in current buffer" }))
-keymap("n", "<leader>ld", ":Telescope lsp_definitions<cr>", opts({ desc = "LSP definitions of word under the cursor" }))
+keymap(
+  "n",
+  "<leader>ld",
+  ":Telescope lsp_definitions jump_type=never<cr>",
+  opts({ desc = "LSP definitions of word under the cursor" })
+)
 keymap("n", "<leader>ls", ":Telescope lsp_document_symbols<cr>", opts({ desc = "Symbols in current buffer" }))
 keymap("n", "<leader>lf", ":Telescope lsp_references<cr>", opts({ desc = "References" }))
 keymap("n", "<leader>lm", ":Telescope lsp_implementations<cr>", opts({ desc = "LSP implementations" }))
 keymap("n", "<leader>lt", ":Telescope diagnostics<cr>", opts({ desc = "LSP diagnostics" }))
 keymap("n", "<leader>gm", ":Telescope git_commits<cr>", opts({ desc = "Git commits" }))
 keymap("n", "<leader>gb", ":Telescope git_commits<cr>", opts({ desc = "Git branches" }))
+keymap("n", "<leader>gs", ":Telescope git_status<cr>", opts({ desc = "Git status" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
@@ -157,3 +163,7 @@ keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", 
 keymap("n", "<leader>xx", ":TroubleToggle<cr>", opts({ desc = "Toggle trouble view", noremap = true, silent = true }))
 
 -- keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
+
+keymap("n", "<leader>gc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
+keymap("n", "<leader>gt", ":GoTestPkg<cr>", opts({ desc = "Go test package" }))
+keymap("n", "<leader>gv", ":GoModVendor<cr>", opts({ desc = "Go mod vendor" }))
