@@ -40,8 +40,8 @@ export ASDF_DIR="$HOME/.asdf"
 . "$HOME/.asdf/asdf.sh"
 . ~/.asdf/plugins/golang/set-env.zsh
 
-eval "$(zoxide init zsh)"
-eval "$(rbenv init - zsh)"
-
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+eval "$(zoxide init zsh)"
+eval "$(rbenv init - zsh)"

@@ -8,16 +8,17 @@ fi
 unsetopt INTERACTIVE_COMMENTS
 unsetopt BAD_PATTERN
 
-source "$HOME/.dotfiles/zshrc/env.zsh"
 # For cross-platform logics
 if [ "$(uname -s)" = "Darwin" ]; then
   source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
 elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
 fi
+
+source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
-plugins=(zsh-autosuggestions tmux zsh-fzf-history-search asdf fzf-tab forgit)
+plugins=(tmux asdf zsh-autosuggestions)
 source $ZSH/oh-my-zsh.sh
 
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
@@ -32,5 +33,5 @@ source "$HOME/.dotfiles/zshrc/functions.zsh"
 eval "$(atuin init zsh)"
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
-export PATH="/Users/azuan.zairein/.rd/bin:$PATH"
+export PATH="/Users/azuan/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)

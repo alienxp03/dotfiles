@@ -58,3 +58,5 @@ alias tf='terraform'
 # why not
 alias ls='eza --group-directories-first --sort extension'
 alias cat='bat'
+
+alias t='sesh connect $(sesh list | fzf)'
