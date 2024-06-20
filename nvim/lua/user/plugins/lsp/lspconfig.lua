@@ -65,7 +65,7 @@ return {
           },
         },
       },
-      ruby_ls = {
+      ruby_lsp = {
         cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
       },
       solargraph = {

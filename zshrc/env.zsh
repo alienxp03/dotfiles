@@ -36,6 +36,8 @@ export PATH="$PATH:$GOPATH/bin"
 export PATH="$PATH:$FORGIT_INSTALL_DIR/bin"
 export FORGIT_NO_ALIASES=1
 
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+
 export ASDF_DIR="$HOME/.asdf"
 . "$HOME/.asdf/asdf.sh"
 . ~/.asdf/plugins/golang/set-env.zsh
@@ -45,3 +47,4 @@ export ASDF_DIR="$HOME/.asdf"
 
 eval "$(zoxide init zsh)"
 eval "$(rbenv init - zsh)"
+
