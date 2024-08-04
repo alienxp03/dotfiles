@@ -39,6 +39,11 @@ return {
           -- the default case_mode is "smart_case"
         },
       },
+      pickers = {
+        lsp_references = {
+          show_line = false,
+        },
+      },
     })
 
     telescope.load_extension("fzf")
