@@ -166,4 +166,7 @@ keymap("n", "<leader>xx", ":TroubleToggle<cr>", opts({ desc = "Toggle trouble vi
 
 keymap("n", "<leader>gc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
 keymap("n", "<leader>gt", ":GoTestPkg<cr>", opts({ desc = "Go test package" }))
-keymap("n", "<leader>gv", ":GoModVendor<cr>", opts({ desc = "Go mod vendor" }))
+vim.keymap.set("n", "<leader>gv", function()
+  vim.cmd("GoModTidy")
+  vim.cmd("GoModVendor")
+end)
