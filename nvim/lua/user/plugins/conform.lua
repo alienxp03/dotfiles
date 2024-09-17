@@ -37,7 +37,7 @@ return {
           end
         end
 
-        return { timeout_ms = 200, lsp_format = "fallback" }, on_format
+        return { timeout_ms = 1000, lsp_format = "fallback" }, on_format
       end,
 
       format_after_save = function(bufnr)

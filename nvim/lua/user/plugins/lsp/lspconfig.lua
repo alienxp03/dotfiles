@@ -53,6 +53,7 @@ return {
           Lua = {
             -- make the language server recognize "vim" global
             diagnostics = {
+              enable = false,
               globals = { "vim" },
             },
             workspace = {
@@ -84,6 +85,7 @@ return {
           },
         },
       },
+      pyright = {},
     }
 
     for name, config in pairs(servers) do
