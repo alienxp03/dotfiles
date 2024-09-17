@@ -23,8 +23,6 @@ return {
     cmp.setup({
       sources = {
         { name = "supermaven" },
-        { name = "solargraph" },
-        { name = "ruby-lsp" },
         { name = "nvim_lsp" },
         { name = "luasnip" },
         { name = "buffer" },
