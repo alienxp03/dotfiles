@@ -5,6 +5,7 @@ return {
     "nvim-lua/plenary.nvim",
     { "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
     "nvim-tree/nvim-web-devicons",
+    "camgraff/telescope-tmux.nvim",
   },
   config = function()
     local telescope = require("telescope")
@@ -14,13 +15,17 @@ return {
       defaults = {
         file_ignore_patterns = { "%.git", "node_modules" },
         sorting_strategy = "ascending",
+        layout_strategy = "horizontal",
         layout_config = {
-          prompt_position = "top",
-          preview_cutoff = 120,
-          horizontal = { width = 0.9, height = 0.9 },
-          vertical = { width = 0.9, height = 0.9 },
+          horizontal = {
+            prompt_position = "top",
+            width = { padding = 0 },
+            height = { padding = 0 },
+            preview_width = 0.6,
+          },
         },
-        path_display = { "truncate " },
+        -- path_display = { "truncate " },
+        path_display = { "filename_first" },
         mappings = {
           i = {
             ["<esc>"] = actions.close,
@@ -42,5 +47,6 @@ return {
     })
 
     telescope.load_extension("fzf")
+    telescope.load_extension("tmux")
   end,
 }

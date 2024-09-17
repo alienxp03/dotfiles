@@ -85,6 +85,8 @@ keymap("n", "<leader>lt", ":Telescope diagnostics<cr>", opts({ desc = "LSP diagn
 keymap("n", "<leader>gm", ":Telescope git_commits<cr>", opts({ desc = "Git commits" }))
 keymap("n", "<leader>gb", ":Telescope git_commits<cr>", opts({ desc = "Git branches" }))
 keymap("n", "<leader>gs", ":Telescope git_status<cr>", opts({ desc = "Git status" }))
+keymap("n", "<leader>ts", ":Telescope tmux sessions<cr>", opts({ desc = "Tmux sessions" }))
+keymap("n", "<leader>tw", ":Telescope tmux windows<cr>", opts({ desc = "Tmux windows" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
