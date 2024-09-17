@@ -55,5 +55,7 @@ return {
         timeout_ms = 1000,
       })
     end, { desc = "Format file or range (in visual mode)" })
+
+    vim.g.python3_host_prog = "~/.asdf/shims/python3"
   end,
 }

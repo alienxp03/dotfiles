@@ -15,6 +15,7 @@ return {
     local luasnip = require("luasnip")
     local cmp = require("cmp")
     local lspkind = require("lspkind")
+    local supermaven = require("supermaven-nvim.completion_preview")
 
     -- loads vscode style snippets from installed plugins (e.g. friendly-snippets)
     require("luasnip.loaders.from_vscode").lazy_load()
@@ -44,12 +45,14 @@ return {
         ["<C-j>"] = cmp.mapping.select_next_item(),
         ["<C-k>"] = cmp.mapping.select_prev_item(),
         ["<Tab>"] = cmp.mapping(function(fallback)
-          if require("copilot.suggestion").is_visible() then
+          if luasnip.expandable() then
+            luasnip.expand()
+          elseif require("copilot.suggestion").is_visible() then
             require("copilot.suggestion").accept()
+          elseif supermaven.has_suggestion() then
+            supermaven.on_accept_suggestion()
           elseif cmp.visible() then
             cmp.select_next_item({ behavior = cmp.SelectBehavior.Insert })
-          elseif luasnip.expandable() then
-            luasnip.expand()
           else
             fallback()
           end
