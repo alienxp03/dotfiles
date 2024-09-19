@@ -45,12 +45,12 @@ return {
         ["<C-j>"] = cmp.mapping.select_next_item(),
         ["<C-k>"] = cmp.mapping.select_prev_item(),
         ["<Tab>"] = cmp.mapping(function(fallback)
-          if luasnip.expandable() then
-            luasnip.expand()
+          if supermaven.has_suggestion() then
+            supermaven.on_accept_suggestion()
           elseif require("copilot.suggestion").is_visible() then
             require("copilot.suggestion").accept()
-          elseif supermaven.has_suggestion() then
-            supermaven.on_accept_suggestion()
+          elseif luasnip.expandable() then
+            luasnip.expand()
           elseif cmp.visible() then
             cmp.select_next_item({ behavior = cmp.SelectBehavior.Insert })
           else
