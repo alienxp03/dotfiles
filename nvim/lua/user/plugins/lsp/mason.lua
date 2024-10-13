@@ -25,7 +25,7 @@ return {
       -- list of servers for mason to install
       ensure_installed = {
         "bashls",
-        "tsserver",
+        "ts_ls",
         "docker_compose_language_service",
         "jsonls",
         "yamlls",

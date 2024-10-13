@@ -8,5 +8,6 @@ return {
     ft.set("yaml", "#%s") -- yaml files
     ft.set("hcl", "#%s") -- hcl files
     ft.set("helm", "#%s") -- helm files
+    ft.set("eruby", "<%%# %s %%>") -- eruby files
   end,
 }

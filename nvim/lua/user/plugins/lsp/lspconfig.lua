@@ -31,7 +31,7 @@ return {
       emmet_ls = {
         filetypes = { "html", "typescriptreact", "javascriptreact", "css", "sass", "scss", "less" },
       },
-      tsserver = {},
+      ts_ls = {},
       cssls = {},
       bashls = {},
       docker_compose_language_service = {},

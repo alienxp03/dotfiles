@@ -30,6 +30,7 @@ alias lz='lazygit'
 alias dc='docker compose'
 alias dstop='docker stop $(docker ps -a -q)'
 alias mk='minikube'
+alias docker-clean='docker container rm $(docker container ls -aq) 2>/dev/null && docker images | grep "<none>" | awk '{print $3}' | xargs docker rmi'
 alias kl='kubectl'
 
 # Bateriku
