@@ -18,7 +18,7 @@ fi
 source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
-plugins=(tmux asdf zsh-autosuggestions)
+plugins=(tmux asdf zsh-autosuggestions zsh-vi-mode)
 source $ZSH/oh-my-zsh.sh
 
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
