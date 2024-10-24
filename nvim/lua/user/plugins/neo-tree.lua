@@ -38,6 +38,7 @@ return {
           leave_dirs_open = false, -- `false` closes auto expanded dirs, such as with `:Neotree reveal`
         },
         filtered_items = {
+          visible = true, -- always show hidden file by default
           always_show_by_pattern = { -- uses glob style patterns
             ".env*",
           },
