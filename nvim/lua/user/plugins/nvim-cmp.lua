@@ -15,15 +15,15 @@ return {
     local luasnip = require("luasnip")
     local cmp = require("cmp")
     local lspkind = require("lspkind")
-    local supermaven = require("supermaven-nvim.completion_preview")
 
     -- loads vscode style snippets from installed plugins (e.g. friendly-snippets)
     require("luasnip.loaders.from_vscode").lazy_load()
     require("luasnip.loaders.from_vscode").load({ paths = { "./lua/user/plugins/snippets" } })
 
     cmp.setup({
+      preselect = cmp.PreselectMode.None,
       sources = {
-        { name = "supermaven" },
+        { name = "codeium" },
         { name = "nvim_lsp" },
         { name = "luasnip" },
         { name = "buffer" },
@@ -45,9 +45,7 @@ return {
         ["<C-j>"] = cmp.mapping.select_next_item(),
         ["<C-k>"] = cmp.mapping.select_prev_item(),
         ["<Tab>"] = cmp.mapping(function(fallback)
-          if supermaven.has_suggestion() then
-            supermaven.on_accept_suggestion()
-          elseif require("copilot.suggestion").is_visible() then
+          if require("copilot.suggestion").is_visible() then
             require("copilot.suggestion").accept()
           elseif luasnip.expandable() then
             luasnip.expand()

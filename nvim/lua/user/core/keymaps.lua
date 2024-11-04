@@ -171,3 +171,7 @@ vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModTidy")
   vim.cmd("GoModVendor")
 end)
+
+keymap("n", "<leader>tn", ":TestNearest<cr>", opts({ desc = "Test nearest" }))
+keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
+keymap("n", "<leader>ts", ":TestSuite<cr>", opts({ desc = "Test suite" }))
