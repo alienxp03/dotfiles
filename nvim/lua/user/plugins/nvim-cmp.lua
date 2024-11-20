@@ -15,6 +15,8 @@ return {
     local luasnip = require("luasnip")
     local cmp = require("cmp")
     local lspkind = require("lspkind")
+    local neocodeium = require("neocodeium")
+    local commands = require("neocodeium.commands")
 
     -- loads vscode style snippets from installed plugins (e.g. friendly-snippets)
     require("luasnip.loaders.from_vscode").lazy_load()
@@ -45,12 +47,12 @@ return {
         ["<C-j>"] = cmp.mapping.select_next_item(),
         ["<C-k>"] = cmp.mapping.select_prev_item(),
         ["<Tab>"] = cmp.mapping(function(fallback)
-          if require("copilot.suggestion").is_visible() then
-            require("copilot.suggestion").accept()
+          if neocodeium.visible() then
+            neocodeium.accept()
           elseif luasnip.expandable() then
-            luasnip.expand()
           elseif cmp.visible() then
             cmp.select_next_item({ behavior = cmp.SelectBehavior.Insert })
+            luasnip.expand()
           else
             fallback()
           end
@@ -59,7 +61,6 @@ return {
           "s",
         }),
       }),
-
       -- configure lspkind for vs-code like pictograms in completion menu
       formatting = {
         format = lspkind.cmp_format({
