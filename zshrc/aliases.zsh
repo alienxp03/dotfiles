@@ -53,6 +53,7 @@ alias kll='kill -9'
 # golang
 alias gmt='go mod tidy -v'
 alias gmv='go mod vendor -v'
+alias gotest='go test -v --count=1'
 
 # terraform
 alias tf='terraform'

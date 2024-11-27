@@ -18,7 +18,7 @@ fi
 source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
-plugins=(tmux asdf zsh-autosuggestions zsh-vi-mode)
+plugins=(tmux zsh-autosuggestions)
 source $ZSH/oh-my-zsh.sh
 
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
@@ -35,3 +35,5 @@ eval "$(atuin init zsh)"
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
 export PATH="/Users/azuan/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
+
+. "$HOME/.atuin/bin/env"
