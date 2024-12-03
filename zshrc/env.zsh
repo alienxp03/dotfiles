@@ -40,7 +40,7 @@ export FORGIT_NO_ALIASES=1
 
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 
-eval "$(/Users/azuan.zairein/.local/bin/mise activate zsh)"
+eval "$($HOME/.local/bin/mise activate zsh)"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
