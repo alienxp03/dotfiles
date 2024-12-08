@@ -18,4 +18,5 @@ return {
   "moll/vim-bbye", -- Bdelete
   "christoomey/vim-tmux-navigator",
   "ThePrimeagen/harpoon",
+  "tpope/vim-endwise",
 }
