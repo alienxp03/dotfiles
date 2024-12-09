@@ -26,6 +26,8 @@ alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format
 alias lz='lazygit'
 # alias greset="git reset $(git merge-base master $(git rev-parse --abbrev-ref HEAD)) " # reset all commits in branch
 
+alias tmgo="tmux rename-window 'Main' && tmux send-keys 'go mod tidy -v && go mod vendor -v && nvim .' 'C-m' && tmux split-window -h && tmux split-pane && tmux select-pane -L"
+
 # Docker
 alias dc='docker compose'
 alias dstop='docker stop $(docker ps -a -q)'
