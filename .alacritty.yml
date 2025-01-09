@@ -2,22 +2,24 @@ env:
   TERM: xterm-256color
 window:
   dimensions:
-   columns: 270
-   lines: 85
+    columns: 270
+    lines: 85
   opacity: 1
 font:
   normal:
     family: "MesloLGS NF"
   size: 14
 shell:
- program: /bin/zsh
+  program: /bin/zsh
 selection:
   save_to_clipboard: true
 key_bindings:
   # move word using Alt/Opt key
   - { key: Right, mods: Alt, chars: "\x1BF" }
-  - { key: Left,  mods: Alt, chars: "\x1BB" }
+  - { key: Left, mods: Alt, chars: "\x1BB" }
   # tmux preview all windows
   - { key: L, mods: Command, chars: "\x01\x77" }
   # tmux preview all sessions
-  - { key: K, mods: Command, chars: "\x01\x73" }
+  # - { key: K, mods: Command, chars: "\x01\x73" }
+  # sesh inside tmux
+  - { key: K, mods: Command, chars: "\x01\x54" }
