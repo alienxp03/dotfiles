@@ -1,0 +1,3 @@
+require({
+  "folke/snacks.nvim",
+})
