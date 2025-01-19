@@ -35,8 +35,8 @@ keymap("n", "<C-Left>", ":vertical resize -2<CR>", opts())
 keymap("n", "<C-Right>", ":vertical resize +2<CR>", opts())
 
 -- Navigate buffers
-keymap("n", "<S-l>", ":BufferNext<CR>", opts())
-keymap("n", "<S-h>", ":BufferPrevious<CR>", opts())
+keymap("n", "<S-l>", ":BufferLineCycleNext<CR>", opts())
+keymap("n", "<S-h>", ":BufferLineCyclePrev<CR>", opts())
 
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
