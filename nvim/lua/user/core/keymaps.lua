@@ -145,7 +145,7 @@ keymap(
 )
 
 -- Lazygit
-keymap("n", "<leader>gl", ":LazyGit<cr>", opts({ desc = "LazyGit" }))
+keymap("n", "<leader>lz", ":LazyGit<cr>", opts({ desc = "LazyGit" }))
 
 -- Tmux navigation
 -- Temporary fix. Seems to be a bug, had to manually declare these bindings for now
