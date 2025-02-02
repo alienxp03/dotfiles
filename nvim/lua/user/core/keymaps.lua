@@ -44,7 +44,7 @@ keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show do
 keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
 
 -- fzf-lua
-keymap("n", "<C-f>", ":FzfLua live_grep<CR>", opts({ desc = "Find files" }))
+keymap("n", "<C-f>", ":FzfLua live_grep_glob<CR>", opts({ desc = "Find files" }))
 keymap("n", "<C-p>", ":FzfLua files<CR>", opts({ desc = "Find files" }))
 keymap("n", "<C-t>", ":FzfLua lgrep_curbuf<CR>", opts({ desc = "Live grep current buffer" }))
 keymap("n", "<C-b>", ":FzfLua buffers<CR>", opts({ desc = "Open buffers" }))

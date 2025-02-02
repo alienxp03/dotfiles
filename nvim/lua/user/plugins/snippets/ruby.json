@@ -4,5 +4,17 @@
 		"body": [
 			"debugger"
 		]
+	},
+	"leetcode": {
+		"prefix": "leet",
+		"body": [
+			"class Solution",
+			"  def run(${1:params})",
+			"  end",
+			"end",
+			"",
+			"solution = Solution.new",
+			"puts solution.run"
+		]
 	}
 }
