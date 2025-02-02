@@ -54,38 +54,6 @@ keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Doc
 keymap("n", "<leader>lf", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
 keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
 
--- Telescope
--- keymap(
---   "n",
---   "<C-p>",
---   ":Telescope find_files find_command=rg,--ignore,--hidden,--files prompt_prefix=🔍<cr>",
---   opts({ desc = "Find files" })
--- )
--- keymap(
---   "n",
---   "<C-o>",
---   ":Telescope find_files find_command=rg,--no-ignore,--hidden,--files prompt_prefix=🔍<cr>",
---   opts({ desc = "Find files (including .gitignore)" })
--- )
--- keymap("n", "<C-f>", ":Telescope live_grep<cr>", opts({ desc = "Find words in project" }))
--- keymap("n", "<C-t>", ":Telescope current_buffer_fuzzy_find<cr>", opts({ desc = "Find words in current buffer" }))
--- keymap("n", "<C-b>", ":Telescope buffers<cr>", opts({ desc = "Find words in current buffer" }))
--- keymap(
---   "n",
---   "<leader>ld",
---   ":Telescope lsp_definitions jump_type=never<cr>",
---   opts({ desc = "LSP definitions of word under the cursor" })
--- )
--- keymap("n", "<leader>ls", ":Telescope lsp_document_symbols<cr>", opts({ desc = "Symbols in current buffer" }))
--- keymap("n", "<leader>lf", ":Telescope lsp_references<cr>", opts({ desc = "References" }))
--- keymap("n", "<leader>lm", ":Telescope lsp_implementations<cr>", opts({ desc = "LSP implementations" }))
--- keymap("n", "<leader>lt", ":Telescope diagnostics<cr>", opts({ desc = "LSP diagnostics" }))
--- keymap("n", "<leader>gm", ":Telescope git_commits<cr>", opts({ desc = "Git commits" }))
--- keymap("n", "<leader>gb", ":Telescope git_commits<cr>", opts({ desc = "Git branches" }))
--- keymap("n", "<leader>gs", ":Telescope git_status<cr>", opts({ desc = "Git status" }))
--- keymap("n", "<leader>ts", ":Telescope tmux sessions<cr>", opts({ desc = "Tmux sessions" }))
--- keymap("n", "<leader>tw", ":Telescope tmux windows<cr>", opts({ desc = "Tmux windows" }))
-
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
 

@@ -1,5 +1,5 @@
 return {
-  "echasnovski/mini.cursorword",
+  "echasnovski/mini.nvim",
   version = "*",
   config = function()
     require("mini.cursorword").setup()
