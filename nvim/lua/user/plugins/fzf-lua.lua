@@ -8,7 +8,7 @@ return {
       },
       previewers = {
         builtin = {
-          hl_cursorline = "Search", -- cursor line highlight
+          ["hls.cursorline"] = "Search", -- cursor line highlight
           extensions = {
             ["png"] = { "chafa", "{file}" },
             ["svg"] = { "chafa", "{file}" },
@@ -20,11 +20,17 @@ return {
         height = 0.98,
         width = 0.98,
         preview = {
-          horizontal = "right:75%",
+          -- horizontal = "right:75%",
+          vertical = "down:75%",
+          layout = "vertical",
+          wrap = true,
         },
       },
+      files = {
+        -- formatter = "path.filename_first",
+      },
       grep = {
-        rg_opts = "--hidden --column -S -g '!{.git,node_modules}/*'",
+        rg_opts = "--hidden --line-number --column -S -g '!{.git,node_modules}/*'",
       },
     })
   end,

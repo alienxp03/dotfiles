@@ -53,6 +53,8 @@ keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definiti
 keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }))
 keymap("n", "<leader>lf", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
 keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
+keymap("n", "<leader>tb", ":FzfLua git_branches<CR>", opts({ desc = "Git branches" }))
+keymap("n", "<leader>tc", ":FzfLua git_bcommits<CR>", opts({ desc = "Git commits" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
