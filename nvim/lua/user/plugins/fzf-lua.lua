@@ -14,6 +14,7 @@ return {
             ["svg"] = { "chafa", "{file}" },
             ["jpg"] = { "chafa", "{file}" },
           },
+          syntax_limit_b = 1024 * 100, -- 100KB
         },
       },
       winopts = {
@@ -27,10 +28,11 @@ return {
         },
       },
       files = {
-        -- formatter = "path.filename_first",
+        formatter = "path.filename_first",
       },
       grep = {
         rg_opts = "--hidden --line-number --column -S -g '!{.git,node_modules}/*'",
+        multiline = 2,
       },
     })
   end,
