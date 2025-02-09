@@ -53,8 +53,10 @@ keymap("n", "<leader>ld", ":FzfLua lsp_definitions<CR>", opts({ desc = "Definiti
 keymap("n", "<leader>ls", ":FzfLua lsp_document_symbols<CR>", opts({ desc = "Document symbols" }))
 keymap("n", "<leader>lf", ":FzfLua lsp_references<CR>", opts({ desc = "References" }))
 keymap("n", "<leader>lm", ":FzfLua lsp_implementations<CR>", opts({ desc = "Implementations" }))
-keymap("n", "<leader>tb", ":FzfLua git_branches<CR>", opts({ desc = "Git branches" }))
-keymap("n", "<leader>tc", ":FzfLua git_bcommits<CR>", opts({ desc = "Git commits" }))
+keymap("n", "<leader>gb", ":FzfLua git_branches<CR>", opts({ desc = "Git branches" }))
+keymap("n", "<leader>gc", ":FzfLua git_bcommits<CR>", opts({ desc = "Git buffer commits" }))
+keymap("n", "<leader>gs", ":FzfLua git_status<CR>", opts({ desc = "Git status" }))
+keymap("n", "<leader>sc", ":FzfLua command_history<CR>", opts({ desc = "Command history" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
@@ -114,9 +116,6 @@ keymap(
   opts({ desc = "Replace current word" })
 )
 
--- Lazygit
-keymap("n", "<leader>lz", ":LazyGit<cr>", opts({ desc = "LazyGit" }))
-
 -- Tmux navigation
 -- Temporary fix. Seems to be a bug, had to manually declare these bindings for now
 keymap("n", "<C-h>", ":TmuxNavigateLeft<cr>", opts())
@@ -138,8 +137,8 @@ keymap(
 
 -- keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
 
-keymap("n", "<leader>gc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
-keymap("n", "<leader>gt", ":GoTestPkg<cr>", opts({ desc = "Go test package" }))
+keymap("n", "<leader>tc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
+keymap("n", "<leader>tp", ":GoTestPkg<cr>", opts({ desc = "Go test package" }))
 vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModTidy")
   vim.cmd("GoModVendor")
@@ -150,3 +149,6 @@ keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
 keymap("n", "<leader>ts", ":TestSuite<cr>", opts({ desc = "Test suite" }))
 
 keymap("n", "<leader>yz", ":Yazi<cr>", opts({ desc = "Open Yazi" }))
+
+-- neo-clip
+keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))
