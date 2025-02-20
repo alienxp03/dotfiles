@@ -86,6 +86,7 @@ return {
         },
       },
       pyright = {},
+      sqlls = {},
     }
 
     for name, config in pairs(servers) do

@@ -29,6 +29,7 @@ return {
     indent = { enabled = true },
     input = { enabled = true },
     lazygit = { configure = true },
+    bufdelete = { configure = true },
     win = {
       width = 0.95,
       height = 0.95,
@@ -41,6 +42,13 @@ return {
         Snacks.lazygit()
       end,
       desc = "Lazygit Current File History",
+    },
+    {
+      "<C-q>",
+      function()
+        Snacks.bufdelete()
+      end,
+      desc = "Delete buffer",
     },
   },
 }

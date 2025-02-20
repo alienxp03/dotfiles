@@ -57,15 +57,15 @@ keymap("n", "<leader>gb", ":FzfLua git_branches<CR>", opts({ desc = "Git branche
 keymap("n", "<leader>gc", ":FzfLua git_bcommits<CR>", opts({ desc = "Git buffer commits" }))
 keymap("n", "<leader>gs", ":FzfLua git_status<CR>", opts({ desc = "Git status" }))
 keymap("n", "<leader>sc", ":FzfLua command_history<CR>", opts({ desc = "Command history" }))
+keymap("n", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
+keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
+keymap("n", "<leader>nn", ':lua require("neotest").run.run()<cr>', opts())
 
 -- Ntree explorer
 keymap("n", "<leader>e", ":Neotree toggle<cr>", opts())
-
--- Buffers
-keymap("n", "<C-q>", ":Bdelete<cr>", opts({ desc = "Close current buffer" }))
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts())
@@ -138,7 +138,8 @@ keymap(
 -- keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
 
 keymap("n", "<leader>tc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
-keymap("n", "<leader>tp", ":GoTestPkg<cr>", opts({ desc = "Go test package" }))
+keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
+keymap("n", "<leader>tn", ":TestNearest<cr>", opts({ desc = "Test nearest" }))
 vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModTidy")
   vim.cmd("GoModVendor")

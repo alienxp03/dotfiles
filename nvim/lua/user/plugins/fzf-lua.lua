@@ -28,15 +28,13 @@ return {
         },
       },
       files = {
-        formatter = "path.filename_first",
+        formatter = { "path.filename_first", 2 },
       },
       grep = {
         rg_opts = "--hidden --line-number --color=always --column -S -g '!{.git,node_modules}/*'",
-        rg_glob_fn = function(query, opts)
-          local regex, flags = query:match("^(.-)%s%-%-(.*)$")
-          -- If no separator is detected will return the original query
-          return (regex or query), flags
-        end,
+      },
+      lsp = {
+        jump1 = false,
       },
     })
   end,
