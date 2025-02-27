@@ -15,7 +15,7 @@ return {
     local luasnip = require("luasnip")
     local cmp = require("cmp")
     local lspkind = require("lspkind")
-    local neocodeium = require("neocodeium")
+    -- local neocodeium = require("neocodeium")
     -- local commands = require("neocodeium.commands")
 
     -- loads vscode style snippets from installed plugins (e.g. friendly-snippets)
@@ -46,14 +46,14 @@ return {
         ["<C-j>"] = cmp.mapping.select_next_item(),
         ["<C-k>"] = cmp.mapping.select_prev_item(),
         ["<Tab>"] = cmp.mapping(function(fallback)
-          -- local supermaven_suggestion = require("supermaven-nvim.completion_preview")
+          local supermaven_suggestion = require("supermaven-nvim.completion_preview")
 
           if luasnip.expandable() then
             luasnip.expand()
-          elseif neocodeium.visible() then
-            neocodeium.accept()
-          -- elseif supermaven_suggestion.has_suggestion() then
-          --   supermaven_suggestion.on_accept_suggestion()
+          -- elseif neocodeium.visible() then
+          --   neocodeium.accept()
+          elseif supermaven_suggestion.has_suggestion() then
+            supermaven_suggestion.on_accept_suggestion()
           elseif cmp.visible() then
             cmp.select_next_item({ behavior = cmp.SelectBehavior.Insert })
             luasnip.expand()

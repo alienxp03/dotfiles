@@ -18,8 +18,11 @@ fi
 source "$HOME/.dotfiles/zshrc/env.zsh"
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
+# for debugging
+# set -x
 plugins=(tmux zsh-autosuggestions)
 source $ZSH/oh-my-zsh.sh
+# set +x
 
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
 source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
