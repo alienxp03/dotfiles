@@ -9,8 +9,8 @@ elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
 fi
 
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# custom mise prompt helper
+[[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
 
 # History
 HISTFILE=~/.zsh_history

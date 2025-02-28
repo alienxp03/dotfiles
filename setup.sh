@@ -7,5 +7,6 @@ ln -nfs ~/.dotfiles/.solargraph.yml ~/.solargraph.yml
 ln -nfs ~/.dotfiles/.lazygit.config.yml ~/Library/Application\ Support/lazygit/config.yml
 ln -nfs ~/.dotfiles/.zsh_plugins.txt ~/.zsh_plugins.txt
 ln -nfs ~/.dotfiles/.p10k.zsh ~/.p10k.zsh
+ln -nfs ~/.dotfiles/.p10k.mise.zsh ~/.p10k.mise.zsh
 
 echo "Sym links created!"

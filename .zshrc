@@ -12,8 +12,14 @@ antidote load
 # Load completions
 autoload -Uz compinit && compinit
 
-source "$HOME/.dotfiles/zshrc/init.zsh"
+# Themes
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# eval "$(starship init zsh)"
 
+source "$HOME/.dotfiles/zshrc/init.zsh"
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 eval "$(atuin init zsh)"
+eval "$(mise activate zsh)"
+
