@@ -5,38 +5,15 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-unsetopt INTERACTIVE_COMMENTS
-unsetopt BAD_PATTERN
+# antidote zsh plugin manager
+source /opt/homebrew/opt/antidote/share/antidote/antidote.zsh
+antidote load
 
-# For cross-platform logics
-if [ "$(uname -s)" = "Darwin" ]; then
-  source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
-elif [ "$(uname -s)" = "Linux" ]; then
-  source "$HOME/.dotfiles/zshrc/env.linux.zsh"
-fi
+# Load completions
+autoload -Uz compinit && compinit
 
-source "$HOME/.dotfiles/zshrc/env.zsh"
-source "$HOME/.dotfiles/zshrc/env.local.zsh"
+source "$HOME/.dotfiles/zshrc/init.zsh"
 
-# for debugging
-# set -x
-plugins=(tmux zsh-autosuggestions)
-source $ZSH/oh-my-zsh.sh
-# set +x
-
-source "$HOME/.dotfiles/zshrc/aliases.zsh"
-source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
-source "$HOME/.dotfiles/zshrc/functions.zsh"
-
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-
-### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
-export PATH="/Users/azuan/.rd/bin:$PATH"
-### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
-
-. "$HOME/.atuin/bin/env"
+eval "$(fzf --zsh)"
+eval "$(zoxide init zsh)"
 eval "$(atuin init zsh)"

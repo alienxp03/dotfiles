@@ -7,6 +7,7 @@ alias rc='bin/rails console'
 alias n='bundle exec next rspec'
 alias cop='bin/rubocop'
 alias dstop='docker stop $(docker ps -q)'
+alias ls='ls --color'
 
 # Git
 alias gp='git push'

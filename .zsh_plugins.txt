@@ -1,0 +1,8 @@
+romkatv/powerlevel10k
+zsh-users/zsh-completions
+zsh-users/zsh-autosuggestions
+Aloxaf/fzf-tab
+jeffreytse/zsh-vi-mode
+
+# must be last in the list
+zsh-users/zsh-syntax-highlighting
