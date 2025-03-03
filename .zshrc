@@ -21,5 +21,4 @@ source "$HOME/.dotfiles/zshrc/init.zsh"
 eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 eval "$(atuin init zsh)"
-eval "$(mise activate zsh)"
-
+eval "$($HOME/.local/bin/mise activate zsh)"
