@@ -22,3 +22,5 @@ eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
 eval "$(atuin init zsh)"
 eval "$($HOME/.local/bin/mise activate zsh)"
+
+. "$HOME/.atuin/bin/env"

@@ -9,10 +9,11 @@ elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
 fi
 
+source "$HOME/.dotfiles/zshrc/env.local.zsh"
+
 # custom mise prompt helper
 [[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
 # eval "$(starship init zsh)"
-
 
 # History
 HISTFILE=~/.zsh_history
@@ -28,7 +29,7 @@ setopt hist_ignore_dups
 setopt hist_find_no_dups
 
 # Completion
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z} r:|[._-]=* l:|=*'
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' menu no
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
