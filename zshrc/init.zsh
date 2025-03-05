@@ -12,7 +12,7 @@ fi
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
 # custom mise prompt helper
-[[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
+# [[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
 # eval "$(starship init zsh)"
 
 # History

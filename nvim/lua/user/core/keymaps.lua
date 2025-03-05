@@ -138,8 +138,6 @@ keymap(
 -- keymap("n", "<C-o>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
 
 keymap("n", "<leader>tc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
-keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
-keymap("n", "<leader>tn", ":TestNearest<cr>", opts({ desc = "Test nearest" }))
 vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModTidy")
   vim.cmd("GoModVendor")

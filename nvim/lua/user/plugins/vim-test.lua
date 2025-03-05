@@ -10,5 +10,6 @@ return {
       nearest = "-v",
       file = "-v",
     }
+    vim.g["test#go#runner"] = "richgo"
   end,
 }
