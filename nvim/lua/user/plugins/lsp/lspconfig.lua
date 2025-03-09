@@ -66,11 +66,13 @@ return {
           },
         },
       },
-      ruby_lsp = {
-        cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
-      },
+      -- ruby_lsp = {
+      --   -- cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
+      --   cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
+      -- },
       solargraph = {
-        cmd = { home_path .. "/.rbenv/shims/solargraph", "stdio" },
+        -- cmd = { home_path .. "/.rbenv/shims/solargraph", "stdio" },
+        cmd = { home_path .. "/.local/share/mise/shims/solargraph", "stdio" },
         root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
         init_options = { formatting = true },
         settings = {

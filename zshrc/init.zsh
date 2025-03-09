@@ -1,6 +1,7 @@
 source "$HOME/.dotfiles/zshrc/aliases.zsh"
 source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
 source "$HOME/.dotfiles/zshrc/functions.zsh"
+source "$HOME/.dotfiles/zshrc/env.zsh"
 
 # For cross-platform logics
 if [ "$(uname -s)" = "Darwin" ]; then
