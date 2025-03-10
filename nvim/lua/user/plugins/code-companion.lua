@@ -9,22 +9,24 @@ return {
     require("codecompanion").setup({
       strategies = {
         chat = {
-          adapter = "gemini",
+          adapter = "copilot",
         },
       },
       adapters = {
-        anthropic = function()
-          return require("codecompanion.adapters").extend("gemini", {
-            env = {
-              api_key = "GEMINI_API_KEY",
-            },
+        copilot = function()
+          return require("codecompanion.adapters").extend("copilot", {
             schema = {
               model = {
-                default = "gemini-2.0-flash-exp",
+                default = "claude-3.7-sonnet",
               },
             },
           })
         end,
+      },
+      display = {
+        chat = {
+          show_settings = true, -- I'm using this to prove that the default model is not changed.
+        },
       },
     })
   end,

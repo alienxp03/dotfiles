@@ -16,7 +16,8 @@ keymap("n", "<leader>x", '"_x', opts())
 keymap("n", "<leader>d", '"_d', opts())
 
 -- Clear search
-keymap("n", "<esc><esc>", ":noh<cr>", opts())
+keymap("v", "<Esc><Esc>", "<Esc>", opts({ desc = "clear search" }))
+keymap("n", "<Esc><Esc>", ":noh<CR>", opts({ desc = "clear search" }))
 
 -- Save shortcut
 keymap("n", "<C-s>", ":w<cr>", opts())
