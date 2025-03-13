@@ -154,5 +154,3 @@ keymap("n", "<leader>yz", ":Yazi<cr>", opts({ desc = "Open Yazi" }))
 keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))
 
 keymap("n", "<leader>cc", ":CodeCompanionChat Toggle<cr>", opts({ desc = "Toggle code companion" }))
-
-keymap("n", "<leader>lh", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Hover" }))
