@@ -4,10 +4,18 @@ window:
   dimensions:
     columns: 270
     lines: 85
-  opacity: 1
+  opacity: 0.9 # Slightly transparent
+  title: Alacritty
 font:
   normal:
     family: "MesloLGS NF"
+    style: Regular
+  bold:
+    family: "MesloLGS NF"
+    style: Bold
+  italic:
+    family: "MesloLGS NF"
+    style: Italic
   size: 14
 shell:
   program: /bin/zsh
@@ -17,9 +25,15 @@ key_bindings:
   # move word using Alt/Opt key
   - { key: Right, mods: Alt, chars: "\x1BF" }
   - { key: Left, mods: Alt, chars: "\x1BB" }
-  # tmux preview all windows
-  - { key: L, mods: Command, chars: "\x01\x77" }
-  # tmux preview all sessions
+  # tmux preview all windows - Removed, potentially conflicting
+  # - { key: L, mods: Command, chars: "\x01\x77" }
+  # tmux preview all sessions - Removed, potentially conflicting
   # - { key: K, mods: Command, chars: "\x01\x73" }
   # sesh inside tmux
   - { key: K, mods: Command, chars: "\x01\x54" }
+  # Increase font size
+  - { key: Plus, mods: Command, chars: "\x11" }
+  # Decrease font size
+  - { key: Minus, mods: Command, chars: "\x0F" }
+  # Reset font size
+  - { key: '0', mods: Command, chars: "\x12" }
