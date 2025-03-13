@@ -73,7 +73,7 @@ return {
     set("n", "<c-leftdrag>", mc.handleMouseDrag)
 
     -- Easy way to add and remove cursors using the main cursor.
-    -- set({ "n", "x" }, "<c-q>", mc.toggleCursor)
+    set({ "n", "x" }, "<c-c>", mc.toggleCursor)
 
     -- Clone every cursor and disable the originals.
     set({ "n", "x" }, "<leader><c-q>", mc.duplicateCursors)
