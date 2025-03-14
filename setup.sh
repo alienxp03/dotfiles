@@ -8,5 +8,6 @@ ln -nfs ~/.dotfiles/.lazygit.config.yml ~/Library/Application\ Support/lazygit/c
 ln -nfs ~/.dotfiles/.zsh_plugins.txt ~/.zsh_plugins.txt
 ln -nfs ~/.dotfiles/.p10k.zsh ~/.p10k.zsh
 ln -nfs ~/.dotfiles/.p10k.mise.zsh ~/.p10k.mise.zsh
+ln -nfs ~/.dotfiles/.aider.conf.yml ~/.aider.conf.yml
 
 echo "Sym links created!"

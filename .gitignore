@@ -2,3 +2,5 @@
 nvim/plugin/packer_compiled.lua
 tags*
 *.local.zsh
+.aider*
+!.aider.conf.yml
