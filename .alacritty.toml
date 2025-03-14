@@ -1,0 +1,47 @@
+[env]
+TERM = "xterm-256color"
+
+[font]
+size = 14
+
+[font.normal]
+family = "Monaspace Xenon"
+# family = "MesloLGS NF"
+# family: "MesloLGS NF"
+# family: "Monaspace Argon"
+# family: "Monaspace Neon"
+# family: "FiraCode Nerd Font"
+# family: "Hack Nerd Fontfamily = "Monaspace Xenon"
+
+[[keyboard.bindings]]
+chars = "\u001BF"
+key = "Right"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u001BB"
+key = "Left"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u0001w"
+key = "L"
+mods = "Command"
+
+[[keyboard.bindings]]
+chars = "\u0001T"
+key = "K"
+mods = "Command"
+
+[selection]
+save_to_clipboard = true
+
+[shell]
+program = "/bin/zsh"
+
+[window]
+opacity = 1
+
+[window.dimensions]
+columns = 270
+lines = 85
