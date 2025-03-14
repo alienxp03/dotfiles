@@ -4,17 +4,28 @@ window:
   dimensions:
     columns: 270
     lines: 85
-  opacity: 0.9 # Slightly transparent
+  opacity: 0.99
+  blur: true
+  decorations: "Buttonless"
   title: Alacritty
 font:
   normal:
-    family: "MesloLGS NF"
+    # family: "MesloLGS NF"
+    # family: "Monaspace Argon"
+    # family: "Monaspace Neon"
+    family: "Monaspace Xenon"
+    # family: "FiraCode Nerd Font"
+    # family: "Hack Nerd Font"
     style: Regular
   bold:
-    family: "MesloLGS NF"
+    # family: "MesloLGS NF"
+    # family: "FiraCode Nerd Font"
+    family: "Monaspace Xenon"
     style: Bold
   italic:
-    family: "MesloLGS NF"
+    # family: "MesloLGS NF"
+    # family: "FiraCode Nerd Font"
+    family: "Monaspace Xenon"
     style: Italic
   size: 14
 shell:
@@ -35,5 +46,3 @@ key_bindings:
   - { key: Plus, mods: Command, chars: "\x11" }
   # Decrease font size
   - { key: Minus, mods: Command, chars: "\x0F" }
-  # Reset font size
-  - { key: '0', mods: Command, chars: "\x12" }
