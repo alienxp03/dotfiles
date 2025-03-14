@@ -12,10 +12,11 @@ return {
     -- import cmp-nvim-lsp plugin
     local cmp_nvim_lsp = require("cmp_nvim_lsp")
 
-    -- Define base capabilities
+    -- used to enable autocompletion (assign to every lsp server config)
     local capabilities = cmp_nvim_lsp.default_capabilities()
 
     -- Change the Diagnostic symbols in the sign column (gutter)
+    -- (not in youtube nvim video)
     local signs = { Error = " ", Warn = " ", Hint = "󰠠 ", Info = " " }
     for type, icon in pairs(signs) do
       local hl = "DiagnosticSign" .. type
@@ -48,13 +49,15 @@ return {
       terraformls = {},
       tflint = {},
       lua_ls = {
-        settings = {
+        settings = { -- custom settings for lua
           Lua = {
+            -- make the language server recognize "vim" global
             diagnostics = {
               enable = false,
               globals = { "vim" },
             },
             workspace = {
+              -- make language server aware of runtime files
               library = {
                 [vim.fn.expand("$VIMRUNTIME/lua")] = true,
                 [vim.fn.stdpath("config") .. "/lua"] = true,
@@ -63,19 +66,6 @@ return {
           },
         },
       },
-      -- Example of conditional configuration
-      --[[
-      eslint = {
-        on_attach = function(client, bufnr)
-          if client.server_capabilities.documentFormattingProvider then
-            vim.api.nvim_command [[augroup FormatAfterSave]]
-            vim.api.nvim_command [[autocmd! * <buffer>]]
-            vim.api.nvim_command [[autocmd BufWritePost <buffer> lua vim.lsp.buf.format({async = true})]]
-            vim.api.nvim_command [[augroup END]]
-          end
-        end
-      },
-      --]]
       -- ruby_lsp = {
       --   -- cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
       --   cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
@@ -111,57 +101,6 @@ return {
       }, config)
 
       -- lsp.configure(name, config)
-      lspconfig[name].setup(config)
-    end
-  end,
-}
-            diagnostics = {
-              enable = false,
-              globals = { "vim" },
-            },
-            workspace = {
-              library = {
-                [vim.fn.expand("$VIMRUNTIME/lua")] = true,
-                [vim.fn.stdpath("config") .. "/lua"] = true,
-              },
-            },
-          },
-        },
-      },
-      -- ruby_lsp = {
-      --   cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
-      -- },
-      solargraph = {
-        cmd = { home_path .. "/.local/share/mise/shims/solargraph", "stdio" },
-        root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
-        init_options = { formatting = true },
-        settings = {
-          solargraph = {
-            autoformat = true,
-            completion = true,
-            diagnostic = true,
-            folding = true,
-            references = true,
-            rename = true,
-            symbols = true,
-          },
-        },
-      },
-      pyright = {},
-      sqlls = {},
-    }
-
-    for name, config in pairs(servers) do
-      if type(config) ~= "table" then
-        config = {}
-      end
-
-      -- Use a base configuration and extend it
-      local base_config = {
-        capabilities = capabilities,
-      }
-      config = vim.tbl_deep_extend("force", base_config, config)
-
       lspconfig[name].setup(config)
     end
   end,
