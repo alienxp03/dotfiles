@@ -1,0 +1,34 @@
+{
+	"err": {
+		"prefix": "err",
+		"body": [
+			"if err != nil {",
+			"\treturn err",
+			"}"
+		]
+	},
+	"print": {
+		"prefix": "pl",
+		"body": [
+			"fmt.Println($1)"
+		]
+	},
+	"printf": {
+		"prefix": "pf",
+		"body": [
+			"fmt.Printf(\"$1\", $2)"
+		]
+	},
+	"sprintf": {
+		"prefix": "sf",
+		"body": [
+			"fmt.Sprintf(\"$1\", $2)"
+		]
+	},
+	"slog": {
+		"prefix": "slog",
+		"body": [
+			"slog.FromContext(ctx).$1($2, \"$3\")"
+		]
+	}
+}

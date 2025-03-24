@@ -4,3 +4,4 @@ tags*
 *.local.zsh
 .aider*
 !.aider.conf.yml
+nvim/dictionaries
