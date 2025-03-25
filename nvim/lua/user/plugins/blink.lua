@@ -16,14 +16,13 @@ return {
       ["<CR>"] = { "select_and_accept", "fallback" },
       ["<Tab>"] = {
         function(cmp)
-          local supermaven_suggestion = require("supermaven-nvim.completion_preview")
-          if supermaven_suggestion.has_suggestion() then
-            vim.schedule(function()
-              supermaven_suggestion.on_accept_suggestion()
-            end)
+          local ok, supermaven = pcall(require, "supermaven-nvim.completion_preview")
+          if ok and supermaven.has_suggestion() then
+            vim.schedule(supermaven.on_accept_suggestion)
+            return true -- Handled by Supermaven
           end
-
-          return true
+          -- Fall through to normal Tab behavior
+          return cmp.select_next_item()
         end,
         "select_next",
       },
@@ -39,7 +38,7 @@ return {
           name = "Dict",
           min_keyword_length = 3,
           opts = {
-            dictionary_directories = { vim.fn.expand("~/.dotfiles/nvim/dictionaries") },
+            dictionary_directories = { vim.fs.normalize("~/.dotfiles/nvim/dictionaries") },
           },
         },
       },
@@ -49,7 +48,6 @@ return {
     completion = {
       menu = {
         auto_show = true,
-        border = border_chars,
         draw = {
           components = {},
         },
