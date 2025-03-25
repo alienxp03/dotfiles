@@ -13,6 +13,7 @@ return {
       ["<C-j>"] = { "select_next", "fallback_to_mappings" },
       ["<C-n>"] = { "snippet_forward", "fallback_to_mappings" },
       ["<C-p>"] = { "snippet_backward", "fallback_to_mappings" },
+      ["<CR>"] = { "select_and_accept", "fallback" },
       ["<Tab>"] = {
         function(cmp)
           local supermaven_suggestion = require("supermaven-nvim.completion_preview")
