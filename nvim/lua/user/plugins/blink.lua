@@ -3,6 +3,7 @@ return {
   dependencies = {
     "rafamadriz/friendly-snippets",
     "Kaiser-Yang/blink-cmp-dictionary",
+    "onsails/lspkind.nvim",
   },
 
   version = "*",
@@ -19,12 +20,11 @@ return {
           local ok, supermaven = pcall(require, "supermaven-nvim.completion_preview")
           if ok and supermaven.has_suggestion() then
             vim.schedule(supermaven.on_accept_suggestion)
-            return true -- Handled by Supermaven
+            return true
           end
-          -- Fall through to normal Tab behavior
-          return cmp.select_next_item()
         end,
         "select_next",
+        "fallback",
       },
     },
     appearance = {
@@ -33,6 +33,19 @@ return {
     sources = {
       default = { "lsp", "path", "snippets", "buffer", "dictionary" },
       providers = {
+        buffer = {
+          opts = {
+            -- Performance goes brrr
+            -- get all buffers, even ones like neo-tree
+            -- get_bufnrs = vim.api.nvim_list_bufs
+            -- or (recommended) filter to only "normal" buffers
+            get_bufnrs = function()
+              return vim.tbl_filter(function(bufnr)
+                return vim.bo[bufnr].buftype == ""
+              end, vim.api.nvim_list_bufs())
+            end,
+          },
+        },
         dictionary = {
           module = "blink-cmp-dictionary",
           name = "Dict",
@@ -46,13 +59,49 @@ return {
     fuzzy = { implementation = "prefer_rust_with_warning" },
     signature = { enabled = true },
     completion = {
+      ghost_text = {
+        enabled = true,
+      },
       menu = {
         auto_show = true,
         draw = {
-          components = {},
+          components = {
+            kind_icon = {
+              text = function(ctx)
+                local lspkind = require("lspkind")
+                local icon = ctx.kind_icon
+                if vim.tbl_contains({ "Path" }, ctx.source_name) then
+                  local dev_icon, _ = require("nvim-web-devicons").get_icon(ctx.label)
+                  if dev_icon then
+                    icon = dev_icon
+                  end
+                else
+                  icon = require("lspkind").symbolic(ctx.kind, {
+                    mode = "symbol",
+                  })
+                end
+
+                return icon .. ctx.icon_gap
+              end,
+
+              highlight = function(ctx)
+                local hl = ctx.kind_hl
+                if vim.tbl_contains({ "Path" }, ctx.source_name) then
+                  local dev_icon, dev_hl = require("nvim-web-devicons").get_icon(ctx.label)
+                  if dev_icon then
+                    hl = dev_hl
+                  end
+                end
+                return hl
+              end,
+            },
+          },
         },
       },
-      documentation = { auto_show = true, auto_show_delay_ms = 500 },
+      documentation = { auto_show = true, auto_show_delay_ms = 0 },
+    },
+    cmdline = {
+      completion = { menu = { auto_show = true } },
     },
   },
   opts_extend = { "sources.default" },
