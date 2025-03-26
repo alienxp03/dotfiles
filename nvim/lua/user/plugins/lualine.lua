@@ -1,20 +1,7 @@
 return {
-  "nvim-lualine/lualine.nvim", -- Fancier statusline
+  "nvim-lualine/lualine.nvim",
+  dependencies = { "nvim-tree/nvim-web-devicons" },
   config = function()
-    require("lualine").setup({
-      options = {
-        theme = "papercolor_light",
-      },
-      sections = {
-        lualine_b = {}, -- Disable branch
-        lualine_c = {
-          {
-            "filename",
-            path = 1,
-          },
-        },
-        lualine_x = {}, -- Disable branch
-      },
-    })
+    require("lualine").setup()
   end,
 }

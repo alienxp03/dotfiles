@@ -41,7 +41,13 @@ return {
         },
       },
       dockerls = {},
-      gopls = {},
+      gopls = {
+        settings = {
+          gopls = {
+            usePlaceHolders = true,
+          },
+        },
+      },
       terraformls = {},
       tflint = {},
       lua_ls = {
