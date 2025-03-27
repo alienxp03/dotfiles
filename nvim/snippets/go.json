@@ -1,9 +1,9 @@
 {
 	"err": {
-		"prefix": "err",
+		"prefix": "rr",
 		"body": [
 			"if err != nil {",
-			"\treturn err",
+			"  return nil, err",
 			"}"
 		]
 	},
@@ -26,7 +26,7 @@
 		]
 	},
 	"slog": {
-		"prefix": "slog",
+		"prefix": "slg",
 		"body": [
 			"slog.FromContext(ctx).$1($2, \"$3\")"
 		]
