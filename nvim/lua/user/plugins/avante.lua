@@ -12,15 +12,15 @@ return {
     "zbirenbaum/copilot.lua",
   },
   opts = {
-    -- provider = "gemini",
-    -- gemini = {
-    --   endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
-    --   -- model = "gemini-1.5-flash-latest",
-    --   model = "gemini-2.0-flash-exp",
-    --   timeout = 30000, -- Timeout in milliseconds
-    --   temperature = 0,
-    --   max_tokens = 4096,
-    -- },
+    provider = "gemini",
+    gemini = {
+      endpoint = "https://generativelanguage.googleapis.com/v1beta/models",
+      -- model = "gemini-1.5-flash-latest",
+      model = "gemini-2.0-flash-exp",
+      timeout = 30000, -- Timeout in milliseconds
+      temperature = 0,
+      max_tokens = 4096,
+    },
     -- provide = "copilot",
     -- copilot = {
     --   endpoint = "https://api.githubcopilot.com",
@@ -34,18 +34,18 @@ return {
     -- mappings = {
     --   ask = "<leader>ch",
     -- },
-    provider = "copilot",
-    copilot = {
-      endpoint = "https://api.githubcopilot.com",
-      -- model = "gpt-4o-2024-08-06",
-      -- model = "o1",
-      model = "claude-3.7-sonnet",
-      proxy = nil,
-      allow_insecure = false,
-      timeout = 30000,
-      temperature = 0,
-      max_tokens = 8192,
-    },
+    -- provider = "copilot",
+    -- copilot = {
+    --   endpoint = "https://api.githubcopilot.com",
+    --   -- model = "gpt-4o-2024-08-06",
+    --   -- model = "o1",
+    --   model = "claude-3.7-sonnet",
+    --   proxy = nil,
+    --   allow_insecure = false,
+    --   timeout = 30000,
+    --   temperature = 0,
+    --   max_tokens = 8192,
+    -- },
   },
   -- config = function()
   --   require("avante").setup({

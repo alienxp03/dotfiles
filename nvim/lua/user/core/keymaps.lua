@@ -63,7 +63,6 @@ keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 
 -- nvim-spectre
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
-keymap("n", "<leader>nn", ':lua require("neotest").run.run()<cr>', opts())
 
 -- Ntree explorer
 keymap("n", "<leader>e", ":Neotree toggle<cr>", opts())
