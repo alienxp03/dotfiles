@@ -3,6 +3,9 @@ return {
   priority = 1000,
   lazy = false,
   opts = {
+    picker = {
+      enabled = true,
+    },
     dashboard = {
       enabled = true,
       preset = {
@@ -64,6 +67,19 @@ return {
         Snacks.bufdelete()
       end,
       desc = "Delete buffer",
+    },
+    {
+      "<leader>sf",
+      function()
+        Snacks.picker.files()
+      end,
+      desc = "Picker",
+    },
+    {
+      "<leader>su",
+      function()
+        Snacks.picker.undo()
+      end,
     },
   },
 }
