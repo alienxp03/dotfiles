@@ -12,6 +12,7 @@ return {
         update_cwd = true,
       },
       renderer = {
+        highlight_git = true,
         root_folder_modifier = ":t",
         icons = {
           glyphs = {
