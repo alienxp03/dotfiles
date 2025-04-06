@@ -65,7 +65,7 @@ keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
 
 -- Ntree explorer
-keymap("n", "<leader>e", ":Neotree toggle<cr>", opts())
+keymap("n", "<leader>e", ":NvimTreeToggle<cr>", opts())
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts())
@@ -122,10 +122,6 @@ keymap("n", "<C-h>", ":TmuxNavigateLeft<cr>", opts())
 keymap("n", "<C-j>", ":TmuxNavigateDown<cr>", opts())
 keymap("n", "<C-k>", ":TmuxNavigateUp<cr>", opts())
 keymap("n", "<C-l>", ":TmuxNavigateRight<cr>", opts())
-
--- Harpoon
-keymap("n", "<leader>ha", ":lua require('harpoon.mark').add_file()<cr>", opts({ desc = "Add file to harpoon" }))
-keymap("n", "<leader>hl", ":lua require('harpoon.ui').toggle_quick_menu()<cr>", opts({ desc = "Toggle harpoon menu" }))
 
 -- trouble
 keymap(

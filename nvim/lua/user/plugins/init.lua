@@ -15,7 +15,6 @@ return {
   "folke/neodev.nvim", -- Neovim development
   "akinsho/toggleterm.nvim",
   "christoomey/vim-tmux-navigator",
-  "ThePrimeagen/harpoon",
   "tpope/vim-endwise",
   "folke/snacks.nvim",
 }
