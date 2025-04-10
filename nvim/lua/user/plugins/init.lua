@@ -9,7 +9,6 @@ return {
   "vim-ruby/vim-ruby",
   "slim-template/vim-slim", -- Rails slim
   "dstein64/vim-startuptime", -- Improve startup time
-  "nvim-pack/nvim-spectre", -- Search and replace
   "sbdchd/neoformat", -- Indent
   "wakatime/vim-wakatime", -- Wakatime
   "folke/neodev.nvim", -- Neovim development

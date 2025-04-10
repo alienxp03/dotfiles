@@ -6,6 +6,7 @@ end
 --Remap space as leader key
 vim.api.nvim_set_keymap("", "<Space>", "<Nop>", { noremap = true, silent = true })
 vim.g.mapleader = " "
+vim.g.maplocalleader = ","
 
 -- Shorten function name
 local keymap = vim.api.nvim_set_keymap
@@ -60,9 +61,6 @@ keymap("n", "<leader>gs", ":FzfLua git_status<CR>", opts({ desc = "Git status" }
 keymap("n", "<leader>sc", ":FzfLua command_history<CR>", opts({ desc = "Command history" }))
 keymap("n", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
-
--- nvim-spectre
-keymap("n", "<leader>fr", ":lua require('spectre').open_visual({ is_insert_mode = true })<cr>", opts())
 
 -- Ntree explorer
 keymap("n", "<leader>e", ":NvimTreeToggle<cr>", opts())
