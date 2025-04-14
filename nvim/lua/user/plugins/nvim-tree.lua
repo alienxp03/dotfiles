@@ -58,6 +58,7 @@ return {
         side = "left",
       },
       filters = {
+        custom = { ".DS_Store" },
         dotfiles = false,
       },
       git = {
