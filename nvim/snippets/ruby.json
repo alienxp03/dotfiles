@@ -9,7 +9,7 @@
 		"prefix": "leet",
 		"body": [
 			"class Solution",
-			"  def run(${1:params})",
+			"  def run(${1:str})",
 			"  end",
 			"end",
 			"",

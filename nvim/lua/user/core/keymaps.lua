@@ -42,7 +42,7 @@ keymap("n", "<S-h>", ":BufferLineCyclePrev<CR>", opts())
 
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
-keymap("n", "<leader>lo", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation" }))
+keymap("n", "<leader>lh", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation" }))
 keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
 
 -- fzf-lua
