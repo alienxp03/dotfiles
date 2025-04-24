@@ -3,7 +3,8 @@ editor-model: openrouter/anthropic/claude-3.5-sonnet
 dark-mode: true
 auto-commits: false
 show-model-warnings: false
-architect: true
+architect: false
 yes-always: true
 llm-history-file: .aider.llm.history
 analytics-disable: true
+watch-files: true

@@ -59,6 +59,7 @@ keymap("n", "<leader>gb", ":FzfLua git_branches<CR>", opts({ desc = "Git branche
 keymap("n", "<leader>gc", ":FzfLua git_bcommits<CR>", opts({ desc = "Git buffer commits" }))
 keymap("n", "<leader>gs", ":FzfLua git_status<CR>", opts({ desc = "Git status" }))
 keymap("n", "<leader>sc", ":FzfLua command_history<CR>", opts({ desc = "Command history" }))
+keymap("n", "<leader>fk", ":FzfLua keymaps<CR>", opts({ desc = "Keymaps" }))
 keymap("n", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 
