@@ -1,19 +1,27 @@
 {
-	"name": "snippets",
-	"contributes": {
-		"snippets": [
-			{
-				"language": "all",
-				"path": "./all.json"
-			},
-			{
-				"language": "ruby",
-				"path": "./ruby.json"
-			},
-			{
-				"language": "go",
-				"path": "./go.json"
-			}
-		]
-	}
+  "name": "snippets",
+  "contributes": {
+    "snippets": [
+      {
+        "language": "all",
+        "path": "./all.json"
+      },
+      {
+        "language": "ruby",
+        "path": "./ruby.json"
+      },
+      {
+        "language": "go",
+        "path": "./go.json"
+      },
+      {
+        "language": "typescript",
+        "path": "./javascript.json"
+      },
+      {
+        "language": "javascript",
+        "path": "./javascript.json"
+      }
+    ]
+  }
 }
