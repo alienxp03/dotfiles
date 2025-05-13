@@ -25,14 +25,8 @@ return {
         go = { "gofmt", "goimports" },
       },
 
-      -- This snippet will automatically detect which formatters take too long
-      -- to run synchronously and will run them async on save instead.
-      format_on_save = function(bufnr)
-        -- Disable with a global or buffer-local variable
-        if vim.g.disable_autoformat or vim.b[bufnr].disable_autoformat then
-          return
-        end
-        return { timeout_ms = 500, lsp_format = "fallback" }
+      format_after_save = function(bufnr)
+        return { lsp_format = "fallback" }
       end,
     })
 
