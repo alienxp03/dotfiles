@@ -1,13 +1,37 @@
 return {
   "folke/snacks.nvim",
-  priority = 1000,
   lazy = false,
   opts = {
     picker = {
+      hidden = true,
+      ignore = true,
       enabled = true,
       formatters = {
         file = {
           filename_first = true,
+        },
+      },
+      layout = {
+        cycle = false,
+        layout = {
+          backdrop = false,
+          width = 0.8,
+          min_width = 80,
+          height = 0.9,
+          min_height = 30,
+          box = "vertical",
+          border = "rounded",
+          title = "{title} {live} {flags}",
+          title_pos = "center",
+          { win = "input", height = 1, border = "bottom" },
+          { win = "list", border = "none" },
+          { win = "preview", title = "{preview}", height = 0.7, border = "top" },
+        },
+      },
+      sources = {
+        files = {
+          hidden = true,
+          ignore = true,
         },
       },
     },
@@ -16,9 +40,6 @@ return {
       duration = 30,
       easing = "linear",
       fps = 60,
-    },
-    dim = {
-      enabled = true,
     },
     bigfile = {
       enabled = true,
@@ -131,30 +152,37 @@ return {
     {
       "<leader>go",
       function()
-        Snacks.picker.gitbrowse()
+        Snacks.gitbrowse()
       end,
       desc = "Git browse",
     },
     {
       "<leader>ld",
       function()
-        Snacks.picker.lsp_definitions()
+        Snacks.picker.lsp_definitions({ auto_confirm = false })
       end,
       desc = "LSP definitions",
     },
     {
       "<leader>lf",
       function()
-        Snacks.picker.lsp_references()
+        Snacks.picker.lsp_references({ auto_confirm = false })
       end,
       desc = "LSP references",
     },
     {
       "<leader>lm",
       function()
-        Snacks.picker.lsp_implementations()
+        Snacks.picker.lsp_implementations({ auto_confirm = false })
       end,
       desc = "LSP implementations",
+    },
+    {
+      "<leader>ls",
+      function()
+        Snacks.picker.lsp_symbols()
+      end,
+      desc = "LSP symbols",
     },
     {
       "<leader>sk",
