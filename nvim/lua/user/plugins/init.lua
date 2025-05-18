@@ -16,4 +16,5 @@ return {
   "christoomey/vim-tmux-navigator",
   "tpope/vim-endwise",
   "folke/snacks.nvim",
+  "nvim-tree/nvim-web-devicons",
 }

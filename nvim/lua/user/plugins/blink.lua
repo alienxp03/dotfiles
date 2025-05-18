@@ -4,12 +4,8 @@ return {
     "rafamadriz/friendly-snippets",
     "onsails/lspkind.nvim",
   },
-
   version = "*",
   opts = {
-    enabled = function()
-      return not vim.tbl_contains({ "NvimTree" }, vim.bo.filetype)
-    end,
     keymap = {
       preset = "enter",
       ["<C-k>"] = { "select_prev", "fallback_to_mappings" },
@@ -49,23 +45,30 @@ return {
             end,
           },
         },
-        cmdline = {
-          -- ignores cmdline completions when executing shell commands
-          enabled = function()
-            return vim.fn.getcmdtype() ~= ":" or not vim.fn.getcmdline():match("^[%%0-9,'<>%-]*!")
-          end,
-        },
       },
     },
     fuzzy = { implementation = "prefer_rust_with_warning" },
     signature = { enabled = true },
     completion = {
       ghost_text = {
-        enabled = true,
+        enabled = false,
+      },
+      list = {
+        selection = {
+          preselect = false,
+          auto_insert = false,
+        },
       },
       menu = {
         auto_show = true,
         draw = {
+          columns = {
+            { "label", "label_description", gap = 1 },
+            { "kind_icon" },
+            {
+              "kind",
+            },
+          },
           components = {
             kind_icon = {
               text = function(ctx)
@@ -102,7 +105,7 @@ return {
       documentation = { auto_show = true, auto_show_delay_ms = 0 },
     },
     cmdline = {
-      completion = { menu = { auto_show = true } },
+      completion = { menu = { auto_show = false } },
     },
   },
   opts_extend = { "sources.default" },

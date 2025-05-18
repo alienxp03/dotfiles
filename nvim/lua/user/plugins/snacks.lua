@@ -117,7 +117,42 @@ return {
     {
       "<C-t>",
       function()
-        Snacks.picker.lines()
+        Snacks.picker.lines({
+          layout = {
+            layout = {
+              box = "vertical",
+              backdrop = false,
+              width = 0.8,
+              height = 0.3,
+              min_width = 80,
+              min_height = 30,
+              border = "rounded",
+              title = " {title} {live} {flags}",
+              title_pos = "center",
+              { win = "input", height = 1, border = "bottom" },
+              {
+                box = "horizontal",
+                { win = "list", border = "bottom" },
+                { win = "preview", title = "{preview}", width = 0.6, border = "top" },
+              },
+            },
+          },
+          on_close = function(item)
+            local pattern = item.input.filter.pattern
+            vim.fn.setreg("/", pattern)
+          end,
+          matcher = {
+            fuzzy = false,
+            smartcase = true,
+            ignorecase = true,
+            sort_empty = false,
+          },
+          sort = {
+            fields = {
+              "lnum",
+            },
+          },
+        })
       end,
       desc = "Grep current buffer",
     },
