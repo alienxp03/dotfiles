@@ -3,6 +3,7 @@ return {
   dependencies = {
     "rafamadriz/friendly-snippets",
     "onsails/lspkind.nvim",
+    "moyiz/blink-emoji.nvim",
   },
   version = "*",
   opts = {
@@ -30,7 +31,7 @@ return {
       nerd_font_variant = "mono",
     },
     sources = {
-      default = { "lsp", "path", "snippets", "buffer", "cmdline" },
+      default = { "lsp", "path", "snippets", "buffer", "cmdline", "emoji" },
       providers = {
         buffer = {
           opts = {
@@ -44,6 +45,12 @@ return {
               end, vim.api.nvim_list_bufs())
             end,
           },
+        },
+        emoji = {
+          module = "blink-emoji",
+          name = "Emoji",
+          score_offset = 15, -- Tune by preference
+          opts = { insert = true }, -- Insert emoji (default) or complete its name
         },
       },
     },
