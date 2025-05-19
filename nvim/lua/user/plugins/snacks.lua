@@ -14,6 +14,9 @@ return {
       layout = {
         cycle = false,
         layout = {
+          preset = "ivy",
+        },
+        layout = {
           backdrop = false,
           width = 0.8,
           min_width = 80,
@@ -27,6 +30,9 @@ return {
           { win = "list", border = "none" },
           { win = "preview", title = "{preview}", height = 0.7, border = "top" },
         },
+      },
+      matcher = {
+        frecency = true,
       },
       sources = {
         files = {
@@ -44,6 +50,19 @@ return {
     bigfile = {
       enabled = true,
       notify = true,
+    },
+    indent = { enabled = true },
+    input = { enabled = true },
+    lazygit = { configure = true },
+    bufdelete = { configure = true },
+    win = {
+      width = 0.95,
+      height = 0.95,
+    },
+    image = { enabled = true },
+    notifier = {
+      enabled = true,
+      top_down = false,
     },
     dashboard = {
       enabled = true,
@@ -83,14 +102,6 @@ return {
         { section = "header" },
       },
     },
-    indent = { enabled = true },
-    input = { enabled = true },
-    lazygit = { configure = true },
-    bufdelete = { configure = true },
-    win = {
-      width = 0.95,
-      height = 0.95,
-    },
   },
   keys = {
     {
@@ -110,7 +121,26 @@ return {
     {
       "<C-b>",
       function()
-        Snacks.picker.buffers()
+        Snacks.picker.buffers({
+          on_show = function()
+            -- Always start in normal mode
+            vim.cmd.stopinsert()
+          end,
+          finder = "buffers",
+          format = "buffer",
+          hidden = false,
+          unloaded = true,
+          current = true,
+          sort_lastused = true,
+          win = {
+            input = {
+              keys = {
+                ["d"] = "bufdelete",
+              },
+            },
+            list = { keys = { ["d"] = "bufdelete" } },
+          },
+        })
       end,
       desc = "Buffers",
     },
@@ -178,11 +208,18 @@ return {
       desc = "Grep",
     },
     {
-      "<leader>gb",
+      "<leader>gf",
       function()
         Snacks.picker.git_log_file()
       end,
       desc = "Git log file",
+    },
+    {
+      "<leader>gb",
+      function()
+        Snacks.picker.git_branches({})
+      end,
+      desc = "Branches",
     },
     {
       "<leader>go",
