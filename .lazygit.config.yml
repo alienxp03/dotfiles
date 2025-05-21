@@ -4,3 +4,38 @@ git:
   paging:
     colorArg: always
     pager: delta --dark --paging=never
+customCommands:
+  - key: "E"
+    context: "global"
+    command: "git commit --allow-empty -m '{{index .PromptResponses 0}}'"
+    prompts:
+      - type: "input"
+        title: "Empty commit message"
+    description: "Create an empty commit"
+  - key: "G"
+    command: "glab mr view -w {{.SelectedLocalBranch.UpstreamBranch}}"
+    context: "localBranches"
+    description: "Go to MR in gitlab"
+    stream: true
+  - key: "<c-n>"
+    context: "global"
+    description: "Create branch"
+    prompts:
+      - type: "input"
+        title: "Ticket number"
+        key: "Ticket"
+        initialValue: ""
+      - type: "input"
+        key: "Service"
+        title: "Service"
+        initialValue: ""
+      - type: "input"
+        title: "Message"
+        key: "Message"
+        initialValue: ""
+      - type: "confirm"
+        key: "Confirm"
+        title: "Commit"
+        body: "Create new branch?"
+    command: "git checkout -b 'RGPAYM-{{ .Form.Ticket }}-{{.Form.Service}}-{{.Form.Message}}'"
+    loadingText: "Creating new branch..."

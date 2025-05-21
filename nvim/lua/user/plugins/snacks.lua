@@ -210,7 +210,7 @@ return {
       desc = "grep in current buffer's directory",
     },
     {
-      "<leader>gl",
+      "<leader>gg",
       function()
         Snacks.lazygit()
       end,
