@@ -118,6 +118,15 @@ return {
       desc = "Search files",
     },
     {
+      "<M-p>",
+      function()
+        Snacks.picker.files({
+          cwd = vim.fn.expand("%:p:h"),
+        })
+      end,
+      desc = "Search files in current buffer's directory",
+    },
+    {
       "<C-b>",
       function()
         Snacks.picker.buffers({
@@ -192,6 +201,15 @@ return {
       desc = "Grep",
     },
     {
+      "<M-f>",
+      function()
+        Snacks.picker.grep({
+          cwd = vim.fn.expand("%:p:h"),
+        })
+      end,
+      desc = "grep in current buffer's directory",
+    },
+    {
       "<leader>gl",
       function()
         Snacks.lazygit()
@@ -225,6 +243,13 @@ return {
         Snacks.gitbrowse()
       end,
       desc = "Git browse",
+    },
+    {
+      "<leader>gd",
+      function()
+        Snacks.picker.git_diff()
+      end,
+      desc = "Git diff",
     },
     {
       "<leader>ld",
