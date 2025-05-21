@@ -9,13 +9,12 @@ return {
       formatters = {
         file = {
           filename_first = true,
+          truncate = 100,
         },
       },
       layout = {
         cycle = false,
-        layout = {
-          preset = "ivy",
-        },
+        preset = "ivy",
         layout = {
           backdrop = false,
           width = 0.8,
@@ -149,22 +148,21 @@ return {
       function()
         Snacks.picker.lines({
           layout = {
+            preview = "",
+            preset = "ivy",
             layout = {
-              box = "vertical",
               backdrop = false,
-              width = 0.8,
-              height = 0.3,
+              width = 0.9,
               min_width = 80,
+              height = 0.9,
               min_height = 30,
+              box = "vertical",
               border = "rounded",
-              title = " {title} {live} {flags}",
+              title = "{title} {live} {flags}",
               title_pos = "center",
               { win = "input", height = 1, border = "bottom" },
-              {
-                box = "horizontal",
-                { win = "list", border = "bottom" },
-                { win = "preview", title = "{preview}", width = 0.6, border = "top" },
-              },
+              { win = "list", border = "none" },
+              { win = "preview", title = "{preview}", height = 0.7, border = "top" },
             },
           },
           on_close = function(item)
