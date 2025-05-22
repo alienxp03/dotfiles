@@ -1,0 +1,7 @@
+shell-integration       = zsh
+macos-titlebar-style    = hidden
+font-family             = Jetbrain Mono
+mouse-hide-while-typing = true
+scrollback-limit        = 1000000
+keybind                 = super+k=text:\x01\x54
+keybind                 = super+r=reload_config

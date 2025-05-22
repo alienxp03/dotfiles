@@ -4,6 +4,9 @@ git:
   paging:
     colorArg: always
     pager: delta --dark --paging=never
+os:
+  # this will edit the file in the current neovim sesh
+  edit: "nvr -cc vsplit --remote-wait +'set bufhidden=wipe' {{filename}}"
 customCommands:
   - key: "E"
     context: "global"

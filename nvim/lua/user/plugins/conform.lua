@@ -5,7 +5,6 @@ return {
   event = { "BufReadPre", "BufNewFile" }, -- to disable, comment this out
   config = function()
     local conform = require("conform")
-    local slow_format_filetypes = {}
 
     conform.setup({
       formatters_by_ft = {
@@ -25,7 +24,7 @@ return {
         go = { "gofmt", "goimports" },
       },
 
-      format_after_save = function(bufnr)
+      format_after_save = function(_)
         return { lsp_format = "fallback" }
       end,
     })
