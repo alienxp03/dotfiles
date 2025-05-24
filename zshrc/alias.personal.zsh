@@ -1,0 +1,1 @@
+/Users/azuan/.dotfiles/personal/zshrc/zshrc/aliases.private.zsh
