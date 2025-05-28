@@ -18,9 +18,9 @@ autoload -Uz compinit && compinit
 # eval "$(starship init zsh)"
 
 source "$HOME/.dotfiles/zshrc/init.zsh"
-eval "$(fzf --zsh)"
 eval "$(zoxide init zsh)"
-eval "$(atuin init zsh)"
 eval "$($HOME/.local/bin/mise activate zsh)"
+eval "$(atuin init zsh)"
+source <(fzf --zsh)
 
 . "$HOME/.atuin/bin/env"
