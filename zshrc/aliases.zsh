@@ -27,6 +27,7 @@ alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format
 alias gpl='git pull && git-delete-merged-branches'
 alias lz='lazygit'
 alias lr='lazydocker'
+alias lq='lazysql'
 # alias greset="git reset $(git merge-base master $(git rev-parse --abbrev-ref HEAD)) " # reset all commits in branch
 
 alias tmgo="tmux rename-window 'Main' && tmux send-keys 'go mod tidy -v && go mod vendor -v && nvim .' 'C-m' && tmux split-window -h && tmux split-pane && tmux select-pane -L"

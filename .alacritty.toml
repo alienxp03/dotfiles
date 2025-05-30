@@ -5,7 +5,8 @@ TERM = "xterm-256color"
 size = 14
 
 [font.normal]
-family = "Monaspace Xenon"
+family = "Jetbrain Mono"
+# family = "Monaspace Xenon"
 # family = "MesloLGS NF"
 # family: "MesloLGS NF"
 # family: "Monaspace Argon"
