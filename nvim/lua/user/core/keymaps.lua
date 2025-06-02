@@ -12,9 +12,6 @@ vim.g.maplocalleader = ","
 local keymap = vim.api.nvim_set_keymap
 
 -- Clipboard
--- Do not yank with x
-keymap("n", "<leader>x", '"_x', opts())
-keymap("n", "<leader>d", '"_d', opts())
 
 -- Clear search
 keymap("v", "<Esc><Esc>", "<Esc>", opts({ desc = "clear search" }))

@@ -118,13 +118,25 @@ return {
       desc = "Search files",
     },
     {
-      "<M-p>",
+      "<leader>sp",
       function()
         Snacks.picker.files({
           cwd = vim.fn.expand("%:p:h"),
+          title = "Search files in current buffer's directory",
         })
       end,
       desc = "Search files in current buffer's directory",
+    },
+    {
+      "<leader>so",
+      function()
+        Snacks.picker.files({
+          hidden = true,
+          ignored = true,
+          title = "Search all files (including hidden/ignored)",
+        })
+      end,
+      desc = "Search all files (including hidden/ignored)",
     },
     {
       "<C-b>",
@@ -201,16 +213,17 @@ return {
       desc = "Grep",
     },
     {
-      "<M-f>",
+      "<leader>sb",
       function()
         Snacks.picker.grep({
           cwd = vim.fn.expand("%:p:h"),
+          title = "Grep in current buffer's directory: ",
         })
       end,
-      desc = "grep in current buffer's directory",
+      desc = "Grep in current buffer's directory",
     },
     {
-      "<leader>gg",
+      "<C-g>",
       function()
         Snacks.lazygit()
       end,

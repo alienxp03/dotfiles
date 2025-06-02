@@ -26,6 +26,7 @@ alias git-delete-merged-branches='git branch --merged | egrep -v "(^\*|master|de
 alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format=format:'\''%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)'\'' --all'''"
 alias gpl='git pull && git-delete-merged-branches'
 alias lz='lazygit'
+alias lr='lazydocker'
 # alias greset="git reset $(git merge-base master $(git rev-parse --abbrev-ref HEAD)) " # reset all commits in branch
 
 alias tmgo="tmux rename-window 'Main' && tmux send-keys 'go mod tidy -v && go mod vendor -v && nvim .' 'C-m' && tmux split-window -h && tmux split-pane && tmux select-pane -L"
