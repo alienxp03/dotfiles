@@ -69,3 +69,6 @@ alias ls='eza --group-directories-first --sort extension'
 alias cat='bat'
 
 alias t='sesh connect $(sesh list | fzf)'
+
+alias claude="$HOME/.claude/local/claude"
+

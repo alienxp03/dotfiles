@@ -68,11 +68,6 @@ keymap("x", "<leader>p", [["_dP]], opts())
 -- Normal paste
 keymap("v", "p", '"_dP', opts())
 
--- Testing comment gc/gcc shortcut
-keymap("x", "<C-g>", "gc", { noremap = false })
-keymap("x", "<C-_>-", "gc", { noremap = false })
-keymap("x", "<C-->-", "gc", { noremap = false })
-
 -- Keep things in the middle
 keymap("n", "<C-d>", "<C-d>zz", opts())
 keymap("n", "<C-u>", "<C-u>zz", opts())
