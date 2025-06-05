@@ -22,6 +22,7 @@ export PATH="/Applications/Sublime Text.app/Contents/SharedSupport/bin:$PATH"
 export PATH="$HOME/.tmux/plugins/tmuxifier/bin:$PATH"
 export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export PATH="$WORKSPACE/GitHub/diff-so-fancy:$PATH"
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 
 export HOMEBREW_PREFIX="/opt/homebrew"
 export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
@@ -44,4 +45,4 @@ export PATH="$PATH:$GOPATH/bin"
 export PATH="$PATH:$FORGIT_INSTALL_DIR/bin"
 export FORGIT_NO_ALIASES=1
 
-export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+export HOMEBREW_NO_AUTO_UPDATE=1

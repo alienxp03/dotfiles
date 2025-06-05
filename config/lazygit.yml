@@ -13,13 +13,23 @@ customCommands:
         title: "Empty commit message"
     description: "Create an empty commit"
   - key: "F"
-    command: "git fetch --prune"
+    command: "git pull --rebase origin master"
     context: "localBranches"
     stream: true
   - key: "O"
     context: "localBranches"
-    description: "Open/Create GitLab MR (via glab)"
-    command: "glab mr view --web || glab mr create --web"
+    description: "Open/Create PR/MR (GitHub/GitLab)"
+    command: |
+      #!/bin/bash
+      REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+      if [[ "$REMOTE_URL" == *"github.com"* ]]; then
+        gh pr view --web || gh pr create --web
+      elif [[ "$REMOTE_URL" == *"gitlab"* ]]; then
+        glab mr view --web || glab mr create --web
+      else
+        echo "Unknown git provider. Remote URL: $REMOTE_URL"
+        exit 1
+      fi
   - key: "C"
     context: "files"
     description: "Smart commit with branch prefix"
@@ -28,13 +38,13 @@ customCommands:
         title: "Enter commit message"
         key: "msg"
     command: |
-        #!/bin/bash
-        BRANCH=$(git rev-parse --abbrev-ref HEAD)
-        TICKET=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
-        SERVICE=$(echo "$BRANCH" | cut -d'-' -f3)
-        PREFIX="feat: [$TICKET] $SERVICE:"
-        echo "Committing with: $PREFIX {{.Form.msg}}"
-        git commit -m "$PREFIX {{.Form.msg}}"
+      #!/bin/bash
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      TICKET=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
+      SERVICE=$(echo "$BRANCH" | cut -d'-' -f3)
+      PREFIX="feat: [$TICKET] $SERVICE:"
+      echo "Committing with: $PREFIX {{.Form.msg}}"
+      git commit -m "$PREFIX {{.Form.msg}}"
   - key: "U"
     context: "commits"
     description: "Undo last commit (keep changes)"
