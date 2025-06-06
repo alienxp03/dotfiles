@@ -24,13 +24,6 @@ export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export PATH="$WORKSPACE/GitHub/diff-so-fancy:$PATH"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 
-export HOMEBREW_PREFIX="/opt/homebrew"
-export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
-export HOMEBREW_REPOSITORY="/opt/homebrew"
-fdpath[1,0]="/opt/homebrew/share/zsh/site-functions"
-export PATH="/opt/homebrew/bin:$PATH"
-export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
-
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix
 

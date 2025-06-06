@@ -4,11 +4,11 @@ source "$HOME/.dotfiles/zshrc/functions.zsh"
 source "$HOME/.dotfiles/zshrc/env.zsh"
 
 # For cross-platform logics
-# if [ "$(uname -s)" = "Darwin" ]; then
-#   source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
-# elif [ "$(uname -s)" = "Linux" ]; then
-#   source "$HOME/.dotfiles/zshrc/env.linux.zsh"
-# fi
+if [ "$(uname -s)" = "Darwin" ]; then
+  source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
+elif [ "$(uname -s)" = "Linux" ]; then
+  source "$HOME/.dotfiles/zshrc/env.linux.zsh"
+fi
 
 source "$HOME/.dotfiles/zshrc/env.local.zsh"
 
