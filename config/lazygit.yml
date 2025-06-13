@@ -25,7 +25,7 @@ customCommands:
       if [[ "$REMOTE_URL" == *"github.com"* ]]; then
         gh pr view --web || gh pr create --web
       elif [[ "$REMOTE_URL" == *"gitlab"* ]]; then
-        glab mr view --web || glab mr create --web
+        glab mr view --web || glab mr create --web --fill
       else
         echo "Unknown git provider. Remote URL: $REMOTE_URL"
         exit 1

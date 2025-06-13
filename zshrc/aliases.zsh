@@ -12,6 +12,7 @@ alias ls='ls --color'
 # Git
 alias gp='git push'
 alias gs='git status -u'
+alias gbase='git pull --rebase origin master 2>/dev/null || git pull --rebase origin main'
 alias gcb='git branch | grep -v "^\*" | fzf --reverse --info=inline | xargs git checkout'
 alias gcm='git checkout master 2>/dev/null || git checkout main'
 alias gaa='git add .'
@@ -71,4 +72,5 @@ alias cat='bat'
 alias t='sesh connect $(sesh list | fzf)'
 
 alias claude="$HOME/.claude/local/claude"
+alias cc="$HOME/.claude/local/claude"
 
