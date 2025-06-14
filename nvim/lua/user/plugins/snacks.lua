@@ -126,27 +126,6 @@ return {
       desc = "Search files",
     },
     {
-      "<leader>sp",
-      function()
-        Snacks.picker.files({
-          cwd = vim.fn.expand("%:p:h"),
-          title = "Search files in current buffer's directory",
-        })
-      end,
-      desc = "Search files in current buffer's directory",
-    },
-    {
-      "<leader>so",
-      function()
-        Snacks.picker.files({
-          hidden = true,
-          ignored = true,
-          title = "Search all files (including hidden/ignored)",
-        })
-      end,
-      desc = "Search all files (including hidden/ignored)",
-    },
-    {
       "<C-b>",
       function()
         Snacks.picker.buffers({
@@ -219,16 +198,6 @@ return {
         Snacks.picker.grep()
       end,
       desc = "Grep",
-    },
-    {
-      "<leader>sb",
-      function()
-        Snacks.picker.grep({
-          cwd = vim.fn.expand("%:p:h"),
-          title = "Grep in current buffer's directory: ",
-        })
-      end,
-      desc = "Grep in current buffer's directory",
     },
     {
       "<C-g>",
@@ -334,6 +303,138 @@ return {
         Snacks.picker.notifications()
       end,
       desc = "Notifications",
+    },
+    {
+      "<leader>sf",
+      function()
+        local function get_directories()
+          local directories = {}
+          local handle = io.popen("fd . --type directory --hidden --exclude .git")
+          if handle then
+            for line in handle:lines() do
+              table.insert(directories, line)
+            end
+            handle:close()
+          else
+            print("Failed to execute fd command")
+          end
+          return directories
+        end
+
+        local dirs = get_directories()
+
+        Snacks.picker({
+          finder = function()
+            local items = {}
+            for i, item in ipairs(dirs) do
+              table.insert(items, {
+                idx = i,
+                file = item,
+                text = item,
+              })
+            end
+            return items
+          end,
+          layout = {
+            layout = {
+              box = "horizontal",
+              width = 0.5,
+              height = 0.5,
+              {
+                box = "vertical",
+                border = "rounded",
+                title = "Select Folder to Search Files In",
+                { win = "input", height = 1, border = "bottom" },
+                { win = "list", border = "none" },
+              },
+            },
+          },
+          format = function(item, _)
+            local file = item.file
+            local ret = {}
+            local a = Snacks.picker.util.align
+            local icon, icon_hl = Snacks.util.icon(file.ft, "directory")
+            ret[#ret + 1] = { a(icon, 3), icon_hl }
+            ret[#ret + 1] = { " " }
+            ret[#ret + 1] = { a(file, 20) }
+            return ret
+          end,
+          confirm = function(picker, item)
+            picker:close()
+            Snacks.picker.files({
+              cwd = item.file,
+              title = "Files in: " .. item.file,
+            })
+          end,
+        })
+      end,
+      desc = "Search files (pick folder first)",
+    },
+    {
+      "<leader>sg",
+      function()
+        local function get_directories()
+          local directories = {}
+          local handle = io.popen("fd . --type directory --hidden --exclude .git")
+          if handle then
+            for line in handle:lines() do
+              table.insert(directories, line)
+            end
+            handle:close()
+          else
+            print("Failed to execute fd command")
+          end
+          return directories
+        end
+
+        local dirs = get_directories()
+
+        Snacks.picker({
+          finder = function()
+            local items = {}
+            for i, item in ipairs(dirs) do
+              table.insert(items, {
+                idx = i,
+                file = item,
+                text = item,
+              })
+            end
+            return items
+          end,
+          layout = {
+            layout = {
+              box = "horizontal",
+              width = 0.5,
+              height = 0.5,
+              {
+                box = "vertical",
+                border = "rounded",
+                title = "Select Folder to Grep In",
+                { win = "input", height = 1, border = "bottom" },
+                { win = "list", border = "none" },
+              },
+            },
+          },
+          format = function(item, _)
+            local file = item.file
+            local ret = {}
+            local a = Snacks.picker.util.align
+            local icon, icon_hl = Snacks.util.icon(file.ft, "directory")
+            ret[#ret + 1] = { a(icon, 3), icon_hl }
+            ret[#ret + 1] = { " " }
+            ret[#ret + 1] = { a(file, 20) }
+            return ret
+          end,
+          confirm = function(picker, item)
+            picker:close()
+            Snacks.picker.grep({
+              cwd = item.file,
+              title = "Grep in: " .. item.file,
+            })
+          end,
+        })
+      end,
+      desc = "Grep (pick folder first)",
     },
   },
 }
