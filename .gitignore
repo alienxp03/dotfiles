@@ -5,3 +5,4 @@ tags*
 .aider*
 !.aider.conf.yml
 nvim/dictionaries
+tmp/

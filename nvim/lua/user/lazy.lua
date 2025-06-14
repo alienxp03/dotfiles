@@ -19,7 +19,7 @@ require("lazy").setup({
   { import = "user.plugins" },
   { import = "user.plugins.lsp" },
 }, {
-  -- defaults = { lazy = true },
+  defaults = { lazy = true },
   checker = {
     enabled = true,
     notify = false,

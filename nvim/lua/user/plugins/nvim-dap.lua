@@ -7,6 +7,20 @@ return {
     "rcarriga/nvim-dap-ui",
     "theHamsta/nvim-dap-virtual-text",
   },
+  keys = {
+    { "<leader>dt", '<cmd>lua require"dap-go".debug_test()<CR>', desc = "Debug test" },
+    { "<leader>db", '<cmd>lua require"dap".toggle_breakpoint()<CR>', desc = "Toggle breakpoint" },
+    { "<leader>do", '<cmd>lua require("dapui").open()<CR>', desc = "Open DAP UI" },
+    { "<leader>dx", '<cmd>lua require("dapui").close()<CR>', desc = "Close DAP UI" },
+    { "<leader>dc", '<cmd>lua require"dap".continue()<CR>', desc = "Continue" },
+    { "<leader>dr", '<cmd>lua require"dap".repl.open()<CR>', desc = "Open REPL" },
+    { "<leader>dn", '<cmd> lua require"dap".step_over()<CR>', desc = "Step over" },
+    { "<leader>di", '<cmd> lua require"dap".step_into()<CR>', desc = "Step into" },
+    { "<leader>du", '<cmd> lua require"dap".step_out()<CR>', desc = "Step out" },
+    { "<F9>", function() require("dap").step_over() end, desc = "Step over" },
+    { "<F10>", function() require("dap").step_into() end, desc = "Step into" },
+    { "<F11>", function() require("dap").step_out() end, desc = "Step out" },
+  },
   config = function()
     require("dap-go").setup()
     require("nvim-dap-virtual-text").setup()
@@ -18,20 +32,6 @@ return {
     -- Icons
     vim.fn.sign_define("DapBreakpoint", { text = "🟥", texthl = "", linehl = "", numhl = "" })
     vim.fn.sign_define("DapStopped", { text = "▶️", texthl = "", linehl = "", numhl = "" })
-
-    -- Keymaps
-    vim.keymap.set("n", "<leader>dt", '<cmd>lua require"dap-go".debug_test()<CR>')
-    vim.keymap.set("n", "<leader>db", '<cmd>lua require"dap".toggle_breakpoint()<CR>')
-    vim.keymap.set("n", "<leader>do", '<cmd>lua require("dapui").open()<CR>')
-    vim.keymap.set("n", "<leader>dx", '<cmd>lua require("dapui").close()<CR>')
-    vim.keymap.set("n", "<leader>dc", '<cmd>lua require"dap".continue()<CR>')
-    vim.keymap.set("n", "<leader>dr", '<cmd>lua require"dap".repl.open()<CR>')
-    vim.keymap.set("n", "<leader>dn", '<cmd> lua require"dap".step_over()<CR>')
-    vim.keymap.set("n", "<leader>di", '<cmd> lua require"dap".step_into()<CR>')
-    vim.keymap.set("n", "<leader>du", '<cmd> lua require"dap".step_out()<CR>')
-    vim.keymap.set("n", "<F9>", require("dap").step_over)
-    vim.keymap.set("n", "<F10>", require("dap").step_into)
-    vim.keymap.set("n", "<F11>", require("dap").step_out)
 
     dap.listeners.after.event_initialized["dapui_config"] = function()
       dapui.open()

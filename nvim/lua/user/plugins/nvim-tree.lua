@@ -1,6 +1,7 @@
 -- File explorer
 return {
   "nvim-tree/nvim-tree.lua",
+  cmd = { "NvimTreeToggle", "NvimTreeFocus", "NvimTreeFindFile", "NvimTreeCollapse" },
   dependencies = {
     "b0o/nvim-tree-preview.lua", -- for file previews
   },

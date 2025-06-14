@@ -7,6 +7,9 @@ return {
   config = function()
     local lint = require("lint")
 
+    -- Configure jsonlint to use Mason's path
+    lint.linters.jsonlint.cmd = vim.fn.stdpath("data") .. "/mason/bin/jsonlint"
+
     lint.linters_by_ft = {
       lua = { "luacheck" },
       -- yaml = { "yamllint" },

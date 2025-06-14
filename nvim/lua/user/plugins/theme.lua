@@ -1,15 +1,18 @@
 return {
-  "folke/tokyonight.nvim",
+  "rebelot/kanagawa.nvim", -- Primary theme
+  lazy = false,
+  priority = 1000,
   dependencies = {
-    "rebelot/kanagawa.nvim",
-    "EdenEast/nightfox.nvim",
-    "AlexvZyl/nordic.nvim",
-    "catppuccin/nvim",
-    "marko-cerovac/material.nvim",
-    "ramojus/mellifluous.nvim",
-    "neanias/everforest-nvim",
-    "zenbones-theme/zenbones.nvim",
-    "rktjmp/lush.nvim",
+    -- Other themes lazy loaded
+    { "folke/tokyonight.nvim", lazy = true },
+    { "EdenEast/nightfox.nvim", lazy = true },
+    { "AlexvZyl/nordic.nvim", lazy = true },
+    { "catppuccin/nvim", lazy = true },
+    { "marko-cerovac/material.nvim", lazy = true },
+    { "ramojus/mellifluous.nvim", lazy = true },
+    { "neanias/everforest-nvim", lazy = true },
+    { "zenbones-theme/zenbones.nvim", lazy = true },
+    { "rktjmp/lush.nvim", lazy = true },
   },
   config = function()
     -- require("tokyonight").setup({

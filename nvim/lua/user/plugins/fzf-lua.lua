@@ -1,5 +1,12 @@
 return {
   "ibhagwan/fzf-lua", -- Fuzzy Finder (files, lsp, etc)
+  cmd = { "FzfLua" },
+  keys = {
+    { "<leader>ff", "<cmd>FzfLua files<cr>", desc = "Find files" },
+    { "<leader>fg", "<cmd>FzfLua live_grep<cr>", desc = "Live grep" },
+    { "<leader>fb", "<cmd>FzfLua buffers<cr>", desc = "Find buffers" },
+    { "<leader>fh", "<cmd>FzfLua help_tags<cr>", desc = "Help tags" },
+  },
   config = function()
     require("fzf-lua").setup({
       bat = {

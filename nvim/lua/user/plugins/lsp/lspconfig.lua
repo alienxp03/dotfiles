@@ -24,81 +24,42 @@ return {
       vim.fn.sign_define(hl, { text = icon, texthl = hl, numhl = "" })
     end
 
+    -- Only setup servers not handled by mason-lspconfig
     local home_path = os.getenv("HOME")
-    local servers = {
-      html = {
-        filetypes = { "html", "slim" },
-      },
-      emmet_ls = {
-        filetypes = { "html", "typescriptreact", "javascriptreact", "css", "sass", "scss", "less" },
-      },
-      ts_ls = {},
-      cssls = {},
-      bashls = {},
-      docker_compose_language_service = {},
-      jsonls = {},
-      yamlls = {
-        settings = {
-          yaml = {
-            validate = false,
-            keyOrdering = false,
-          },
-        },
-      },
-      dockerls = {},
-      gopls = {
-        settings = {
-          gopls = {
-            usePlaceHolders = true,
-          },
-        },
-      },
-      terraformls = {},
-      tflint = {},
-      lua_ls = {
-        settings = { -- custom settings for lua
-          Lua = {
-            -- make the language server recognize "vim" global
-            diagnostics = {
-              enable = false,
-              globals = { "vim" },
-            },
-            workspace = {
-              -- make language server aware of runtime files
-              library = {
-                [vim.fn.expand("$VIMRUNTIME/lua")] = true,
-                [vim.fn.stdpath("config") .. "/lua"] = true,
-              },
-            },
-          },
-        },
-      },
-      -- ruby_lsp = {
-      --   -- cmd = { home_path .. "/.rbenv/shims/ruby-lsp" },
-      --   cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
-      -- },
-      solargraph = {
-        -- cmd = { home_path .. "/.rbenv/shims/solargraph", "stdio" },
-        cmd = { home_path .. "/.local/share/mise/shims/solargraph", "stdio" },
+    local manual_servers = {
+      -- Ruby LSP server - choose one: ruby_lsp or solargraph
+      ruby_lsp = {
+        cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
         root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
-        init_options = { formatting = true },
+        -- Add environment variables to disable problematic features
+        cmd_env = {
+          RUBY_LSP_EXPERIMENTAL_FEATURES = "false",
+          RUBY_LSP_BUNDLE = "false", -- Disable automatic bundle operations
+        },
+        init_options = {
+          enabledFeatures = {
+            "documentHighlights",
+            "documentSymbols", 
+            "foldingRanges",
+            "selectionRanges",
+            "semanticHighlighting",
+            "formatting",
+            "codeActions",
+          },
+        },
         settings = {
-          solargraph = {
-            autoformat = true,
-            completion = true,
-            diagnostic = true,
-            folding = true,
-            references = true,
-            rename = true,
-            symbols = true,
+          rubyLsp = {
+            -- Disable automatic bundle operations
+            bundleGemfile = false,
           },
         },
       },
-      pyright = {},
+      -- SQL LSP server (if needed)
       sqlls = {},
     }
 
-    for name, config in pairs(servers) do
+    -- Setup manual servers
+    for name, config in pairs(manual_servers) do
       if type(config) ~= "table" then
         config = {}
       end
@@ -107,7 +68,6 @@ return {
         capabilities = capabilities,
       }, config)
 
-      -- lsp.configure(name, config)
       lspconfig[name].setup(config)
     end
   end,
