@@ -27,32 +27,40 @@ return {
     -- Only setup servers not handled by mason-lspconfig
     local home_path = os.getenv("HOME")
     local manual_servers = {
-      -- Ruby LSP server - choose one: ruby_lsp or solargraph
+      -- Ruby LSP server - using mise shims (recommended over Mason)
       ruby_lsp = {
         cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
         root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
-        -- Add environment variables to disable problematic features
-        cmd_env = {
-          RUBY_LSP_EXPERIMENTAL_FEATURES = "false",
-          RUBY_LSP_BUNDLE = "false", -- Disable automatic bundle operations
-        },
         init_options = {
-          enabledFeatures = {
-            "documentHighlights",
-            "documentSymbols", 
-            "foldingRanges",
-            "selectionRanges",
-            "semanticHighlighting",
-            "formatting",
-            "codeActions",
+          formatter = "rubocop",
+          linters = { "rubocop" },
+          addonSettings = {
+            ["Ruby LSP Rails"] = {
+              enablePendingMigrationsPrompt = false,
+            },
+            ["Ruby LSP RuboCop"] = {
+              enabled = true,
+            },
           },
         },
-        settings = {
-          rubyLsp = {
-            -- Disable automatic bundle operations
-            bundleGemfile = false,
-          },
-        },
+        on_attach = function(client, bufnr)
+          -- Add custom Ruby LSP functionality
+          vim.keymap.set("n", "<leader>rd", function()
+            vim.lsp.buf.execute_command({
+              command = "rubyLsp.showSyntaxTree",
+              arguments = { vim.uri_from_bufnr(bufnr) },
+            })
+          end, { buffer = bufnr, desc = "Show Ruby syntax tree" })
+
+          -- Show Ruby dependencies command
+          vim.api.nvim_buf_create_user_command(bufnr, "ShowRubyDeps", function()
+            local params = {
+              command = "rubyLsp.showDependencies",
+              arguments = { vim.uri_from_bufnr(bufnr) },
+            }
+            vim.lsp.buf.execute_command(params)
+          end, { desc = "Show Ruby dependencies" })
+        end,
       },
       -- SQL LSP server (if needed)
       sqlls = {},
