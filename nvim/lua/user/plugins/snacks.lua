@@ -30,14 +30,22 @@ return {
           { win = "preview", title = "{preview}", height = 0.7, border = "top" },
         },
       },
+      win = {
+        input = {
+          keys = {
+            ["<C-h>"] = { "toggle_ignored", mode = { "i", "n" } },
+          },
+        },
+      },
       matcher = {
         frecency = true,
       },
       sources = {
-        files = {
-          hidden = true,
-          ignore = true,
-        },
+        files = { ignored = false, hidden = false },
+        explorer = { ignored = false, hidden = false },
+        grep = { ignored = false, hidden = false },
+        grep_word = { ignored = false, hidden = false },
+        grep_buffers = { ignored = false, hidden = false },
       },
     },
     animate = {

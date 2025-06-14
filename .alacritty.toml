@@ -14,26 +14,6 @@ family = "Jetbrain Mono"
 # family: "FiraCode Nerd Font"
 # family: "Hack Nerd Fontfamily = "Monaspace Xenon"
 
-[[keyboard.bindings]]
-chars = "\u001BF"
-key = "Right"
-mods = "Alt"
-
-[[keyboard.bindings]]
-chars = "\u001BB"
-key = "Left"
-mods = "Alt"
-
-[[keyboard.bindings]]
-chars = "\u0001w"
-key = "L"
-mods = "Command"
-
-[[keyboard.bindings]]
-chars = "\u0001T"
-key = "K"
-mods = "Command"
-
 [selection]
 save_to_clipboard = true
 
@@ -42,7 +22,13 @@ program = "/bin/zsh"
 
 [window]
 opacity = 1
+option_as_alt = "Both"
+dimensions = { columns = 270, lines = 85}
 
-[window.dimensions]
-columns = 270
-lines = 85
+[keyboard]
+bindings = [
+  { key = "Right", mods = "Alt", chars = "\u001BF" },
+  { key = "Left", mods = "Alt", chars = "\u001BB" },
+  { key = "L", mods = "Command", chars = "\u0001w" },
+  { key = "K", mods = "Command", chars = "\u0001T" },
+]
