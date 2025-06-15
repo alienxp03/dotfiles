@@ -134,8 +134,6 @@ keymap("n", "<leader>tn", ":TestNearest<cr>", opts({ desc = "Test nearest" }))
 keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
 keymap("n", "<leader>ts", ":TestSuite<cr>", opts({ desc = "Test suite" }))
 
-keymap("n", "<leader>yz", ":Yazi<cr>", opts({ desc = "Open Yazi" }))
-
 -- neo-clip
 keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))
 
