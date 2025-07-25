@@ -91,10 +91,6 @@ keymap("n", "<S-k>", ":m .-2<CR>==", opts())
 keymap("v", "<S-j>", ":m '>+1<CR>gv=gv", opts())
 keymap("v", "<S-k>", ":m '<-2<CR>gv=gv", opts())
 
--- Search and replace
-keymap("n", "<leader>rp", ":lua require('spectre').open()<cr>", opts({ desc = "Find and replace in project" }))
-keymap("n", "<leader>rf", ":lua require('spectre').open_file_search()<cr>", opts({ desc = "Find and replace in file" }))
-
 -- Copy path
 keymap("n", "<leader>cp", ":let @+=@%<cr>", opts({ desc = "Copy relative path" }))
 keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", opts({ desc = "Copy full path" }))

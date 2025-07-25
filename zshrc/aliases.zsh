@@ -71,6 +71,8 @@ alias cat='bat'
 
 alias t='sesh connect $(sesh list | fzf)'
 
-alias claude="$HOME/.claude/local/claude"
-alias cc="$HOME/.claude/local/claude"
+alias cc='claude'
+alias ccd="claude --dangerously-skip-permissions"
 
+# kamal
+alias kamal='mise exec ruby@3.4.3 -- kamal'
