@@ -10,6 +10,7 @@
   "diffview.nvim": { "branch": "main", "commit": "4516612fe98ff56ae0415a259ff6361a89419b0a" },
   "everforest-nvim": { "branch": "main", "commit": "2eb7c348f880ba93de4d98cae049c9441f5d4d49" },
   "flash.nvim": { "branch": "main", "commit": "3c942666f115e2811e959eabbdd361a025db8b63" },
+  "floaterm": { "branch": "main", "commit": "ae3de018d20dccd9372bbff7137e8a6d6030f69e" },
   "friendly-snippets": { "branch": "main", "commit": "572f5660cf05f8cd8834e096d7b4c921ba18e175" },
   "fzf-lua": { "branch": "main", "commit": "66e620a7a724364809e78a1ae4b5bfe73e37df49" },
   "gitlab.nvim": { "branch": "main", "commit": "a260f648fe92c5d640340e1c2d55db1fe523c8a5" },
@@ -80,6 +81,7 @@
   "vim-tmux-navigator": { "branch": "master", "commit": "64803fdd19a36211eba5e39f86c4cbceae8e1d06" },
   "vim-wakatime": { "branch": "master", "commit": "cb037fb53e718c4f0027a491782ad99efdcd789a" },
   "vimux": { "branch": "master", "commit": "7db6b2f79d432ee3820668b1d4625311dbe1d0ad" },
+  "volt": { "branch": "main", "commit": "7b8c5e790120d9f08c8487dcb80692db6d2087a1" },
   "which-key.nvim": { "branch": "main", "commit": "370ec46f710e058c9c1646273e6b225acf47cbed" },
   "yazi.nvim": { "branch": "main", "commit": "a9e454e2219b6c2953d248b74ed24f0de5837c6e" },
   "zenbones.nvim": { "branch": "main", "commit": "9deaa8a38e43e8c587b427095dd43c3511255b21" }

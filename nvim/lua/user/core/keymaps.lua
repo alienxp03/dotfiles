@@ -125,10 +125,7 @@ vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModTidy")
   vim.cmd("GoModVendor")
 end)
-
-keymap("n", "<leader>tn", ":TestNearest<cr>", opts({ desc = "Test nearest" }))
-keymap("n", "<leader>tf", ":TestFile<cr>", opts({ desc = "Test file" }))
-keymap("n", "<leader>ts", ":TestSuite<cr>", opts({ desc = "Test suite" }))
+keymap("n", "<leader>to", ":GoAlt<cr>", opts({ desc = "Switch between go and test file" }))
 
 -- neo-clip
 keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))

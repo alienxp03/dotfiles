@@ -24,3 +24,15 @@ eval "$(atuin init zsh)"
 source <(fzf --zsh)
 
 . "$HOME/.atuin/bin/env"
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/azuan/.lmstudio/bin"
+# End of LM Studio CLI section
+
+
+# bun completions
+[ -s "/Users/azuan/.bun/_bun" ] && source "/Users/azuan/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

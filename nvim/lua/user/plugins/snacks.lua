@@ -41,11 +41,11 @@ return {
         frecency = true,
       },
       sources = {
-        files = { ignored = false, hidden = false },
-        explorer = { ignored = false, hidden = false },
-        grep = { ignored = false, hidden = false },
-        grep_word = { ignored = false, hidden = false },
-        grep_buffers = { ignored = false, hidden = false },
+        files = { ignored = true, hidden = true },
+        explorer = { ignored = false, hidden = true },
+        grep = { ignored = false, hidden = true },
+        grep_word = { ignored = false, hidden = true },
+        grep_buffers = { ignored = false, hidden = true },
       },
     },
     animate = {
@@ -121,7 +121,7 @@ return {
     {
       "<C-p>",
       function()
-        Snacks.picker.files()
+        Snacks.picker.files({})
       end,
       desc = "Search files",
     },
