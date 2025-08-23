@@ -131,3 +131,13 @@ keymap("n", "<leader>to", ":GoAlt<cr>", opts({ desc = "Switch between go and tes
 keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))
 
 keymap("n", "<leader>cc", ":CodeCompanionChat Toggle<cr>", opts({ desc = "Toggle code companion" }))
+
+vim.api.nvim_create_user_command("OpenInFinder", function()
+  local file = vim.fn.expand("%:p") -- full path of current file
+  if file == "" then
+    print("No file to open in Finder")
+    return
+  end
+  -- Use macOS 'open -R' to reveal the file in Finder
+  vim.fn.jobstart({ "open", "-R", file }, { detach = true })
+end, {})

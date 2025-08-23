@@ -18,9 +18,10 @@ return {
     -- require("tokyonight").setup({
     --   style = "storm",
     -- })
+    vim.cmd([[colorscheme terafox]])
     -- vim.cmd([[colorscheme nightfox]])
 
-    vim.cmd([[colorscheme kanagawa-wave]])
+    -- vim.cmd([[colorscheme kanagawa-wave]])
     -- vim.cmd([[colorscheme kanagawa-dragon]]) -- night mode
 
     -- transparent background

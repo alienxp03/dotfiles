@@ -305,6 +305,13 @@ return {
       desc = "Notifications",
     },
     {
+      "<leader>st",
+      function()
+        Snacks.picker.colorschemes()
+      end,
+      desc = "Notifications",
+    },
+    {
       "<leader>sf",
       function()
         local function get_directories()
