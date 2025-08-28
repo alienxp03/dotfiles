@@ -1,5 +1,5 @@
-nodejs 24.5.0
-golang 1.23.3
+nodejs 24.6.0
+golang 1.25.0
 lua    5.1
 python 3.13.0
-ruby   3.4.2
+ruby   3.4.5
