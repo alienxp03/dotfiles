@@ -15,7 +15,7 @@ customCommands:
   - key: "F"
     command: "git pull --rebase origin master"
     context: "localBranches"
-    stream: true
+    output: log
   - key: "O"
     context: "localBranches"
     description: "Open/Create PR/MR (GitHub/GitLab)"

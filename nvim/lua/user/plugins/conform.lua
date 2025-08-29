@@ -1,8 +1,7 @@
 -- formatter
 return {
   "stevearc/conform.nvim",
-  lazy = true,
-  event = { "BufReadPre", "BufNewFile" }, -- to disable, comment this out
+  event = { "BufReadPre", "BufNewFile" },
   config = function()
     local conform = require("conform")
 
@@ -24,8 +23,12 @@ return {
         go = { "gofmt", "goimports" },
       },
 
-      format_after_save = function(_)
-        return { lsp_format = "fallback" }
+      format_on_save = function(bufnr)
+        -- Disable with a global or buffer-local variable
+        if vim.g.disable_autoformat or vim.b[bufnr].disable_autoformat then
+          return
+        end
+        return { timeout_ms = 500, lsp_format = "fallback" }
       end,
     })
 
