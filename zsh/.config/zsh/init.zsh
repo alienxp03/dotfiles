@@ -1,16 +1,17 @@
-source "$HOME/.dotfiles/zshrc/aliases.zsh"
-source "$HOME/.dotfiles/zshrc/aliases.local.zsh"
-source "$HOME/.dotfiles/zshrc/functions.zsh"
-source "$HOME/.dotfiles/zshrc/env.zsh"
+source "$HOME/.config/zsh/aliases.zsh"
+[[ -f "$HOME/.config/zsh/aliases.private.zsh" ]] && source "$HOME/.config/zsh/aliases.private.zsh"
+[[ -f "$HOME/.config/zsh/aliases.local.zsh" ]] && source "$HOME/.config/zsh/aliases.local.zsh"
+source "$HOME/.config/zsh/functions.zsh"
+source "$HOME/.config/zsh/env.zsh"
 
 # For cross-platform logics
 if [ "$(uname -s)" = "Darwin" ]; then
-  source "$HOME/.dotfiles/zshrc/env.darwin.zsh"
+  source "$HOME/.config/zsh/env.darwin.zsh"
 elif [ "$(uname -s)" = "Linux" ]; then
-  source "$HOME/.dotfiles/zshrc/env.linux.zsh"
+  source "$HOME/.config/zsh/env.linux.zsh"
 fi
 
-source "$HOME/.dotfiles/zshrc/env.local.zsh"
+[[ -f "$HOME/.config/zsh/env.local.zsh" ]] && source "$HOME/.config/zsh/env.local.zsh"
 
 # custom mise prompt helper
 # [[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
@@ -35,4 +36,3 @@ zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' menu no
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
-

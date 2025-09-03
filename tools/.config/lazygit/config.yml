@@ -1,0 +1,73 @@
+gui:
+  sidePanelWidth: 0.2
+git:
+  paging:
+    colorArg: always
+    pager: delta --dark --paging=never
+customCommands:
+  - key: "E"
+    context: "global"
+    command: "git commit --allow-empty -m '{{index .PromptResponses 0}}'"
+    prompts:
+      - type: "input"
+        title: "Empty commit message"
+    description: "Create an empty commit"
+  - key: "F"
+    command: "git pull --rebase origin master"
+    context: "localBranches"
+    output: log
+  - key: "O"
+    context: "localBranches"
+    description: "Open/Create PR/MR (GitHub/GitLab)"
+    command: |
+      #!/bin/bash
+      REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+      if [[ "$REMOTE_URL" == *"github.com"* ]]; then
+        gh pr view --web || gh pr create --web
+      elif [[ "$REMOTE_URL" == *"gitlab"* ]]; then
+        glab mr view --web || glab mr create --web --fill
+      else
+        echo "Unknown git provider. Remote URL: $REMOTE_URL"
+        exit 1
+      fi
+  - key: "C"
+    context: "files"
+    description: "Smart commit with branch prefix"
+    prompts:
+      - type: "input"
+        title: "Enter commit message"
+        key: "msg"
+    command: |
+      #!/bin/bash
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
+      TICKET=$(echo "$BRANCH" | grep -oE '[A-Z]+-[0-9]+')
+      SERVICE=$(echo "$BRANCH" | cut -d'-' -f3)
+      PREFIX="feat: [$TICKET] $SERVICE:"
+      echo "Committing with: $PREFIX {{.Form.msg}}"
+      git commit -m "$PREFIX {{.Form.msg}}"
+  - key: "U"
+    context: "commits"
+    description: "Undo last commit (keep changes)"
+    command: "git reset --soft HEAD~1"
+  - key: "<c-n>"
+    context: "localBranches"
+    description: "Create branch"
+    prompts:
+      - type: "input"
+        title: "Ticket number"
+        key: "Ticket"
+        initialValue: ""
+      - type: "input"
+        key: "Service"
+        title: "Service"
+        initialValue: ""
+      - type: "input"
+        title: "Message"
+        key: "Message"
+        initialValue: ""
+      - type: "confirm"
+        key: "Confirm"
+        title: "Commit"
+        body: "Create new branch?"
+    command: "git checkout -b 'RGPAYM-{{ .Form.Ticket }}-{{.Form.Service}}-{{.Form.Message}}'"
+    loadingText: "Creating new branch..."

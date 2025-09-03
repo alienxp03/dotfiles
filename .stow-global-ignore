@@ -1,0 +1,12 @@
+^\.git($|/)
+^personal($|/)
+^tmp($|/)
+^config($|/)
+^README\.md$
+^setup\.sh$
+^\.DS_Store$
+^\.aider.*
+^\.claude($|/)
+^\.vscode($|/)
+^\.gitignore$
+^\.gitmodules$

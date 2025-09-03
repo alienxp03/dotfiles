@@ -17,7 +17,7 @@ autoload -Uz compinit && compinit
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 # eval "$(starship init zsh)"
 
-source "$HOME/.dotfiles/zshrc/init.zsh"
+source "$HOME/.config/zsh/init.zsh"
 eval "$(zoxide init zsh)"
 eval "$($HOME/.local/bin/mise activate zsh)"
 eval "$(atuin init zsh)"
