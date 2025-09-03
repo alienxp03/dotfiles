@@ -25,42 +25,42 @@ function gcb() {
 
   local selected=$(
     {
-      git for-each-ref --format='%(refname:short)	%(committerdate:relative)	%(subject)' refs/heads | \
+      git for-each-ref --format='%(refname:short)	%(committerdate:relative)	%(authorname)	%(subject)' refs/heads | \
         awk -v default="$default_branch" 'BEGIN{FS="\t"; OFS="\t"} {
-          # Reconstruct the commit message from field 3 onwards
-          commit_msg = $3
-          for (i = 4; i <= NF; i++) {
+          # Reconstruct the commit message from field 4 onwards
+          commit_msg = $4
+          for (i = 5; i <= NF; i++) {
             commit_msg = commit_msg " " $i
           }
 
-          # Calculate padding needed for alignment (assuming max branch name + date is around 50 chars)
-          branch_date = $1 " (" $2 ")"
-          padding = 50 - length(branch_date)
+          # Calculate padding needed for alignment (assuming max branch name + date + author is around 60 chars)
+          branch_info = $1 " (" $2 ") [" $3 "]"
+          padding = 70 - length(branch_info)
           if (padding < 1) padding = 1
           spaces = sprintf("%" padding "s", "")
 
           if ($1 == default) {
-            printf "\033[34m%s\033[0m \033[92m(%s)\033[0m%s%s\n", $1, $2, spaces, commit_msg
+            printf "\033[34m%s\033[0m \033[92m(%s)\033[0m \033[36m[%s]\033[0m%s%s\n", $1, $2, $3, spaces, commit_msg
           } else {
-            printf "\033[33m%s\033[0m \033[92m(%s)\033[0m%s%s\n", $1, $2, spaces, commit_msg
+            printf "\033[33m%s\033[0m \033[92m(%s)\033[0m \033[36m[%s]\033[0m%s%s\n", $1, $2, $3, spaces, commit_msg
           }
         }'
 
-      git for-each-ref --format='%(refname:short)	%(committerdate:relative)	%(subject)' refs/remotes | \
+      git for-each-ref --format='%(refname:short)	%(committerdate:relative)	%(authorname)	%(subject)' refs/remotes | \
         awk 'BEGIN{FS="\t"; OFS="\t"} {
-          # Reconstruct the commit message from field 3 onwards
-          commit_msg = $3
-          for (i = 4; i <= NF; i++) {
+          # Reconstruct the commit message from field 4 onwards
+          commit_msg = $4
+          for (i = 5; i <= NF; i++) {
             commit_msg = commit_msg " " $i
           }
 
-          # Calculate padding needed for alignment (assuming max branch name + date is around 50 chars)
-          branch_date = $1 " (" $2 ")"
-          padding = 50 - length(branch_date)
+          # Calculate padding needed for alignment (assuming max branch name + date + author is around 60 chars)
+          branch_info = $1 " (" $2 ") [" $3 "]"
+          padding = 70 - length(branch_info)
           if (padding < 1) padding = 1
           spaces = sprintf("%" padding "s", "")
 
-          printf "\033[38;5;208m%s\033[0m \033[92m(%s)\033[0m%s%s\n", $1, $2, spaces, commit_msg
+          printf "\033[38;5;208m%s\033[0m \033[92m(%s)\033[0m \033[36m[%s]\033[0m%s%s\n", $1, $2, $3, spaces, commit_msg
         }'
     } | \
     FZF_DEFAULT_OPTS="--height ${FZF_TMUX_HEIGHT:-40%} --reverse --multi=0 \
@@ -87,7 +87,7 @@ function gcb() {
       $FZF_DEFAULT_OPTS $FZF_CTRL_G_OPTS" \
     fzf-tmux -p90%,60% -- \
       --header '  CTRL-O: Open in browser │ CTRL-/: Toggle preview │ ENTER: Checkout  ' \
-      --preview 'branch_name=$(echo {} | awk "{print \$1}" | sed "s/\x1b\[[0-9;]*m//g"); git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %s" "$branch_name" -- 2>/dev/null | head -20 || echo "No commits found for branch: $branch_name"' | \
+      --preview 'branch_name=$(echo {} | awk "{print \$1}" | sed "s/\x1b\[[0-9;]*m//g"); git log --oneline --graph --date=short --color=always --pretty="format:%C(auto)%cd %h%d %C(cyan)[%an]%C(reset) %s" "$branch_name" -- 2>/dev/null | head -20 || echo "No commits found for branch: $branch_name"' | \
     awk '{gsub(/\x1b\[[0-9;]*m/, "", $1); print $1}'
   )
 

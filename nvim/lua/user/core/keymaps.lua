@@ -118,7 +118,7 @@ keymap(
   opts({ desc = "Toggle trouble view", noremap = true, silent = true })
 )
 
-keymap("n", "<C-r>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
+keymap("n", "<C-e>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
 
 keymap("n", "<leader>tc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
 vim.keymap.set("n", "<leader>gv", function()
