@@ -22,6 +22,7 @@ eval "$(zoxide init zsh)"
 eval "$($HOME/.local/bin/mise activate zsh)"
 eval "$(atuin init zsh)"
 source <(fzf --zsh)
+source <(kubectl completion zsh)
 
 . "$HOME/.atuin/bin/env"
 
