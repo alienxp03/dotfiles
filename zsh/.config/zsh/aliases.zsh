@@ -75,6 +75,7 @@ alias t='sesh connect $(sesh list | fzf)'
 
 alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
+alias cox="codex --sandbox danger-full-access"
 
 # kamal
 alias kamal='mise exec ruby@3.4.3 -- kamal'
