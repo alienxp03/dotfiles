@@ -37,7 +37,7 @@ return {
     local all_servers = mason_lspconfig.get_installed_servers()
 
     -- Setup remaining servers with default config
-    local excluded_servers = { "sorbet", "ruby_lsp", "rubocop" } -- Exclude these from auto-setup
+    local excluded_servers = { "sorbet", "ruby_lsp", "rubocop", "stylua", "yamlls" } -- Exclude these from auto-setup
 
     for _, server_name in ipairs(all_servers) do
       if not vim.tbl_contains(excluded_servers, server_name) then

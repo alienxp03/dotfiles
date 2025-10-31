@@ -4,6 +4,7 @@ return {
   dependencies = {
     -- "hrsh7th/cmp-nvim-lsp",
     { "antosha417/nvim-lsp-file-operations", config = true },
+    "b0o/schemastore.nvim",
   },
   config = function()
     -- import lspconfig plugin
@@ -64,6 +65,31 @@ return {
       },
       -- SQL LSP server (if needed)
       sqlls = {},
+      yamlls = {
+        settings = {
+          yaml = {
+            schemaStore = {
+              -- You must disable built-in schemaStore support if you want to use
+              -- this plugin and its advanced options like `ignore`.
+              enable = false,
+              -- Avoid TypeError: Cannot read properties of undefined (reading 'length')
+              url = "",
+            },
+            schemas = require("schemastore").yaml.schemas({
+              extra = {
+                {
+                  name = "Kubernetes",
+                  description = "Kubernetes resource manifest",
+                  url = "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/v1.34.1-standalone/all.json",
+                  fileMatch = {
+                    "**/*.yaml",
+                  },
+                },
+              },
+            }),
+          },
+        },
+      },
     }
 
     -- Setup manual servers
