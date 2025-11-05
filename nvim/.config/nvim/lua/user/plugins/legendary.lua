@@ -10,7 +10,10 @@ return {
       commands = {
         {
           ":CopyRelativePath",
-          ':let @+=expand("%")',
+          function()
+            local path = vim.fn.expand("%:.")
+            vim.fn.setreg("+", path)
+          end,
           description = "Copy relative path",
         },
         {

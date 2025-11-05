@@ -200,6 +200,13 @@ return {
       desc = "Grep",
     },
     {
+      "<leader>sr",
+      function()
+        Snacks.picker.resume()
+      end,
+      desc = "Resume",
+    },
+    {
       "<C-g>",
       function()
         Snacks.lazygit()

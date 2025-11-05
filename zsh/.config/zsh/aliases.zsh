@@ -4,6 +4,7 @@ alias rdm='bin/rake db:migrate'
 alias fs='foreman start'
 alias rs='bin/rails server -b 0.0.0.0'
 alias rc='bin/rails console'
+alias spec='bin/rspec'
 alias n='bundle exec next rspec'
 alias cop='bin/rubocop'
 alias dstop='docker stop $(docker ps -q)'
@@ -75,7 +76,8 @@ alias t='sesh connect $(sesh list | fzf)'
 
 alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
-alias cox="codex --sandbox danger-full-access"
+alias cox="codex --dangerously-bypass-approvals-and-sandbox
+"
 
 # kamal
 alias kamal='mise exec ruby@3.4.3 -- kamal'
