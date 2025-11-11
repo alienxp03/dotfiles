@@ -221,13 +221,6 @@ return {
       desc = "Grep",
     },
     {
-      "<leader>gf",
-      function()
-        Snacks.picker.git_log_file()
-      end,
-      desc = "Git log file",
-    },
-    {
       "<leader>gb",
       function()
         Snacks.picker.git_branches({})

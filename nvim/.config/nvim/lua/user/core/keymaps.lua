@@ -141,3 +141,5 @@ vim.api.nvim_create_user_command("OpenInFinder", function()
   -- Use macOS 'open -R' to reveal the file in Finder
   vim.fn.jobstart({ "open", "-R", file }, { detach = true })
 end, {})
+
+keymap("n", "<leader>gf", ":LazyGitFilterCurrentFile<cr>", opts({ desc = "Current file git history" }))
