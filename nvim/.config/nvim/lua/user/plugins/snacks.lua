@@ -41,7 +41,7 @@ return {
         frecency = true,
       },
       sources = {
-        files = { ignored = true, hidden = true },
+        files = { ignored = true, hidden = true, exclude = { "**/.DS_Store" } },
         explorer = { ignored = false, hidden = true },
         grep = { ignored = false, hidden = true },
         grep_word = { ignored = false, hidden = true },

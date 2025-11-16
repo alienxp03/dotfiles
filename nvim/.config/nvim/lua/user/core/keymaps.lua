@@ -143,3 +143,4 @@ vim.api.nvim_create_user_command("OpenInFinder", function()
 end, {})
 
 keymap("n", "<leader>gf", ":LazyGitFilterCurrentFile<cr>", opts({ desc = "Current file git history" }))
+keymap("n", "<leader>fe", ":Yazi<cr>", opts({ desc = "File explore via Yazi" }))
