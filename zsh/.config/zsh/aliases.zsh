@@ -76,8 +76,8 @@ alias t='sesh connect $(sesh list | fzf)'
 
 alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
-alias cox="codex --dangerously-bypass-approvals-and-sandbox
-"
+alias cox="codex --dangerously-bypass-approvals-and-sandbox"
+alias oc="opencode"
 
 # kamal
 alias kamal='mise exec ruby@3.4.3 -- kamal'

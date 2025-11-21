@@ -34,9 +34,20 @@ export GOBIN="$GOPATH/bin"
 export PATH="$PATH:$GOROOT/bin"
 export PATH="$PATH:$GOPATH/bin"
 
+# zsh-vi-mode
+export ZVM_VI_EDITOR="nvim"
+export ZVM_SYSTEM_CLIPBOARD_ENABLED=true
+export ZVM_INIT_MODE=sourcing
+
 # forgit
 export PATH="$PATH:$FORGIT_INSTALL_DIR/bin"
 export FORGIT_NO_ALIASES=1
 
+export PATH="/Users/azuan/.rd/bin:$PATH"
+
+export PATH="$PATH:/Users/azuan/.lmstudio/bin"
+
 export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_INSTALL_CLEANUP=1
+
+

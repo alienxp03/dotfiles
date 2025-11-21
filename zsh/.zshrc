@@ -5,6 +5,9 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+export ZVM_INIT_MODE=sourcing
+# Fix for Ctrl+r not working for Atuin
+
 # antidote zsh plugin manager
 source /opt/homebrew/opt/antidote/share/antidote/antidote.zsh
 antidote load
@@ -12,34 +15,12 @@ antidote load
 # Load completions
 autoload -Uz compinit && compinit
 
-# Themes
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-# eval "$(starship init zsh)"
 
 source "$HOME/.config/zsh/init.zsh"
 eval "$(zoxide init zsh)"
 eval "$($HOME/.local/bin/mise activate zsh)"
-eval "$(atuin init zsh)"
 source <(fzf --zsh)
+eval "$(atuin init zsh)"
 source <(kubectl completion zsh)
-
-. "$HOME/.atuin/bin/env"
-
-# Added by LM Studio CLI (lms)
-export PATH="$PATH:/Users/azuan/.lmstudio/bin"
-# End of LM Studio CLI section
-
-
-# bun completions
-[ -s "/Users/azuan/.bun/_bun" ] && source "/Users/azuan/.bun/_bun"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-
-[[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
-
-### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
-export PATH="/Users/azuan/.rd/bin:$PATH"
-### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)

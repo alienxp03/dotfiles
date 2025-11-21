@@ -1,0 +1,23 @@
+update_check = false
+
+## which style to use
+## possible values: auto, full, compact
+style = "full"
+
+## Defaults to true. If enabled, upon hitting enter Atuin will immediately execute the command. Press tab to return to the shell and edit.
+# This applies for new installs. Old installs will keep the old behaviour unless configured otherwise.
+enter_accept = false
+
+## Defaults to "emacs".  This specifies the keymap on the startup of `atuin
+## search`.  If this is set to "auto", the startup keymap mode in the Atuin
+## search is automatically selected based on the shell's keymap where the
+## keybinding is defined.  If this is set to "emacs", "vim-insert", or
+## "vim-normal", the startup keymap mode in the Atuin search is forced to be
+## the specified one.
+keymap_mode = "vim-insert"
+
+[sync]
+# Enable sync v2 by default
+# This ensures that sync v2 is enabled for new installs only
+# In a later release it will become the default across the board
+records = true

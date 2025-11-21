@@ -6,3 +6,4 @@ tags*
 !.aider.conf.yml
 nvim/dictionaries
 tmp/
+.claude/
