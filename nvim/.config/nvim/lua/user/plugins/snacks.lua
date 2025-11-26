@@ -1,6 +1,5 @@
 return {
   "folke/snacks.nvim",
-  lazy = false,
   opts = {
     picker = {
       hidden = true,
@@ -233,13 +232,6 @@ return {
         Snacks.gitbrowse()
       end,
       desc = "Git browse",
-    },
-    {
-      "<leader>gd",
-      function()
-        Snacks.picker.git_diff()
-      end,
-      desc = "Git diff",
     },
     {
       "<leader>ld",
