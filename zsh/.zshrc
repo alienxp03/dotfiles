@@ -18,9 +18,11 @@ autoload -Uz compinit && compinit
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
+export MISE_ACTIVATE_AGGRESSIVE=1
+eval "$(~/.local/bin/mise activate zsh)"
+
 source "$HOME/.config/zsh/init.zsh"
 eval "$(zoxide init zsh)"
-eval "$($HOME/.local/bin/mise activate zsh)"
 source <(fzf --zsh)
 eval "$(atuin init zsh)"
 source <(kubectl completion zsh)

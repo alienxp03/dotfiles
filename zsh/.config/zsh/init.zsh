@@ -1,6 +1,8 @@
 source "$HOME/.config/zsh/aliases.zsh"
 [[ -f "$HOME/.config/zsh/aliases.private.zsh" ]] && source "$HOME/.config/zsh/aliases.private.zsh"
 [[ -f "$HOME/.config/zsh/aliases.local.zsh" ]] && source "$HOME/.config/zsh/aliases.local.zsh"
+[[ -f "$HOME/.config/zsh/env.local.zsh" ]] && source "$HOME/.config/zsh/env.local.zsh"
+[[ -f "$HOME/.config/zsh/functions.local.zsh" ]] && source "$HOME/.config/zsh/functions.local.zsh"
 source "$HOME/.config/zsh/functions.zsh"
 source "$HOME/.config/zsh/env.zsh"
 

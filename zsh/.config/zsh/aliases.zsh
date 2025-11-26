@@ -78,6 +78,8 @@ alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
 alias cox="codex --dangerously-bypass-approvals-and-sandbox"
 alias oc="opencode"
+alias cop='copilot'
 
 # kamal
 alias kamal='mise exec ruby@3.4.3 -- kamal'
+alias kamal='mise exec node@24.9.0 -- copilot'
