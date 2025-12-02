@@ -10,8 +10,8 @@ alias cop='bin/rubocop'
 alias dstop='docker stop $(docker ps -q)'
 alias d='docker'
 alias ls='ls --color'
-alias k="kubectl"
-alias gmod="go mod tidy -v && go mod vendor -v && nvim ."
+alias gmod="go mod tidy -v && go mod vendor -v && nvim go.mod"
+alias k='kubectl'
 compdef __kubectl k
 
 # Git
@@ -83,4 +83,6 @@ alias cop='copilot'
 
 # kamal
 alias kamal='mise exec ruby@3.4.3 -- kamal'
-alias kamal='mise exec node@24.9.0 -- copilot'
+alias cop='mise exec node@24.9.0 -- copilot'
+
+# alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic" API_TIMEOUT_MS=3000000 claude --dangerously-skip-permissions'

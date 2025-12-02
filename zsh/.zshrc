@@ -25,4 +25,4 @@ source "$HOME/.config/zsh/init.zsh"
 eval "$(zoxide init zsh)"
 source <(fzf --zsh)
 eval "$(atuin init zsh)"
-source <(kubectl completion zsh)
+# source <(kubectl completion zsh)
