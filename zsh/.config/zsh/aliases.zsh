@@ -85,4 +85,6 @@ alias cop='copilot'
 alias kamal='mise exec ruby@3.4.3 -- kamal'
 alias cop='mise exec node@24.9.0 -- copilot'
 
-# alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic" API_TIMEOUT_MS=3000000 claude --dangerously-skip-permissions'
+alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_MODEL=glm-4.6 ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic" API_TIMEOUT_MS=3000000 claude --dangerously-skip-permissions'
+
+alias ccusage='bunx ccusage'
