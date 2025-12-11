@@ -23,6 +23,7 @@ export PATH="$HOME/.tmux/plugins/tmuxifier/bin:$PATH"
 export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export PATH="$WORKSPACE/GitHub/diff-so-fancy:$PATH"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+export PATH="/Users/azuan/.rd/bin:$PATH"
 
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix
