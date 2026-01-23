@@ -10,6 +10,7 @@ export TMUXIFIER_LAYOUT_PATH="$HOME/.tmux-layouts"
 export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles
 export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
+export ZAI_BASE_URL="https://api.z.ai/api/anthropic"
 
 export PATH="$HOME/.rbenv/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
@@ -29,9 +30,10 @@ export PATH="/Users/azuan/.rd/bin:$PATH"
 export CGO_CFLAGS=-Wno-undef-prefix
 
 # golang
-export GOROOT="/usr/local/go"
+# export GOROOT="/usr/local/go"
 export GOPATH="$HOME/go"
 export GOBIN="$GOPATH/bin"
+export GOPROXY=direct
 export PATH="$PATH:$GOROOT/bin"
 export PATH="$PATH:$GOPATH/bin"
 
