@@ -100,3 +100,14 @@ function gcb() {
   fi
 }
 
+function remote-open() {
+  REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+  if [[ "$REMOTE_URL" == *"github.com"* ]]; then
+    gh pr view --web || gh pr create --web
+  elif [[ "$REMOTE_URL" == *"gitlab"* ]]; then
+    glab mr view --web || glab mr create --web --fill
+  else
+    echo "Unknown git provider. Remote URL: $REMOTE_URL"
+    exit 1
+  fi
+}

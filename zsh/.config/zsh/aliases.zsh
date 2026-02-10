@@ -11,7 +11,7 @@ alias dstop='docker stop $(docker ps -q)'
 alias d='docker'
 alias ls='ls --color'
 alias k="kubectl"
-alias gmod="go mod tidy -v && go mod vendor -v && nvim ."
+alias gmod="go mod tidy -v && go mod vendor -v && nvim go.mod"
 compdef __kubectl k
 
 # Git

@@ -31,4 +31,5 @@ bindings = [
   { key = "Left", mods = "Alt", chars = "\u001BB" },
   { key = "L", mods = "Command", chars = "\u0001w" },
   { key = "K", mods = "Command", chars = "\u0001T" },
+  { key = "Return", mods = "Shift", chars = "\n" }
 ]

@@ -11,6 +11,7 @@ return {
   { "dstein64/vim-startuptime", cmd = "StartupTime" }, -- Improve startup time
   { "wakatime/vim-wakatime", event = "VeryLazy" }, -- Wakatime
   { "folke/neodev.nvim", ft = "lua" }, -- Neovim development
+  { "folke/twilight.nvim" }, -- Distraction free coding
   { "akinsho/toggleterm.nvim", cmd = { "ToggleTerm", "TermExec" } },
   { "christoomey/vim-tmux-navigator", lazy = false }, -- Keep immediate for tmux integration
   { "tpope/vim-endwise", event = "InsertEnter" },
