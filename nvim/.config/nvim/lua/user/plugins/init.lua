@@ -14,7 +14,7 @@ return {
   { "akinsho/toggleterm.nvim", cmd = { "ToggleTerm", "TermExec" } },
   { "christoomey/vim-tmux-navigator", lazy = false }, -- Keep immediate for tmux integration
   { "tpope/vim-endwise", event = "InsertEnter" },
-  { "github/copilot.vim", lazy = false },
+  -- { "github/copilot.vim", lazy = false },
   {
     "nvim-tree/nvim-web-devicons",
     lazy = true,
