@@ -101,20 +101,14 @@ function gcb() {
 }
 
 function export-zai() {
-  local missing=()
-
-  [[ -z "${ZAI_API_KEY:-}" ]] && missing+=("ZAI_API_KEY")
-  [[ -z "${ZAI_MODEL:-}" ]] && missing+=("ZAI_MODEL")
-  [[ -z "${ZAI_BASE_URL:-}" ]] && missing+=("ZAI_BASE_URL")
-
-  if (( ${#missing[@]} > 0 )); then
-    echo "export-zai: missing required variable(s): ${missing[*]}"
+  if [[ -z "${ZAI_API_KEY:-}" ]]; then
+    echo "export-zai: ZAI_API_KEY is not set"
     return 1
   fi
 
   export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
-  export ANTHROPIC_MODEL="$ZAI_MODEL"
-  export ANTHROPIC_BASE_URL="$ZAI_BASE_URL"
+  export ANTHROPIC_MODEL="${ZAI_MODEL:-glm-5}"
+  export ANTHROPIC_BASE_URL="${ZAI_BASE_URL:-https://api.z.ai/api/anthropic}"
 
   echo "export-zai: ANTHROPIC_* variables set for current shell"
 }
