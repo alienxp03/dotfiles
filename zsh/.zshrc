@@ -26,3 +26,8 @@ eval "$(zoxide init zsh)"
 source <(fzf --zsh)
 eval "$(atuin init zsh)"
 # source <(kubectl completion zsh)
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/Users/azuan/.lmstudio/bin"
+# End of LM Studio CLI section
+

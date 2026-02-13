@@ -9,6 +9,7 @@ alias n='bundle exec next rspec'
 alias cop='bin/rubocop'
 alias dstop='docker stop $(docker ps -q)'
 alias d='docker'
+alias docker-delete-dangling='docker rmi $(docker images --filter "dangling=true" -q --no-trunc)'
 alias ls='ls --color'
 alias gmod="go mod tidy -v && go mod vendor -v && nvim go.mod"
 alias k='kubectl'
@@ -86,5 +87,7 @@ alias cop='copilot'
 alias kamal='mise exec ruby@3.4.3 -- kamal'
 alias cop='mise exec node@24.9.0 -- copilot'
 
-alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_MODEL=glm-4.7 ANTHROPIC_BASE_URL=$ZAI_BASE_URL claude --dangerously-skip-permissions'
+alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_MODEL=$ZAI_MODEL ANTHROPIC_BASE_URL=$ZAI_BASE_URL claude --dangerously-skip-permissions'
 alias ccusage='bunx ccusage'
+
+alias jt='just'

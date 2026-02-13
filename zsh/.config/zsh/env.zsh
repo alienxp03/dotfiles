@@ -2,7 +2,7 @@ export WORKSPACE="$HOME/Workspace"
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_THEME="powerlevel10k/powerlevel10k"
 export EDITOR='nvim'
-export RUBY_CONFIGURE_OPTS="--with-openssl-dir=/opt/openssl-1.1.1s/"
+# export RUBY_CONFIGURE_OPTS="--with-openssl-dir=/opt/openssl-1.1.1s/"
 export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
 export LIBGL_ALWAYS_SOFTWARE=1
 export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-22.jdk/Contents/Home/"
@@ -11,6 +11,7 @@ export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles
 export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
 export ZAI_BASE_URL="https://api.z.ai/api/anthropic"
+export ZAI_MODEL="glm-5"
 
 export PATH="$HOME/.rbenv/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
@@ -25,6 +26,7 @@ export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export PATH="$WORKSPACE/GitHub/diff-so-fancy:$PATH"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
 export PATH="/Users/azuan/.rd/bin:$PATH"
+export PATH="/Users/azuan/.bun/bin:$PATH"
 
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix

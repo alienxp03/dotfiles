@@ -100,3 +100,29 @@ function gcb() {
   fi
 }
 
+function export-zai() {
+  local missing=()
+
+  [[ -z "${ZAI_API_KEY:-}" ]] && missing+=("ZAI_API_KEY")
+  [[ -z "${ZAI_MODEL:-}" ]] && missing+=("ZAI_MODEL")
+  [[ -z "${ZAI_BASE_URL:-}" ]] && missing+=("ZAI_BASE_URL")
+
+  if (( ${#missing[@]} > 0 )); then
+    echo "export-zai: missing required variable(s): ${missing[*]}"
+    return 1
+  fi
+
+  export ANTHROPIC_AUTH_TOKEN="$ZAI_API_KEY"
+  export ANTHROPIC_MODEL="$ZAI_MODEL"
+  export ANTHROPIC_BASE_URL="$ZAI_BASE_URL"
+
+  echo "export-zai: ANTHROPIC_* variables set for current shell"
+}
+
+function unexport-zai() {
+  unset ANTHROPIC_AUTH_TOKEN
+  unset ANTHROPIC_MODEL
+  unset ANTHROPIC_BASE_URL
+
+  echo "unexport-zai: ANTHROPIC_* variables cleared from current shell"
+}
