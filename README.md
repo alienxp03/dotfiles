@@ -51,6 +51,29 @@ Notes:
 - Alacritty, Ghostty, and Lazygit use XDG config paths under `~/.config`.
 - `personal/` is a separate repo/submodule and not stowed by default.
 
+## Local-Only Configuration Boundaries
+
+Default bootstrap (`setup.sh`) only stows:
+
+```bash
+stow zsh tmux nvim terminal tools ruby
+```
+
+Treat files in these package directories as shared/tracked by default. Keep machine-specific or secret values in local-only files under `$HOME`:
+
+- `~/.config/zsh/aliases.private.zsh`
+- `~/.config/zsh/aliases.local.zsh`
+- `~/.config/zsh/env.local.zsh`
+- `~/.config/zsh/functions.local.zsh`
+
+`~/.config/zsh/init.zsh` sources each of these files only if it exists. This repo ignores `*.local.zsh`, but does not ignore `aliases.private.zsh`, so keep `aliases.private.zsh` outside this repo or add a local Git exclude for `zsh/.config/zsh/aliases.private.zsh`.
+
+Before committing, verify local-only files are still untracked:
+
+```bash
+git status --short --untracked-files=all
+```
+
 ## Repository Hygiene
 
 Remove Finder metadata files:
