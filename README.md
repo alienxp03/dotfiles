@@ -50,3 +50,25 @@ Notes:
 - zsh sources configs from `~/.config/zsh`. Optionally place private aliases at `~/.config/zsh/aliases.private.zsh` (not tracked here).
 - Alacritty, Ghostty, and Lazygit use XDG config paths under `~/.config`.
 - `personal/` is a separate repo/submodule and not stowed by default.
+
+## Repository Hygiene
+
+Remove Finder metadata files:
+
+```bash
+find . -name '.DS_Store' -delete
+```
+
+Resolve the stale tracked path if it appears in status:
+
+```bash
+git rm zshrc/alias.personal.zsh
+```
+
+Verify repository hygiene:
+
+```bash
+git ls-files | rg 'DS_Store$'
+find . -name '.DS_Store'
+git status --short
+```

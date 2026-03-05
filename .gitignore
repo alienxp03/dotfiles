@@ -1,4 +1,4 @@
-*.DS_STORE
+.DS_Store
 nvim/plugin/packer_compiled.lua
 tags*
 *.local.zsh
