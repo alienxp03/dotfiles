@@ -1,0 +1,11 @@
+[tools]
+bun = "latest"
+node = "latest"
+python = "latest"
+ruby = "latest"
+rust = "latest"
+
+[settings]
+idiomatic_version_file_enable_tools = ["ruby"]
+ruby.compile = false
+http_timeout = "5s"
