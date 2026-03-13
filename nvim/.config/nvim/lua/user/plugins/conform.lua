@@ -1,9 +1,17 @@
 -- formatter
+-- Set NVIM_AUTOFORMAT=false in your shell env to disable autoformat by default
+local autoformat_enabled = vim.env.NVIM_AUTOFORMAT ~= "false"
+
 return {
   "stevearc/conform.nvim",
   event = { "BufReadPre", "BufNewFile" },
   config = function()
     local conform = require("conform")
+
+    -- Initialize global autoformat state from env (unless already set)
+    if vim.g.disable_autoformat == nil then
+      vim.g.disable_autoformat = not autoformat_enabled
+    end
 
     conform.setup({
       formatters_by_ft = {

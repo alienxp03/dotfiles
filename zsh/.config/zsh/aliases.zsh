@@ -13,6 +13,7 @@ alias docker-delete-dangling='docker rmi $(docker images --filter "dangling=true
 alias ls='ls --color'
 alias gmod="go mod tidy -v && go mod vendor -v && nvim go.mod"
 alias k='kubectl'
+alias p='pnpm'
 compdef __kubectl k
 
 # Git

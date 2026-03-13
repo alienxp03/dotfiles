@@ -13,8 +13,6 @@ elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.config/zsh/env.linux.zsh"
 fi
 
-[[ -f "$HOME/.config/zsh/env.local.zsh" ]] && source "$HOME/.config/zsh/env.local.zsh"
-
 # custom mise prompt helper
 # [[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
 # eval "$(starship init zsh)"
