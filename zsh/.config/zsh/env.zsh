@@ -24,8 +24,8 @@ export PATH="$HOME/.tmux/plugins/tmuxifier/bin:$PATH"
 export PATH="$HOME/.tmux/plugins/t-smart-tmux-session-manager/bin:$PATH"
 export PATH="$WORKSPACE/GitHub/diff-so-fancy:$PATH"
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
-export PATH="/Users/azuan/.rd/bin:$PATH"
-export PATH="/Users/azuan/.bun/bin:$PATH"
+export PATH="$HOME/.rd/bin:$PATH"
+export PATH="$HOME/.bun/bin:$PATH"
 
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix
@@ -47,11 +47,22 @@ export ZVM_INIT_MODE=sourcing
 export PATH="$PATH:$FORGIT_INSTALL_DIR/bin"
 export FORGIT_NO_ALIASES=1
 
-export PATH="/Users/azuan/.rd/bin:$PATH"
+export PATH="$HOME/.rd/bin:$PATH"
 
-export PATH="$PATH:/Users/azuan/.lmstudio/bin"
+export PATH="$PATH:$HOME/.lmstudio/bin"
 
 export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_INSTALL_CLEANUP=1
 
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:$HOME/.lmstudio/bin"
+# End of LM Studio CLI section
+
+# pnpm
+export PNPM_HOME="$HOME/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
 
