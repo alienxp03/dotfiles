@@ -30,6 +30,11 @@ export PATH="$HOME/.bun/bin:$PATH"
 # Golang
 export CGO_CFLAGS=-Wno-undef-prefix
 
+# Android
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export PATH=$PATH:$ANDROID_HOME/emulator
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+
 # golang
 # export GOROOT="/usr/local/go"
 export GOPATH="$HOME/go"
