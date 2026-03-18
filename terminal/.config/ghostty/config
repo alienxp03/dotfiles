@@ -16,6 +16,8 @@ keybind                 = super+j=text:\x01\x4c
 keybind                 = super+n=text:\x01\x6e
 # sesh previous window
 keybind                 = super+p=text:\x01\x70
+# tmux windows
+keybind                 = super+o=text:\x01\x77
 
 # keybind                 = alt+left=unbind
 # keybind                 = alt+right=unbind
