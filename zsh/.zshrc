@@ -26,3 +26,10 @@ eval "$(zoxide init zsh)"
 source <(fzf --zsh)
 eval "$(atuin init zsh)"
 source <(kubectl completion zsh)
+
+# bun completions
+[ -s "/Users/azuan.zairein/.bun/_bun" ] && source "/Users/azuan.zairein/.bun/_bun"
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="/Users/azuan.zairein/.rd/bin:$PATH"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
