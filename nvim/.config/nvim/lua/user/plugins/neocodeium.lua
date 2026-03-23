@@ -6,7 +6,14 @@ return {
     local neocodeium = require("neocodeium")
     neocodeium.setup()
 
-    vim.keymap.set("i", "<C.j>", function()
+    vim.keymap.set("i", "<Tab>", function()
+      if neocodeium.visible() then
+        neocodeium.accept()
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<Tab>", true, false, true), "n")
+      end
+    end)
+    vim.keymap.set("i", "<A-j>", function()
       require("neocodeium").accept()
     end)
     vim.keymap.set("i", "<C-e>", function()

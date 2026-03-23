@@ -10,7 +10,15 @@ return {
   { "slim-template/vim-slim", ft = "slim" }, -- Rails slim
   { "dstein64/vim-startuptime", cmd = "StartupTime" }, -- Improve startup time
   { "wakatime/vim-wakatime", event = "VeryLazy" }, -- Wakatime
-  { "folke/neodev.nvim", ft = "lua" }, -- Neovim development
+  {
+    "folke/lazydev.nvim",
+    ft = "lua",
+    opts = {
+      library = {
+        { path = "${3rd}/luv/library", words = { "vim%.uv" } },
+      },
+    },
+  }, -- Neovim development
   { "akinsho/toggleterm.nvim", cmd = { "ToggleTerm", "TermExec" } },
   { "christoomey/vim-tmux-navigator", lazy = false }, -- Keep immediate for tmux integration
   { "tpope/vim-endwise", event = "InsertEnter" },
