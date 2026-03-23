@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Formatted sesh list with active/history separation
+
+active=$(sesh list -t --icons)
+history=$(sesh list -z --icons)
+
+if [[ -n "$active" ]]; then
+  # Bold active sessions with a more visible icon
+  echo "$active" | sed $'s/\xee\xaf\x88/\xe2\x9a\xa1/'
+fi
+
+if [[ -n "$active" && -n "$history" ]]; then
+  printf '\033[2;37m ── history ─────────────────────\033[0m\n'
+fi
+
+if [[ -n "$history" ]]; then
+  echo "$history"
+fi
