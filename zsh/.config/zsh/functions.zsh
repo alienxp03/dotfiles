@@ -120,3 +120,13 @@ function unexport-zai() {
 
   echo "unexport-zai: ANTHROPIC_* variables cleared from current shell"
 }
+
+# Setup a 3-pane workspace in a new window
+function ide() {
+  local dir_name="${PWD##*/}"
+  tmux rename-window "${dir_name}-code"
+  tmux split-window -h -c "$PWD"
+  tmux split-window -v -c "$PWD"
+  tmux send-keys -t 1 "nvim" C-m
+  tmux select-pane -t 1
+}
