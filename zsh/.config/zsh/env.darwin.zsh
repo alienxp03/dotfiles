@@ -5,3 +5,4 @@ then
 else
   eval "$(/usr/local/bin/brew shellenv)"
 fi
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
