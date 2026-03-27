@@ -10,7 +10,7 @@ return {
   },
   config = function()
     -- v1.x: install parsers explicitly (ensure_installed removed)
-    require("nvim-treesitter.install").install({
+    require("nvim-treesitter.install").ensure_installed({
       "lua",
       "ruby",
       "html",
@@ -42,14 +42,11 @@ return {
     })
 
     -- textobjects
-    require("nvim-treesitter-textobjects").setup({
-      select = { lookahead = true },
-      move = { set_jumps = true },
-    })
+    require("nvim-treesitter-textobjects").init()
 
-    local select = require("nvim-treesitter-textobjects.select")
-    local move = require("nvim-treesitter-textobjects.move")
-    local swap = require("nvim-treesitter-textobjects.swap")
+    local select = require("nvim-treesitter.textobjects.select")
+    local move = require("nvim-treesitter.textobjects.move")
+    local swap = require("nvim-treesitter.textobjects.swap")
 
     vim.keymap.set({ "x", "o" }, "aa", function() select.select_textobject("@parameter.outer", "textobjects") end)
     vim.keymap.set({ "x", "o" }, "ia", function() select.select_textobject("@parameter.inner", "textobjects") end)
