@@ -10,7 +10,7 @@ export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles
 export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
 export ZAI_BASE_URL="https://api.z.ai/api/anthropic"
-export ZAI_MODEL="glm-5"
+export ZAI_MODEL="glm-5.1"
 
 export PATH="$HOME/.rbenv/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
