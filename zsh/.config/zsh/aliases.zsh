@@ -13,6 +13,7 @@ alias docker-delete-dangling='docker rmi $(docker images --filter "dangling=true
 alias ls='ls --color'
 alias gmod="go mod tidy -v && go mod vendor -v && nvim go.mod"
 alias k='kubectl'
+alias kx='kubectx'
 alias p='pnpm'
 compdef __kubectl k
 
@@ -44,7 +45,6 @@ alias dc='docker compose'
 alias dstop='docker stop $(docker ps -a -q)'
 alias mk='minikube'
 alias docker-clean='docker container rm $(docker container ls -aq) 2>/dev/null && docker images | grep "<none>" | awk '{print $3}' | xargs docker rmi'
-alias kl='kubectl'
 
 # Bateriku
 alias bateriku_production='ssh deploy@$(bundle exec cap production ec2:status | grep "bateriku-production-1" -m 1| tr -s " " | cut -d " " -f6)'
