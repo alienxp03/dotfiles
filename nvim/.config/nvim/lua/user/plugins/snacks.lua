@@ -156,7 +156,7 @@ return {
       "<C-t>",
       function()
         Snacks.picker.lines({
-          layout = { hidden = { "preview" } },
+          layout = { preview = true },
           on_close = function(item)
             local pattern = item.input.filter.pattern
             vim.fn.setreg("/", pattern)
