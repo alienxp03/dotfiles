@@ -9,8 +9,8 @@ return {
     "windwp/nvim-ts-autotag",
   },
   config = function()
-    -- v1.x: install parsers explicitly (ensure_installed removed)
-    require("nvim-treesitter.install").ensure_installed({
+    -- v1.x: install parsers explicitly
+    local parsers = {
       "lua",
       "ruby",
       "html",
@@ -23,9 +23,19 @@ return {
       "query",
       "scss",
       "sql",
+      "typescript",
+      "tsx",
       "vim",
       "yaml",
-    })
+    }
+    local config = require("nvim-treesitter.config")
+    local install = require("nvim-treesitter.install")
+    local installed = config.get_installed()
+    for _, lang in ipairs(parsers) do
+      if not vim.list_contains(installed, lang) then
+        install.install(lang)
+      end
+    end
 
     -- v1.x: highlight and indent via autocmd
     vim.api.nvim_create_autocmd("FileType", {
@@ -42,11 +52,11 @@ return {
     })
 
     -- textobjects
-    require("nvim-treesitter-textobjects").init()
+    require("nvim-treesitter-textobjects").setup()
 
-    local select = require("nvim-treesitter.textobjects.select")
-    local move = require("nvim-treesitter.textobjects.move")
-    local swap = require("nvim-treesitter.textobjects.swap")
+    local select = require("nvim-treesitter-textobjects.select")
+    local move = require("nvim-treesitter-textobjects.move")
+    local swap = require("nvim-treesitter-textobjects.swap")
 
     vim.keymap.set({ "x", "o" }, "aa", function() select.select_textobject("@parameter.outer", "textobjects") end)
     vim.keymap.set({ "x", "o" }, "ia", function() select.select_textobject("@parameter.inner", "textobjects") end)
