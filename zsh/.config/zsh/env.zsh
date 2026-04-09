@@ -12,6 +12,7 @@ export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
 export ZAI_BASE_URL="https://api.z.ai/api/anthropic"
 export ZAI_MODEL="glm-5.1"
 
+export PATH="$HOME/.dotfiles/bin:$PATH"
 export PATH="$HOME/.rbenv/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$WORKSPACE/bin/apache-maven-3.8.6/bin:$PATH"

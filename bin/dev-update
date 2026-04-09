@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+echo "Updating development environment..."
+
+# Homebrew updates
+echo "Updating Homebrew..."
+brew update
+echo "Upgrading Homebrew..."
+brew upgrade
+
+# Google Cloud SDK update
+echo "Updating Google Cloud SDK..."
+gcloud components update --quiet
