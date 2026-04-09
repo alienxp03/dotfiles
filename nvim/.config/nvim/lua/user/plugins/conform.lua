@@ -40,6 +40,34 @@ return {
       end,
     })
 
+    -- Auto organize imports on save (language-agnostic, works with any LSP that supports it)
+    vim.api.nvim_create_autocmd("BufWritePre", {
+      callback = function(args)
+        local bufnr = args.buf
+        local clients = vim.lsp.get_clients({ bufnr = bufnr })
+        for _, client in ipairs(clients) do
+          if client:supports_method("textDocument/codeAction") then
+            local params = {
+              textDocument = vim.lsp.util.make_text_document_params(bufnr),
+              range = {
+                start = { line = 0, character = 0 },
+                ["end"] = { line = vim.api.nvim_buf_line_count(bufnr), character = 0 },
+              },
+              context = { only = { "source.addMissingImports" }, diagnostics = {} },
+            }
+            local result = client:request_sync("textDocument/codeAction", params, 3000, bufnr)
+            if result and result.result then
+              for _, action in ipairs(result.result) do
+                if action.edit then
+                  vim.lsp.util.apply_workspace_edit(action.edit, client.offset_encoding)
+                end
+              end
+            end
+          end
+        end
+      end,
+    })
+
     vim.api.nvim_create_user_command("FormatDisable", function(args)
       if args.bang then
         -- FormatDisable! will disable formatting just for this buffer
