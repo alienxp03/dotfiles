@@ -27,11 +27,13 @@ return {
 
     -- Only setup servers not handled by mason-lspconfig
     local home_path = os.getenv("HOME")
+    local nvim_config = home_path .. "/.config/nvim"
     local manual_servers = {
-      -- Ruby LSP server - using mise shims (recommended over Mason)
+      -- Ruby LSP server - use a launcher script that finds a working ruby/ruby-lsp pair
+      -- from mise installs instead of relying on shims or the current shell environment.
       ruby_lsp = {
-        cmd = { home_path .. "/.local/share/mise/shims/ruby-lsp" },
-        root_dir = lspconfig.util.root_pattern("Gemfile", ".git"),
+        cmd = { nvim_config .. "/bin/ruby-lsp-launcher" },
+        root_dir = lspconfig.util.root_pattern("Gemfile", ".ruby-version", ".tool-versions", "mise.toml", ".git"),
         init_options = {
           formatter = "rubocop",
           linters = { "rubocop" },

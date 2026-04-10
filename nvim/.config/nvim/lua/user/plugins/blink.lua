@@ -14,6 +14,16 @@ return {
       ["<C-n>"] = { "snippet_forward", "fallback_to_mappings" },
       ["<C-p>"] = { "snippet_backward", "fallback_to_mappings" },
       ["<C-x>"] = { "hide" },
+      ["<Tab>"] = {
+        "snippet_forward",
+        function()
+          return require("sidekick").nes_jump_or_apply()
+        end,
+        function()
+          return vim.lsp.inline_completion and vim.lsp.inline_completion.get()
+        end,
+        "fallback",
+      },
     },
     appearance = {
       nerd_font_variant = "mono",
