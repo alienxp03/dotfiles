@@ -26,6 +26,7 @@ return {
       "typescript",
       "tsx",
       "vim",
+      "toml",
       "yaml",
     }
     local config = require("nvim-treesitter.config")

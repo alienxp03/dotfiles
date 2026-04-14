@@ -115,7 +115,7 @@ return {
     {
       "<C-q>",
       function()
-        Snacks.bufdelete()
+        Snacks.bufdelete({ wipe = true })
       end,
       desc = "Delete buffer",
     },
