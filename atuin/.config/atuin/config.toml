@@ -14,7 +14,7 @@ enter_accept = false
 ## keybinding is defined.  If this is set to "emacs", "vim-insert", or
 ## "vim-normal", the startup keymap mode in the Atuin search is forced to be
 ## the specified one.
-keymap_mode = "vim-insert"
+keymap_mode = "vim-normal"
 
 [sync]
 # Enable sync v2 by default
