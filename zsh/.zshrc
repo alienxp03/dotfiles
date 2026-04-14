@@ -1,3 +1,6 @@
+# Uncomment to measure startup time (uses $SECONDS from process spawn)
+# typeset -F SECONDS
+
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
@@ -86,4 +89,10 @@ _zsh_deferred_init() {
   precmd_functions=(${precmd_functions:#_zsh_deferred_init})
   unfunction _zsh_deferred_init
 }
+# _zshrc_startup_timer() {
+#   printf >&2 '\nShell ready in %.0fms\n' $(( SECONDS * 1000 ))
+#   precmd_functions=(${precmd_functions:#_zshrc_startup_timer})
+#   unfunction _zshrc_startup_timer
+# }
+# precmd_functions=(_zshrc_startup_timer _zsh_deferred_init ${precmd_functions[@]})
 precmd_functions=(_zsh_deferred_init ${precmd_functions[@]})
