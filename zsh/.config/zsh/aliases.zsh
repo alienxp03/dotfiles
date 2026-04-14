@@ -21,7 +21,7 @@ compdef __kubectl k
 alias gp='git push'
 alias gs='git status -u'
 alias gbase='git pull --rebase origin master 2>/dev/null || git pull --rebase origin main'
-alias gcm='git checkout master 2>/dev/null || git checkout main'
+alias gcm='git checkout $(git rev-parse --abbrev-ref origin/HEAD | sed "s|origin/||") && git pull'
 alias gaa='git add .'
 alias gcma='git commit --amend --no-edit'
 alias gcmsg='git commit -m'

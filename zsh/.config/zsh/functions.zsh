@@ -130,3 +130,18 @@ function ide() {
   tmux send-keys -t 1 "nvim" C-m
   tmux select-pane -t 1
 }
+
+# Docker exec into running container with fzf
+dex() {
+  local container
+  container=$(docker ps --format '{{.Names}}' | fzf)
+  [ -n "$container" ] && docker exec -it "$container" "${1:-bash}"
+}
+
+# Git worktree with fzf
+gwt() {
+  local worktree
+  worktree=$(git worktree list | fzf | awk '{print $1}')
+  [ -n "$worktree" ] && cd "$worktree"
+}
+
