@@ -4,6 +4,7 @@ macos-option-as-alt     = true
 font-family             = Jetbrain Mono
 mouse-hide-while-typing = true
 scrollback-limit        = 1000000
+copy-on-select          = true
 
 keybind                 = super+r=reload_config
 confirm-close-surface   = false
