@@ -2,12 +2,20 @@
 
 echo "Updating development environment..."
 
-# Homebrew updates
-echo "Updating Homebrew..."
+echo " Homebrew..."
 brew update
-echo "Upgrading Homebrew..."
 brew upgrade
+
+echo "Updating codex"
+npm i -g @openai/codex
+
+echo "Mise.."
+mise self-update -y
 
 # Google Cloud SDK update
 echo "Updating Google Cloud SDK..."
-gcloud components update --quiet
+if command -v gcloud >/dev/null 2>&1; then
+  gcloud components update --quiet
+else
+  echo "Skipping Google Cloud SDK update: gcloud not found"
+fi

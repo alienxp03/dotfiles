@@ -80,7 +80,7 @@ alias t='sesh connect $(sesh list | fzf)'
 
 alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
-alias cox="codex --dangerously-bypass-approvals-and-sandbox"
+alias cox="mise exec node@26 -- codex --dangerously-bypass-approvals-and-sandbox"
 alias oc="opencode"
 alias cop='copilot'
 
