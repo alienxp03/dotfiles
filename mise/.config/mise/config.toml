@@ -1,11 +1,54 @@
 [tools]
-bun = "latest"
-node = "latest"
-python = "latest"
-ruby = "latest"
-rust = "latest"
+# Languages / runtimes
+bun = "1"
+deno = "2"
+go = "1.26"
+node = "26"
+python = "3.14"
+ruby = "4.0"
+rust = "1"
+
+# JavaScript package managers
+pnpm = "11"
+
+# Python tooling
+uv = "0.11"
+
+# Infrastructure as code
+opentofu = "1.12"
+terraform = "1.15"
+terraform-docs = "0.24"
+terragrunt = "1.0"
+tflint = "0.63"
+tfsec = "1.28"
+
+# Cloud / Kubernetes
+aws-cli = "2"
+helm = "4"
+k9s = "0.51"
+kubectl = "1.36"
+
+# Git / shell / developer workflow
+delta = "0.19"
+direnv = "2"
+fzf = "0.73"
+gh = "2"
+shellcheck = "0.11"
+shfmt = "3"
+starship = "1"
+
+# CLI utilities
+bat = "0.26"
+eza = "0.23"
+fd = "10"
+jq = "1"
+ripgrep = "15"
+yq = "4"
 
 [settings]
+experimental = true
 idiomatic_version_file_enable_tools = ["ruby"]
-ruby.compile = false
 http_timeout = "5s"
+
+[settings.ruby]
+compile = true
