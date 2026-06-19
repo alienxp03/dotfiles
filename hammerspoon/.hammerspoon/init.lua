@@ -1,10 +1,51 @@
+hs.ipc.cliInstall()
+
 local super = { "ctrl", "shift", "alt", "cmd" }
+
+for i = 1, 9 do
+  hs.hotkey.bind({ "alt" }, tostring(i), function()
+    hs.eventtap.keyStroke({ "ctrl" }, tostring(i), 0)
+  end)
+end
 
 hs.hotkey.bind(super, "r", function()
   hs.reload()
 end)
 
-hs.hotkey.bind({"cmd", "shift"}, "D", function()
+local function frontmostAppMatches(patterns)
+  local app = hs.application.frontmostApplication()
+  if app == nil then
+    return false
+  end
+
+  local window = hs.window.frontmostWindow()
+  local name = string.lower(app:name() or "")
+  local bundleID = string.lower(app:bundleID() or "")
+  local path = string.lower(app:path() or "")
+  local pid = app:pid()
+  local process = ""
+  if pid ~= nil then
+    process = string.lower(hs.execute("/bin/ps -p " .. pid .. " -o comm= -o args=", true) or "")
+  end
+  local title = ""
+  if window ~= nil then
+    title = string.lower(window:title() or "")
+  end
+
+  for _, pattern in ipairs(patterns) do
+    if string.find(name, pattern, 1, true) ~= nil
+      or string.find(bundleID, pattern, 1, true) ~= nil
+      or string.find(path, pattern, 1, true) ~= nil
+      or string.find(process, pattern, 1, true) ~= nil
+      or string.find(title, pattern, 1, true) ~= nil then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function inspectIosSimulator()
   local wasRunning = hs.application.get("Safari") ~= nil
   if not wasRunning then
     hs.application.open("Safari")
@@ -56,5 +97,37 @@ hs.hotkey.bind({"cmd", "shift"}, "D", function()
     end,
     0.1
   )
-end)
+end
 
+local androidInspectTimer = nil
+
+function inspectAndroidEmulator()
+  hs.osascript.applescript([[
+    tell application "Google Chrome"
+      activate
+      if (count of windows) = 0 then make new window
+      set URL of active tab of front window to "chrome://inspect/#devices"
+    end tell
+  ]])
+
+  androidInspectTimer = hs.timer.doAfter(1, function()
+    hs.osascript.applescript([[
+      tell application "Google Chrome"
+        execute active tab of front window javascript "
+          const browser = document.querySelector('#devices-list .browser[id^=\"emulator-\"]');
+          const inspect = Array.from(browser?.querySelectorAll('.actions .action') || []).find(el => el.textContent.trim() === 'inspect');
+          inspect?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        "
+      end tell
+    ]])
+    androidInspectTimer = nil
+  end)
+end
+
+hs.hotkey.bind({"cmd", "shift"}, "D", function()
+  if frontmostAppMatches({ "com.apple.iphonesimulator", "simulator" }) then
+    inspectIosSimulator()
+  elseif frontmostAppMatches({ "android emulator", "emulator", "qemu-system", "com.google.android.emulator", "android studio", "com.google.android.studio" }) then
+    inspectAndroidEmulator()
+  end
+end)
