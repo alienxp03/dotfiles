@@ -13,10 +13,6 @@ elif [ "$(uname -s)" = "Linux" ]; then
   source "$HOME/.config/zsh/env.linux.zsh"
 fi
 
-# custom mise prompt helper
-# [[ -f ~/.p10k.mise.zsh ]] && source ~/.p10k.mise.zsh
-# eval "$(starship init zsh)"
-
 # History
 HISTFILE=~/.zsh_history
 HISTSIZE=1000000
