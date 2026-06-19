@@ -11,7 +11,14 @@ rust = "1"
 # JavaScript package managers
 pnpm = "11"
 
+# AI agents
+codex = "latest"
+opencode = "latest"
+pi = "latest"
+
 # Python tooling
+"pipx:httpie" = "3"
+pre-commit = "4"
 uv = "0.11"
 
 # Infrastructure as code
@@ -24,29 +31,65 @@ tfsec = "1.28"
 
 # Cloud / Kubernetes
 aws-cli = "2"
+cloudflared = "2026"
 helm = "4"
 k9s = "0.51"
 kubectl = "1.36"
+kubectx = "0.11"
 
 # Git / shell / developer workflow
+atuin = "latest"
 delta = "0.19"
 direnv = "2"
 fzf = "0.73"
 gh = "2"
+just = "1"
+lazydocker = "0.25"
+lazygit = "0.62"
 shellcheck = "0.11"
+tmux = "3"
+zoxide = "0.9"
+
+# Editors / code tooling
+neovim = "0.12"
+tree-sitter = "0.26"
+yamlfmt = "0.21"
 
 # CLI utilities
 bat = "0.26"
+"cargo:csvlens" = "0.15"
+cmake = "4"
 eza = "0.23"
 fd = "10"
+ffmpeg = "8"
+jd = "2"
 jq = "1"
 ripgrep = "15"
+yazi = "26"
 yq = "4"
 
 [settings]
 experimental = true
-idiomatic_version_file_enable_tools = ["ruby"]
+idiomatic_version_file_enable_tools = ["ruby", "node", "python"]
 http_timeout = "5s"
 
 [settings.ruby]
 compile = true
+
+[tasks.test]
+description = "Validate dotfiles"
+run = [
+  "bash -n setup.sh bin/dev-update",
+  "zsh -n zsh/.zshrc zsh/.config/zsh/*.zsh",
+  "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads(Path('~/.config/mise/config.toml').expanduser().read_text())\nPY",
+]
+
+[tasks.update]
+description = "Update mise-managed tools"
+run = [
+  "mise self-update -y",
+  "mise install",
+  "mise upgrade",
+  "mise prune",
+  "mise reshim",
+]

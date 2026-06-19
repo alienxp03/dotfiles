@@ -10,18 +10,8 @@ brew update -y
 echo "Upgrading Homebrew..."
 brew upgrade -y
 
-# AI agents
-echo "Updating pi..."
-pi update
-
-echo "Updating opencode..."
-opencode upgrade
-
-echo "Updating codex..."
-npm i -g @openai/codex
-
-echo "Updating Mise..."
-mise self-update -y
+echo "Updating mise-managed tools..."
+mise run update
 
 # Google Cloud SDK update
 echo "Updating Google Cloud SDK..."
