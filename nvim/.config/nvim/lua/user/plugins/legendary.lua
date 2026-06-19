@@ -22,6 +22,22 @@ return {
           description = "Copy full path",
         },
         {
+          ":CopyFilename",
+          function()
+            local filename = vim.fn.expand("%:t")
+            vim.fn.setreg("+", filename)
+          end,
+          description = "Copy filename",
+        },
+        {
+          ":CopyFilenameWithoutExt",
+          function()
+            local filename = vim.fn.expand("%:t:r")
+            vim.fn.setreg("+", filename)
+          end,
+          description = "Copy filename without extension",
+        },
+        {
           ":OpenInFinder",
           ":silent !open -R %",
           description = "Open current file in Finder",

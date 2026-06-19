@@ -36,6 +36,9 @@ keymap("n", "<C-Right>", ":vertical resize +2<CR>", opts())
 -- Navigate buffers
 keymap("n", "<S-l>", ":BufferLineCycleNext<CR>", opts())
 keymap("n", "<S-h>", ":BufferLineCyclePrev<CR>", opts())
+keymap("n", "<leader>1", ":BufferLineGoToBuffer 1<CR>", opts())
+keymap("n", "<leader>2", ":BufferLineGoToBuffer 2<CR>", opts())
+keymap("n", "<leader>3", ":BufferLineGoToBuffer 3<CR>", opts())
 
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
@@ -94,6 +97,11 @@ keymap("v", "<S-k>", ":m '<-2<CR>gv=gv", opts())
 -- Copy path
 keymap("n", "<leader>cp", ":let @+=@%<cr>", opts({ desc = "Copy relative path" }))
 keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", opts({ desc = "Copy full path" }))
+
+-- `il` text object: inner line, trimmed of leading/trailing whitespace
+-- Enables yil, vil, dil, cil, etc.
+keymap("x", "il", "^og_", opts({ desc = "inner line (trimmed)" }))
+keymap("o", "il", ":normal vil<CR>", opts({ desc = "inner line (trimmed)" }))
 
 -- Replace word on current cursor
 keymap(

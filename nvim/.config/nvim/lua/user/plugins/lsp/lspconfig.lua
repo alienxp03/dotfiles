@@ -29,6 +29,11 @@ return {
     local home_path = os.getenv("HOME")
     local nvim_config = home_path .. "/.config/nvim"
     local manual_servers = {
+      jdtls = {
+        cmd_env = {
+          JAVA_HOME = home_path .. "/Library/Java/JavaVirtualMachines/temurin-21.0.10/Contents/Home",
+        },
+      },
       -- Ruby LSP server - use a launcher script that finds a working ruby/ruby-lsp pair
       -- from mise installs instead of relying on shims or the current shell environment.
       ruby_lsp = {
