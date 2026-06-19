@@ -6,5 +6,6 @@ fpath[1,0]="/opt/homebrew/share/zsh/site-functions"
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 [ -z "${MANPATH-}" ] || export MANPATH=":${MANPATH#:}"
 export INFOPATH="/opt/homebrew/share/info:${INFOPATH:-}"
+export XDG_CONFIG_HOME="$HOME/.config"
 
 alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"

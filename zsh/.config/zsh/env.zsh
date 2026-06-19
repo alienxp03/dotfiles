@@ -4,7 +4,6 @@ export ZSH_THEME="powerlevel10k/powerlevel10k"
 export EDITOR='nvim'
 export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
 export LIBGL_ALWAYS_SOFTWARE=1
-export JAVA_HOME="/Library/Java/JavaVirtualMachines/jdk-22.jdk/Contents/Home/"
 export TMUXIFIER_LAYOUT_PATH="$HOME/.tmux-layouts"
 export DOCKER_BUILDKIT=1
 export DOTFILES=~/.dotfiles
@@ -32,9 +31,11 @@ export PATH="$HOME/.bun/bin:$PATH"
 export CGO_CFLAGS=-Wno-undef-prefix
 
 # Android
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export PATH=$PATH:$ANDROID_HOME/emulator
-export PATH=$PATH:$ANDROID_HOME/platform-tools
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export ANDROID_CMDLINE_TOOLS_HOME="$ANDROID_HOME/cmdline-tools/latest"
+
+export PATH="$ANDROID_CMDLINE_TOOLS_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
 # golang
 # export GOROOT="/usr/local/go"
@@ -64,6 +65,8 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
 
+export CODEX_HOME=$HOME/.codex
+
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
 case ":$PATH:" in
@@ -71,4 +74,3 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
-

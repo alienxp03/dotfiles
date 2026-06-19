@@ -92,5 +92,8 @@ alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_MODEL=$ZAI_MODEL ANTHROPI
 alias happy-zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_MODEL=$ZAI_MODEL ANTHROPIC_BASE_URL=$ZAI_BASE_URL happy claude --dangerously-skip-permissions'
 alias happy-codex='happy codex --dangerously-bypass-approvals-and-sandbox'
 alias ccusage='bunx ccusage'
+alias pix='pi --approve'
 
-alias jt='just'
+alias js='just'
+alias wx='workmux'
+alias wk='wktree'

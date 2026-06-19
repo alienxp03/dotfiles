@@ -11,14 +11,16 @@ confirm-close-surface   = false
 
 # sesh dashboard
 keybind                 = super+k=text:\x01\x54
-# sesh next session
+# tmux next session
 keybind                 = super+j=text:\x01\x4c
-# sesh next window
+# tmux next window
 keybind                 = super+n=text:\x01\x6e
-# sesh previous window
+# tmux previous window
 keybind                 = super+p=text:\x01\x70
 # tmux windows
 keybind                 = super+o=text:\x01\x77
+# aurora/frontier workflow
+keybind                 = super+i=text:\x01\x53
 
 # keybind                 = alt+left=unbind
 # keybind                 = alt+right=unbind

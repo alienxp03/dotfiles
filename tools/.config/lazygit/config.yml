@@ -1,9 +1,14 @@
 gui:
   sidePanelWidth: 0.2
+keybinding:
+  universal:
+    confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
-  paging:
-    colorArg: always
-    pager: delta --dark --paging=never
+  pagers:
+    - colorArg: always
+      pager: delta --dark --paging=never --line-numbers --features=arctic-fox
+      # pager: delta --dark --paging=never --line-numbers --features=mellow-barbet
+      # pager: delta --dark --paging=never --line-numbers --features=chameleon
 customCommands:
   - key: "E"
     context: "global"

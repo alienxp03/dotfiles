@@ -124,10 +124,21 @@ function unexport-zai() {
 # Setup a 3-pane workspace in a new window
 function ide() {
   local dir_name="${PWD##*/}"
+  local remote_url repo_name
+
+  if [[ -e .git ]]; then
+    remote_url=$(git remote get-url origin 2>/dev/null)
+    if [[ -n "$remote_url" ]]; then
+      repo_name=$(basename -s .git "$remote_url")
+      [[ -n "$repo_name" ]] && dir_name="$repo_name"
+    fi
+  fi
+
   tmux rename-window "${dir_name}-code"
   tmux split-window -h -c "$PWD"
   tmux split-window -v -c "$PWD"
   tmux send-keys -t 1 "nvim" C-m
+  tmux send-keys -t 3 "pix" C-m
   tmux select-pane -t 1
 }
 
@@ -145,3 +156,214 @@ gwt() {
   [ -n "$worktree" ] && cd "$worktree"
 }
 
+__git_worktree_sanitize_branch() {
+  echo "$1" | sed -E 's#[/[:space:]]+#-#g; s#[^[:alnum:]_.-]+#-#g; s#^-+##; s#-+$##'
+}
+
+__git_worktree_fetch() {
+  local repo_root="$1"
+  local label="$2"
+
+  git -C "$repo_root" fetch || echo "${label}: fetch failed, continuing with local refs"
+}
+
+__git_worktree_copy_local_files() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local item
+
+  (
+    cd "$source_dir" || exit 1
+    for item in .env(N) .env.*(N) .mcp.json(N) .claude(N) .aider*(N) AGENTS.override.md(N) docs.local(N); do
+      [[ -e "$target_dir/$item" ]] && continue
+      cp -R "$item" "$target_dir/$item"
+      echo "Copied $item"
+    done
+  )
+}
+
+__git_worktree_create_branch() {
+  local repo_root="$1"
+  local worktree_path="$2"
+  local branch="$3"
+  local default_ref="$4"
+
+  if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$repo_root" worktree add "$worktree_path" "$branch" || return 1
+  elif git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+    git -C "$repo_root" worktree add "$worktree_path" -b "$branch" "origin/$branch" || return 1
+  elif [[ -n "$default_ref" ]]; then
+    git -C "$repo_root" rev-parse --verify --quiet "${default_ref}^{commit}" >/dev/null || return 1
+    git -C "$repo_root" worktree add --no-track "$worktree_path" -b "$branch" "$default_ref" || return 1
+  else
+    git -C "$repo_root" worktree add "$worktree_path" -b "$branch" || return 1
+  fi
+}
+
+__git_worktree_branch_path() {
+  local repo_root="$1"
+  local branch="$2"
+
+  git -C "$repo_root" worktree list --porcelain | awk -v branch="refs/heads/$branch" '
+    /^worktree / { path = substr($0, 10) }
+    /^branch / {
+      ref = substr($0, 8)
+      if (ref == branch) {
+        print path
+        exit
+      }
+    }
+  '
+}
+
+__tmux_prepare_ide_panes() {
+  local editor_pane="$1"
+  local worktree_path="$2"
+  local install_cmd="$3"
+  local install_pane agent_pane
+
+  install_pane=$(tmux split-window -h -t "$editor_pane" -c "$worktree_path" -P -F "#{pane_id}") || return 1
+  agent_pane=$(tmux split-window -v -t "$install_pane" -c "$worktree_path" -P -F "#{pane_id}") || return 1
+
+  tmux send-keys -t "$editor_pane" "nvim" C-m
+  tmux send-keys -t "$install_pane" "$install_cmd" C-m
+  tmux send-keys -t "$agent_pane" "cox" C-m
+  tmux select-pane -t "$editor_pane"
+}
+
+__tmux_new_ide_window() {
+  local session_name="$1"
+  local window_name="$2"
+  local worktree_path="$3"
+  local install_cmd="$4"
+  local editor_pane
+
+  editor_pane=$(tmux new-window -t "$session_name:" -n "$window_name" -c "$worktree_path" -P -F "#{pane_id}") || return 1
+  __tmux_prepare_ide_panes "$editor_pane" "$worktree_path" "$install_cmd"
+}
+
+# Git worktree enter
+gwn() {
+  local repo_root main_checkout repo_name branch sanitized worktree_root worktree_path
+
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "gn: not inside a git repository"
+    return 1
+  }
+
+  main_checkout=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  main_checkout="${main_checkout:h}"
+  repo_name="${main_checkout:t}"
+
+  read "branch?Branch name: "
+  branch="${branch#origin/}"
+  if [[ -z "$branch" ]]; then
+    echo "gn: branch name is required"
+    return 1
+  fi
+
+  sanitized=$(__git_worktree_sanitize_branch "$branch")
+  worktree_root="${GIT_WORKTREE_ROOT:-$HOME/workspace/worktrees}"
+  worktree_path="${worktree_root}/${repo_name}__${sanitized}"
+
+  if [[ ! -d "$worktree_path" ]]; then
+    mkdir -p "$worktree_root" || return 1
+    __git_worktree_fetch "$repo_root" "gn"
+    __git_worktree_create_branch "$repo_root" "$worktree_path" "$branch" "" || return 1
+    __git_worktree_copy_local_files "$main_checkout" "$worktree_path"
+  fi
+
+  cd "$worktree_path"
+}
+
+ide-aurora() {
+  local branch="$1"
+  local sanitized worktree_root session_name
+  local aurora_repo webmono_repo aurora_worktree webmono_worktree
+  local aurora_existing_branch_path webmono_existing_branch_path
+  local editor_pane
+
+  if (( $# > 1 )); then
+    echo "Usage: ide-aurora [branch]"
+    return 1
+  fi
+
+  if [[ -z "$branch" ]]; then
+    read "branch?Branch name: "
+  fi
+
+  branch="${branch#origin/}"
+  if [[ -z "$branch" ]]; then
+    echo "ide-aurora: branch name is required"
+    return 1
+  fi
+
+  if ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
+    echo "ide-aurora: invalid branch name: $branch"
+    return 1
+  fi
+
+  sanitized=$(__git_worktree_sanitize_branch "$branch")
+  if [[ -z "$sanitized" ]]; then
+    echo "ide-aurora: branch name cannot produce a worktree slug"
+    return 1
+  fi
+
+  aurora_repo=$(git -C "$HOME/workspace/aurora" rev-parse --show-toplevel 2>/dev/null) || {
+    echo "ide-aurora: $HOME/workspace/aurora is not a git repository"
+    return 1
+  }
+  webmono_repo=$(git -C "$HOME/workspace/webmono" rev-parse --show-toplevel 2>/dev/null) || {
+    echo "ide-aurora: $HOME/workspace/webmono is not a git repository"
+    return 1
+  }
+
+  worktree_root="${GIT_WORKTREE_ROOT:-$HOME/workspace/worktrees}"
+  aurora_worktree="${worktree_root}/aurora__${sanitized}"
+  webmono_worktree="${worktree_root}/webmono__${sanitized}"
+  session_name="aurora__${sanitized}"
+
+  if [[ -e "$aurora_worktree" ]]; then
+    echo "ide-aurora: worktree already exists: $aurora_worktree"
+    return 1
+  fi
+  if [[ -e "$webmono_worktree" ]]; then
+    echo "ide-aurora: worktree already exists: $webmono_worktree"
+    return 1
+  fi
+  if tmux has-session -t "$session_name" 2>/dev/null; then
+    echo "ide-aurora: tmux session already exists: $session_name"
+    return 1
+  fi
+
+  __git_worktree_fetch "$aurora_repo" "ide-aurora: aurora"
+  __git_worktree_fetch "$webmono_repo" "ide-aurora: webmono"
+
+  aurora_existing_branch_path=$(__git_worktree_branch_path "$aurora_repo" "$branch")
+  if [[ -n "$aurora_existing_branch_path" ]]; then
+    echo "ide-aurora: branch is already checked out for aurora: $aurora_existing_branch_path"
+    return 1
+  fi
+  webmono_existing_branch_path=$(__git_worktree_branch_path "$webmono_repo" "$branch")
+  if [[ -n "$webmono_existing_branch_path" ]]; then
+    echo "ide-aurora: branch is already checked out for webmono: $webmono_existing_branch_path"
+    return 1
+  fi
+
+  mkdir -p "$worktree_root" || return 1
+  __git_worktree_create_branch "$aurora_repo" "$aurora_worktree" "$branch" "origin/master" || return 1
+  __git_worktree_copy_local_files "$aurora_repo" "$aurora_worktree"
+  __git_worktree_create_branch "$webmono_repo" "$webmono_worktree" "$branch" "origin/main" || return 1
+  __git_worktree_copy_local_files "$webmono_repo" "$webmono_worktree"
+
+  editor_pane=$(tmux new-session -d -s "$session_name" -n "aurora-code" -c "$aurora_worktree" -P -F "#{pane_id}") || return 1
+  __tmux_prepare_ide_panes "$editor_pane" "$aurora_worktree" "pnpm install" || return 1
+  __tmux_new_ide_window "$session_name" "webmono-code" "$webmono_worktree" "pnpm install" || return 1
+  tmux select-window -t "${session_name}:aurora-code"
+
+  if [[ -n "$TMUX" ]]; then
+    tmux switch-client -t "$session_name"
+  else
+    tmux attach-session -t "$session_name"
+  fi
+}

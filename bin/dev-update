@@ -4,9 +4,16 @@ echo "Updating development environment..."
 
 # Homebrew updates
 echo "Updating Homebrew..."
-brew update
+brew update -y
 echo "Upgrading Homebrew..."
-brew upgrade
+brew upgrade -y
+
+# ai agents
+pi update
+opencode upgrade
+
+echo "Updating Mise..."
+mise self-update -y
 
 # Google Cloud SDK update
 echo "Updating Google Cloud SDK..."
