@@ -15,20 +15,52 @@ fi
 export ZVM_INIT_MODE=sourcing
 
 # --- Immediate: source plugins inline (skip antidote runtime) ---
-_ap="$HOME/Library/Caches/antidote/https-COLON--SLASH--SLASH-github.com-SLASH-"
+# Antidote uses different cache roots on macOS and Linux. Keep the encoded
+# directory names so existing macOS caches remain usable, but bootstrap missing
+# plugins on fresh Linux hosts such as hades.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  _antidote_cache_root="${XDG_CACHE_HOME:-$HOME/Library/Caches}/antidote"
+else
+  _antidote_cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/antidote"
+fi
+_ap="$_antidote_cache_root/https-COLON--SLASH--SLASH-github.com-SLASH-"
+
+_zsh_plugin_dir() {
+  local repo="$1" encoded dir
+  encoded="${repo//\//-SLASH-}"
+  dir="${_ap}${encoded}"
+  if [[ ! -d "$dir" && -n "${commands[git]:-}" ]]; then
+    mkdir -p "$_antidote_cache_root"
+    git clone --depth 1 --quiet "https://github.com/$repo.git" "$dir" 2>/dev/null || true
+  fi
+  [[ -d "$dir" ]] && print -r -- "$dir"
+}
+
+_zsh_source_if_readable() {
+  [[ -r "$1" ]] && source "$1"
+}
 
 # powerlevel10k (needed for prompt)
-fpath+=( "${_ap}romkatv-SLASH-powerlevel10k" )
-source "${_ap}romkatv-SLASH-powerlevel10k/powerlevel10k.zsh-theme"
-source "${_ap}romkatv-SLASH-powerlevel10k/powerlevel9k.zsh-theme"
+_p10k_dir="$(_zsh_plugin_dir romkatv/powerlevel10k)"
+if [[ -n "$_p10k_dir" ]]; then
+  fpath+=( "$_p10k_dir" )
+  _zsh_source_if_readable "$_p10k_dir/powerlevel10k.zsh-theme"
+  _zsh_source_if_readable "$_p10k_dir/powerlevel9k.zsh-theme"
+fi
 
 # zsh-completions (just fpath, near-zero cost)
-fpath+=( "${_ap}zsh-users-SLASH-zsh-completions" )
-source "${_ap}zsh-users-SLASH-zsh-completions/zsh-completions.plugin.zsh"
+_zsh_completions_dir="$(_zsh_plugin_dir zsh-users/zsh-completions)"
+if [[ -n "$_zsh_completions_dir" ]]; then
+  fpath+=( "$_zsh_completions_dir" )
+  _zsh_source_if_readable "$_zsh_completions_dir/zsh-completions.plugin.zsh"
+fi
 
 # zsh-autosuggestions (needed immediately for typing)
-fpath+=( "${_ap}zsh-users-SLASH-zsh-autosuggestions" )
-source "${_ap}zsh-users-SLASH-zsh-autosuggestions/zsh-autosuggestions.plugin.zsh"
+_zsh_autosuggestions_dir="$(_zsh_plugin_dir zsh-users/zsh-autosuggestions)"
+if [[ -n "$_zsh_autosuggestions_dir" ]]; then
+  fpath+=( "$_zsh_autosuggestions_dir" )
+  _zsh_source_if_readable "$_zsh_autosuggestions_dir/zsh-autosuggestions.plugin.zsh"
+fi
 
 _zsh_completion_dir="$HOME/.zsh/completions"
 fpath=( "$_zsh_completion_dir" $fpath )
@@ -44,12 +76,14 @@ _zcompdump_stale=0
 if [[ -f "$_zcompdump" ]]; then
   _zcompdump_mtime="$(zstat +mtime "$_zcompdump" 2>/dev/null)"
   _zcompdump_mtime="${_zcompdump_mtime:-0}"
-  for _zsh_completion in "$_zsh_completion_dir"/_*; do
-    if [[ -e "$_zsh_completion" && "$_zsh_completion" -nt "$_zcompdump" ]]; then
-      _zcompdump_stale=1
-      break
-    fi
-  done
+  if [[ -d "$_zsh_completion_dir" ]]; then
+    for _zsh_completion in "$_zsh_completion_dir"/_*(N); do
+      if [[ -e "$_zsh_completion" && "$_zsh_completion" -nt "$_zcompdump" ]]; then
+        _zcompdump_stale=1
+        break
+      fi
+    done
+  fi
 else
   _zcompdump_stale=1
 fi
@@ -67,20 +101,26 @@ unset _zsh_completion_dir _zcompdump _zcompdump_mtime _zcompdump_stale _zsh_comp
 _cached_source() {
   local cache=~/.cache/zsh/$1.zsh bin=$2
   shift 2
-  if [[ ! -f $cache || $bin -nt $cache ]]; then
+  mkdir -p "${cache:h}"
+  if [[ -x $bin && ( ! -f $cache || $bin -nt $cache ) ]]; then
     "$@" > $cache 2>/dev/null
     zcompile $cache 2>/dev/null
   fi
-  source $cache
+  [[ -r $cache ]] && source $cache
 }
 
 # mise — load definitions only, defer the hook-env subprocess
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
 export MISE_ACTIVATE_AGGRESSIVE=1
-if [[ ! -f ~/.cache/zsh/mise_fast.zsh || ~/.local/bin/mise -nt ~/.cache/zsh/mise_fast.zsh ]]; then
-  ~/.local/bin/mise activate zsh | sed '/_mise_hook$/d' > ~/.cache/zsh/mise_fast.zsh
-  zcompile ~/.cache/zsh/mise_fast.zsh 2>/dev/null
+_mise_bin="${commands[mise]:-$HOME/.local/bin/mise}"
+if [[ -x "$_mise_bin" ]]; then
+  mkdir -p ~/.cache/zsh
+  if [[ ! -f ~/.cache/zsh/mise_fast.zsh || "$_mise_bin" -nt ~/.cache/zsh/mise_fast.zsh ]]; then
+    "$_mise_bin" activate zsh | sed '/_mise_hook$/d' > ~/.cache/zsh/mise_fast.zsh
+    zcompile ~/.cache/zsh/mise_fast.zsh 2>/dev/null
+  fi
+  source ~/.cache/zsh/mise_fast.zsh
 fi
-source ~/.cache/zsh/mise_fast.zsh
 
 source "$HOME/.config/zsh/init.zsh"
 if [[ -n "${JAVA_HOME:-}" && ! -d "$JAVA_HOME" ]]; then
@@ -94,38 +134,47 @@ fi
 if (( $+commands[zoxide] )); then
   _cached_source zoxide "$commands[zoxide]" zoxide init zsh
 fi
-if (( $+commands[fzf] )); then
+if (( $+commands[fzf] )) && [[ -t 0 && -t 1 ]]; then
   _cached_source fzf "$commands[fzf]" fzf --zsh
 fi
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
-export PATH="/Users/azuan.zairein/.rd/bin:$PATH"
+[[ -d "$HOME/.rd/bin" ]] && export PATH="$HOME/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
 
 # --- Deferred: loaded after first prompt renders ---
 _zsh_deferred_init() {
   # Heavy plugins
-  fpath+=( "${_ap}Aloxaf-SLASH-fzf-tab" )
-  source "${_ap}Aloxaf-SLASH-fzf-tab/fzf-tab.plugin.zsh"
-  fpath+=( "${_ap}jeffreytse-SLASH-zsh-vi-mode" )
-  source "${_ap}jeffreytse-SLASH-zsh-vi-mode/zsh-vi-mode.plugin.zsh"
-  fpath+=( "${_ap}zsh-users-SLASH-zsh-syntax-highlighting" )
-  source "${_ap}zsh-users-SLASH-zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh"
+  local _fzf_tab_dir="$(_zsh_plugin_dir Aloxaf/fzf-tab)"
+  if [[ -n "$_fzf_tab_dir" ]]; then
+    fpath+=( "$_fzf_tab_dir" )
+    _zsh_source_if_readable "$_fzf_tab_dir/fzf-tab.plugin.zsh"
+  fi
+  local _zvm_dir="$(_zsh_plugin_dir jeffreytse/zsh-vi-mode)"
+  if [[ -n "$_zvm_dir" ]]; then
+    fpath+=( "$_zvm_dir" )
+    _zsh_source_if_readable "$_zvm_dir/zsh-vi-mode.plugin.zsh"
+  fi
+  local _zsh_highlight_dir="$(_zsh_plugin_dir zsh-users/zsh-syntax-highlighting)"
+  if [[ -n "$_zsh_highlight_dir" ]]; then
+    fpath+=( "$_zsh_highlight_dir" )
+    _zsh_source_if_readable "$_zsh_highlight_dir/zsh-syntax-highlighting.plugin.zsh"
+  fi
 
   # atuin shell history
-  _cached_source atuin /opt/homebrew/bin/atuin atuin init zsh
+  (( $+commands[atuin] )) && _cached_source atuin "$commands[atuin]" atuin init zsh
 
   # kubectl completions
-  _cached_source kubectl /Users/azuan.zairein/.rd/bin/kubectl kubectl completion zsh
+  (( $+commands[kubectl] )) && _cached_source kubectl "$commands[kubectl]" kubectl completion zsh
 
   # bun completions
-  [ -s "/Users/azuan.zairein/.bun/_bun" ] && source "/Users/azuan.zairein/.bun/_bun"
+  [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
   # mise initial hook (sets up tool paths for current dir)
-  _mise_hook
+  (( $+functions[_mise_hook] )) && _mise_hook
 
-  eval "$(wktree init zsh)"
-  eval "$(workmux completions zsh)"
+  (( $+commands[wktree] )) && eval "$(wktree init zsh)"
+  (( $+commands[workmux] )) && eval "$(workmux completions zsh)"
 
   precmd_functions=(${precmd_functions:#_zsh_deferred_init})
   unfunction _zsh_deferred_init
@@ -142,9 +191,10 @@ if command -v direnv >/dev/null 2>&1; then
 fi
 
 precmd_functions=(_zsh_deferred_init ${precmd_functions[@]})
-export PATH=$PATH:/Users/azuan.zairein/.local/bin
+export PATH="$PATH:$HOME/.local/bin"
 
 # Added by LM Studio CLI (lms)
-export PATH="$PATH:/Users/azuan.zairein/.lmstudio/bin"
+[[ -d "$HOME/.lmstudio/bin" ]] && export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
+unset _p10k_dir _zsh_completions_dir _zsh_autosuggestions_dir _mise_bin
 

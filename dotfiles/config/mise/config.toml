@@ -12,9 +12,11 @@ rust = "1"
 pnpm = "11"
 
 # AI agents
-codex = "latest"
-opencode = "latest"
-pi = "latest"
+"npm:@openai/codex" = { version = "latest", npm_args = "--ignore-scripts=false --dangerously-allow-all-scripts=false --min-release-age=3" }
+"npm:opencode-ai" = { version = "latest", npm_args = "--ignore-scripts=false --dangerously-allow-all-scripts=false --min-release-age=3" }
+"npm:@earendil-works/pi-coding-agent" = { version = "latest", npm_args = "--ignore-scripts=false --dangerously-allow-all-scripts=false --min-release-age=3" }
+"npm:@anthropic-ai/claude-code" = { version = "latest", npm_args = "--ignore-scripts=false --dangerously-allow-all-scripts=false --min-release-age=3" }
+"npm:happy" = { version = "latest", npm_args = "--ignore-scripts=false --dangerously-allow-all-scripts=false --min-release-age=3" }
 
 # Python tooling
 "pipx:httpie" = "3"
@@ -57,7 +59,6 @@ yamlfmt = "0.21"
 
 # CLI utilities
 bat = "0.26"
-"cargo:csvlens" = "0.15"
 cmake = "4"
 eza = "0.23"
 fd = "10"
@@ -74,7 +75,7 @@ idiomatic_version_file_enable_tools = ["ruby", "node", "python"]
 http_timeout = "5s"
 
 [settings.ruby]
-compile = true
+compile = false
 
 [settings.dotfiles]
 default_mode = "symlink"
@@ -85,7 +86,6 @@ root = "~/.dotfiles"
 "~/.config/alacritty" = "~/.dotfiles/dotfiles/config/alacritty"
 "~/.config/atuin" = "~/.dotfiles/dotfiles/config/atuin"
 "~/.config/ghostty" = "~/.dotfiles/dotfiles/config/ghostty"
-"~/.config/just" = "~/.dotfiles/dotfiles/config/just"
 "~/.config/karabiner" = "~/.dotfiles/dotfiles/config/karabiner"
 "~/.config/lazygit" = "~/.dotfiles/dotfiles/config/lazygit"
 "~/.config/mise/config.toml" = "~/.dotfiles/dotfiles/config/mise/config.toml"
@@ -101,7 +101,6 @@ root = "~/.dotfiles"
 "~/.pryrc" = "~/.dotfiles/dotfiles/home/.pryrc"
 "~/.solargraph.yml" = "~/.dotfiles/dotfiles/home/.solargraph.yml"
 "~/.tmux.conf" = "~/.dotfiles/dotfiles/home/.tmux.conf"
-"~/.tool-versions" = "~/.dotfiles/dotfiles/home/.tool-versions"
 "~/.zsh_plugins.txt" = "~/.dotfiles/dotfiles/home/.zsh_plugins.txt"
 "~/.zshrc" = "~/.dotfiles/dotfiles/home/.zshrc"
 "~/Library/Application Support/com.mitchellh.ghostty/config" = "~/.dotfiles/dotfiles/config/ghostty/config"
@@ -154,3 +153,56 @@ run = [
   "mise prune",
   "mise reshim",
 ]
+
+
+[tasks.tmux]
+description = "Install tmux and tmux plugins"
+depends = ["setup"]
+run = '''
+set -eu
+
+mise install tmux
+mise reshim tmux
+
+clone_or_update() {
+  repo="$1"
+  dest="$2"
+  if [ -d "$dest/.git" ]; then
+    git -C "$dest" pull --ff-only
+  else
+    git clone --depth 1 "$repo" "$dest"
+  fi
+}
+
+mkdir -p "$HOME/.tmux/plugins" "$HOME/.config/tmux/plugins/catppuccin"
+clone_or_update https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
+clone_or_update https://github.com/christoomey/vim-tmux-navigator "$HOME/.tmux/plugins/vim-tmux-navigator"
+clone_or_update https://github.com/jimeh/tmuxifier "$HOME/.tmux/plugins/tmuxifier"
+clone_or_update https://github.com/sainnhe/tmux-fzf "$HOME/.tmux/plugins/tmux-fzf"
+clone_or_update https://github.com/catppuccin/tmux "$HOME/.config/tmux/plugins/catppuccin/tmux"
+
+tmux -V
+tmux -L mise-setup new-session -d -s mise-tmux-test
+tmux -L mise-setup source-file "$HOME/.tmux.conf"
+tmux -L mise-setup kill-server 2>/dev/null || true
+'''
+
+[tasks.zsh]
+description = "Install zsh and set it as the default login shell"
+depends = ["setup"]
+run = '''
+set -e
+if ! command -v zsh >/dev/null 2>&1; then
+  echo "Installing zsh via apt..."
+  sudo apt update && sudo apt install -y zsh
+fi
+ZSH_PATH="$(command -v zsh)"
+if ! grep -qx "$ZSH_PATH" /etc/shells; then
+  echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
+fi
+if [ "${SHELL:-}" != "$ZSH_PATH" ]; then
+  echo "Setting default login shell to $ZSH_PATH..."
+  sudo chsh -s "$ZSH_PATH" "$USER"
+fi
+echo "zsh ready: $ZSH_PATH (re-login to use it)"
+'''
