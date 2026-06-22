@@ -14,6 +14,7 @@ pnpm = "11"
 # AI agents
 codex = "latest"
 opencode = "latest"
+claude = "latest"
 pi = "latest"
 
 # Python tooling
