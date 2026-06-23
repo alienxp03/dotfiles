@@ -138,21 +138,18 @@ set -eu
 
 echo "Updating development environment..."
 
-echo "Updating Homebrew..."
-brew update -y
+if command -v brew >/dev/null 2>&1; then
+  echo "Updating Homebrew..."
+  brew update -y
 
-echo "Upgrading Homebrew..."
-brew upgrade -y
+  echo "Upgrading Homebrew..."
+  brew upgrade -y
+else
+  echo "Skipping Homebrew update: brew not found"
+fi
 
 echo "Updating mise-managed tools..."
 mise run update
-
-echo "Updating Google Cloud SDK..."
-if command -v gcloud >/dev/null 2>&1; then
-  gcloud components update --quiet
-else
-  echo "Skipping Google Cloud SDK update: gcloud not found"
-fi
 '''
 
 [tasks.update]
