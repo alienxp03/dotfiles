@@ -45,6 +45,18 @@ Apply dotfiles:
 make setup
 ```
 
+Bootstrap a remote Linux machine over SSH:
+
+```bash
+cp bootstrap/.env.example bootstrap/.env
+# edit bootstrap/.env and set GITHUB_USER, GITHUB_EMAIL, and GITHUB_PAT
+make setup-linux HOST=hades@orb
+# or
+make -C bootstrap setup-linux HOST=hades@orb
+```
+
+This installs base packages and mise on the remote host, configures git identity, clones this repo to `~/.dotfiles` over HTTPS using `GITHUB_PAT` without persisting the token in git config, and runs the dotfiles setup.
+
 Check status:
 
 ```bash

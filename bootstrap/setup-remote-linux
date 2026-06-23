@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+usage: bootstrap/setup-remote-linux user@host
+
+Required environment, usually from .env:
+  GITHUB_PAT       GitHub token used to clone/update the dotfiles repo over HTTPS
+  GITHUB_USER      GitHub username used for HTTPS auth and git identity
+  GITHUB_EMAIL     Git email configured on the remote machine
+USAGE
+}
+
+host="${1:-}"
+if [ -z "$host" ]; then
+  usage
+  exit 1
+fi
+
+if [ "$host" = "-h" ] || [ "$host" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$script_dir/.." && pwd)"
+
+if [ -f "$script_dir/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$script_dir/.env"
+  set +a
+elif [ -f "$root/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$root/.env"
+  set +a
+fi
+
+: "${GITHUB_PAT:?GITHUB_PAT is required; add it to .env or export it}"
+: "${GITHUB_USER:?GITHUB_USER is required; add it to .env or export it}"
+: "${GITHUB_EMAIL:?GITHUB_EMAIL is required; add it to .env or export it}"
+
+remote_url="$(git -C "$root" remote get-url origin)"
+case "$remote_url" in
+  git@github.com:*)
+    DOTFILES_REPO="https://github.com/${remote_url#git@github.com:}"
+    ;;
+  https://github.com/*)
+    DOTFILES_REPO="$remote_url"
+    ;;
+  *)
+    printf 'error: unsupported origin URL for HTTPS bootstrap: %s\n' "$remote_url" >&2
+    exit 1
+    ;;
+esac
+
+printf 'Bootstrapping %s...\n' "$host"
+
+{
+  printf 'export GITHUB_PAT=%q\n' "$GITHUB_PAT"
+  printf 'export GITHUB_USER=%q\n' "$GITHUB_USER"
+  printf 'export GITHUB_EMAIL=%q\n' "$GITHUB_EMAIL"
+  printf 'export DOTFILES_REPO=%q\n' "$DOTFILES_REPO"
+  cat "$root/bootstrap/linux.sh"
+} | ssh "$host" 'bash -s'
