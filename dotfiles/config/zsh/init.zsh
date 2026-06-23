@@ -8,9 +8,9 @@ source "$HOME/.config/zsh/env.zsh"
 
 # For cross-platform logics
 if [ "$(uname -s)" = "Darwin" ]; then
-  source "$HOME/.config/zsh/env.darwin.zsh"
+	source "$HOME/.config/zsh/env.darwin.zsh"
 elif [ "$(uname -s)" = "Linux" ]; then
-  source "$HOME/.config/zsh/env.linux.zsh"
+	source "$HOME/.config/zsh/env.linux.zsh"
 fi
 
 # History
