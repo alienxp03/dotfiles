@@ -1,0 +1,49 @@
+SHELL := /bin/bash
+
+MISE ?= mise
+MISE_CONFIG := $(CURDIR)/dotfiles/config/mise/config.toml
+MISE_RUN := MISE_GLOBAL_CONFIG_FILE=$(MISE_CONFIG) $(MISE)
+SHFMT_FILES := dotfiles/config/zsh/*.zsh dotfiles/home/.zshrc dotfiles/home/.p10k.mise.zsh dotfiles/home/.p10k.zsh dotfiles/local/bin/tmux-sesh
+TOML_FILES := taplo.toml 'dotfiles/**/*.toml'
+
+.PHONY: help install setup tools test update dev-update fmt lint mise-tasks
+
+help:
+	@printf 'Targets:\n'
+	@printf '  install     Install mise tools, then apply dotfiles\n'
+	@printf '  setup       Apply dotfiles\n'
+	@printf '  tools       Install mise-managed tools\n'
+	@printf '  test        Run TOML, shell, mise, and Neovim checks\n'
+	@printf '  update      Update mise-managed tools\n'
+	@printf '  dev-update  Update Homebrew and mise-managed tools\n'
+	@printf '  fmt         Format TOML and shell files\n'
+	@printf '  lint        Run format/lint checks only\n'
+
+install: tools setup
+
+setup:
+	$(MISE_RUN) run setup
+
+tools:
+	$(MISE_RUN) install
+
+test: lint
+	$(MISE_RUN) run test
+
+update:
+	$(MISE_RUN) run update
+
+dev-update:
+	$(MISE_RUN) run dev-update
+
+fmt:
+	$(MISE_RUN) exec taplo -- taplo format --config taplo.toml $(TOML_FILES)
+	$(MISE_RUN) exec shfmt -- shfmt -w $(SHFMT_FILES)
+
+lint:
+	$(MISE_RUN) exec taplo -- taplo format --config taplo.toml --check $(TOML_FILES)
+	$(MISE_RUN) exec taplo -- taplo lint --config taplo.toml $(TOML_FILES)
+	$(MISE_RUN) exec shfmt -- shfmt -d $(SHFMT_FILES)
+
+mise-tasks:
+	$(MISE_RUN) tasks

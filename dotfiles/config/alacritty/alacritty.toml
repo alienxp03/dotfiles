@@ -21,9 +21,9 @@ save_to_clipboard = true
 program = "/bin/zsh"
 
 [window]
-opacity = 1
+opacity       = 1
 option_as_alt = "Both"
-dimensions = { columns = 270, lines = 85}
+dimensions    = { columns = 270, lines = 85 }
 
 [keyboard]
 bindings = [
