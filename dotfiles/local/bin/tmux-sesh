@@ -2,21 +2,25 @@
 set -euo pipefail
 
 MISE="${HOME}/.local/bin/mise"
-SESH="${HOME}/workspace/me/sesh/bin/sesh-dev"
+SESH_DEV="${HOME}/workspace/me/sesh/bin/sesh-dev"
 
-if [[ ! -x "$SESH" ]]; then
-  SESH="$(command -v sesh)"
+if [[ -x "$SESH_DEV" ]]; then
+	SESH_CMD=("$SESH_DEV")
+	SESH_RELOAD="$SESH_DEV"
+else
+	SESH_CMD=("$MISE" exec github:joshmedeski/sesh -- sesh)
+	SESH_RELOAD="$MISE exec github:joshmedeski/sesh -- sesh"
 fi
 
-selected=$("$SESH" list --icons | "$MISE" exec -- fzf --tmux 60%,70% \
-  --no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
-  --header '  ^a all ^t tmux ^g configs ^x zoxide ^d tmux kill ^f find' \
-  --bind 'tab:down,btab:up' \
-  --bind "ctrl-a:change-prompt(⚡  )+reload($SESH list --icons)" \
-  --bind "ctrl-t:change-prompt(🪟  )+reload($SESH list -t --icons)" \
-  --bind "ctrl-g:change-prompt(⚙️  )+reload($SESH list -c --icons)" \
-  --bind "ctrl-x:change-prompt(📁  )+reload($SESH list -z --icons)" \
-  --bind "ctrl-f:change-prompt(🔎  )+reload($MISE exec -- fd -H -d 2 -t d -E .Trash . ~)" \
-  --bind "ctrl-d:execute(tmux kill-session -t {2..})+change-prompt(⚡  )+reload($SESH list --icons)") || exit 0
+selected=$("${SESH_CMD[@]}" list --icons | "$MISE" exec -- fzf --tmux 60%,70% \
+	--no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
+	--header '  ^a all ^t tmux ^g configs ^x zoxide ^d tmux kill ^f find' \
+	--bind 'tab:down,btab:up' \
+	--bind "ctrl-a:change-prompt(⚡  )+reload($SESH_RELOAD list --icons)" \
+	--bind "ctrl-t:change-prompt(🪟  )+reload($SESH_RELOAD list -t --icons)" \
+	--bind "ctrl-g:change-prompt(⚙️  )+reload($SESH_RELOAD list -c --icons)" \
+	--bind "ctrl-x:change-prompt(📁  )+reload($SESH_RELOAD list -z --icons)" \
+	--bind "ctrl-f:change-prompt(🔎  )+reload($MISE exec -- fd -H -d 2 -t d -E .Trash . ~)" \
+	--bind "ctrl-d:execute(tmux kill-session -t {2..})+change-prompt(⚡  )+reload($SESH_RELOAD list --icons)") || exit 0
 
-[[ -n "$selected" ]] && "$SESH" connect "$selected"
+[[ -n "$selected" ]] && "${SESH_CMD[@]}" connect "$selected"

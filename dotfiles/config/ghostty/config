@@ -2,24 +2,28 @@ shell-integration       = zsh
 macos-titlebar-style    = transparent
 macos-option-as-alt     = true
 font-family             = Jetbrain Mono
+cursor-style            = block
+cursor-style-blink      = false
 mouse-hide-while-typing = true
 scrollback-limit        = 1000000
-copy-on-select          = true
+copy-on-select          = clipboard
+window-padding-x        = 6
+window-padding-y        = 4
 
 keybind                 = super+r=reload_config
 confirm-close-surface   = false
 
-# sesh dashboard
+# Cmd+k -> tmux prefix + T -> sesh dashboard
 keybind                 = super+k=text:\x01\x54
-# tmux next session
+# Cmd+j -> tmux prefix + L -> next session
 keybind                 = super+j=text:\x01\x4c
-# tmux next window
+# Cmd+n -> tmux prefix + n -> next window
 keybind                 = super+n=text:\x01\x6e
-# tmux previous window
+# Cmd+p -> tmux prefix + p -> previous window
 keybind                 = super+p=text:\x01\x70
-# tmux windows
+# Cmd+o -> tmux prefix + w -> windows
 keybind                 = super+o=text:\x01\x77
-# aurora/frontier workflow
+# Cmd+i -> tmux prefix + S -> aurora/frontier workflow
 keybind                 = super+i=text:\x01\x53
 
 # keybind                 = alt+left=unbind
