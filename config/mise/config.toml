@@ -3,6 +3,7 @@
 bun    = "1"
 deno   = "2"
 go     = "1.26"
+lua    = "5.4.8"
 node   = "26"
 python = "3.14"
 ruby   = "4.0"
@@ -79,17 +80,10 @@ yazi                                 = "latest"
 yq                                   = "latest"
 
 [settings]
-experimental = true
+experimental                        = true
 idiomatic_version_file_enable_tools = ["ruby", "node", "python", "go"]
-http_timeout = "30s"
-minimum_release_age_excludes = [
-  "npm:@anthropic-ai/claude-code",
-  "npm:@earendil-works/pi-coding-agent",
-  "npm:@openai/codex",
-  "npm:happy",
-  "npm:opencode-ai",
-  "npm:tmux-team",
-]
+http_timeout                        = "30s"
+minimum_release_age                 = "1d"
 
 [settings.ruby]
 compile = false
@@ -99,28 +93,27 @@ default_mode = "symlink"
 root         = "~/.dotfiles"
 
 [dotfiles]
-"~/.claude/CLAUDE.md"                                        = "~/.dotfiles/claude/.claude/CLAUDE.md"
-"~/.config/alacritty"                                        = "~/.dotfiles/dotfiles/config/alacritty"
-"~/.config/atuin"                                            = "~/.dotfiles/dotfiles/config/atuin"
-"~/.config/ghostty"                                          = "~/.dotfiles/dotfiles/config/ghostty"
-"~/.config/karabiner"                                        = "~/.dotfiles/dotfiles/config/karabiner"
-"~/.config/lazygit"                                          = "~/.dotfiles/dotfiles/config/lazygit"
-"~/.config/mise/config.toml"                                 = "~/.dotfiles/dotfiles/config/mise/config.toml"
-"~/.config/nvim"                                             = "~/.dotfiles/dotfiles/config/nvim"
-"~/.config/opencode"                                         = "~/.dotfiles/dotfiles/config/opencode"
-"~/.config/zsh"                                              = "~/.dotfiles/dotfiles/config/zsh"
-"~/.hammerspoon"                                             = "~/.dotfiles/dotfiles/macos/hammerspoon"
-"~/.irbrc"                                                   = "~/.dotfiles/dotfiles/home/.irbrc"
-"~/.local/bin/sesh-list"                                     = "~/.dotfiles/dotfiles/local/bin/sesh-list"
-"~/.local/bin/tmux-sesh"                                     = "~/.dotfiles/dotfiles/local/bin/tmux-sesh"
-"~/.p10k.mise.zsh"                                           = "~/.dotfiles/dotfiles/home/.p10k.mise.zsh"
-"~/.p10k.zsh"                                                = "~/.dotfiles/dotfiles/home/.p10k.zsh"
-"~/.pryrc"                                                   = "~/.dotfiles/dotfiles/home/.pryrc"
-"~/.solargraph.yml"                                          = "~/.dotfiles/dotfiles/home/.solargraph.yml"
-"~/.tmux.conf"                                               = "~/.dotfiles/dotfiles/home/.tmux.conf"
-"~/.zsh_plugins.txt"                                         = "~/.dotfiles/dotfiles/home/.zsh_plugins.txt"
-"~/.zshrc"                                                   = "~/.dotfiles/dotfiles/home/.zshrc"
-"~/Library/Application Support/com.mitchellh.ghostty/config" = "~/.dotfiles/dotfiles/config/ghostty/config"
+"~/.config/alacritty"                                        = "~/.dotfiles/config/alacritty"
+"~/.config/atuin"                                            = "~/.dotfiles/config/atuin"
+"~/.config/ghostty"                                          = "~/.dotfiles/config/ghostty"
+"~/.config/karabiner"                                        = "~/.dotfiles/config/karabiner"
+"~/.config/lazygit"                                          = "~/.dotfiles/config/lazygit"
+"~/.config/mise/config.toml"                                 = "~/.dotfiles/config/mise/config.toml"
+"~/.config/nvim"                                             = "~/.dotfiles/config/nvim"
+"~/.config/opencode"                                         = "~/.dotfiles/config/opencode"
+"~/.config/zsh"                                              = "~/.dotfiles/config/zsh"
+"~/.hammerspoon"                                             = "~/.dotfiles/macos/hammerspoon"
+"~/.irbrc"                                                   = "~/.dotfiles/home/.irbrc"
+"~/.local/bin/sesh-list"                                     = "~/.dotfiles/local/bin/sesh-list"
+"~/.local/bin/tmux-sesh"                                     = "~/.dotfiles/local/bin/tmux-sesh"
+"~/.p10k.mise.zsh"                                           = "~/.dotfiles/home/.p10k.mise.zsh"
+"~/.p10k.zsh"                                                = "~/.dotfiles/home/.p10k.zsh"
+"~/.pryrc"                                                   = "~/.dotfiles/home/.pryrc"
+"~/.solargraph.yml"                                          = "~/.dotfiles/home/.solargraph.yml"
+"~/.tmux.conf"                                               = "~/.dotfiles/home/.tmux.conf"
+"~/.zsh_plugins.txt"                                         = "~/.dotfiles/home/.zsh_plugins.txt"
+"~/.zshrc"                                                   = "~/.dotfiles/home/.zshrc"
+"~/Library/Application Support/com.mitchellh.ghostty/config" = "~/.dotfiles/config/ghostty/config"
 
 [tasks.setup]
 description = "Apply dotfiles"
@@ -131,10 +124,10 @@ description = "Validate dotfiles"
 run = [
   "mise dotfiles status >/dev/null",
   "mise ls --current >/dev/null",
-  "zsh -n ~/.dotfiles/dotfiles/home/.zshrc ~/.dotfiles/dotfiles/config/zsh/*.zsh",
-  "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads(Path('~/.config/mise/config.toml').expanduser().read_text())\nPY",
-  "nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.sidekick\") end); if not ok then error(err) end' -c 'qa!'",
-  "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
+  "zsh -n ~/.dotfiles/home/.zshrc ~/.dotfiles/config/zsh/*.zsh",
+  "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads(Path('config/mise/config.toml').read_text())\nPY",
+  "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.sidekick\") end); if not ok then error(err) end' -c 'qa!'",
+  "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 
 [tasks.dev-update]

@@ -1,10 +1,10 @@
 SHELL := /bin/bash
 
 MISE ?= mise
-MISE_CONFIG := $(CURDIR)/dotfiles/config/mise/config.toml
+MISE_CONFIG := $(CURDIR)/config/mise/config.toml
 MISE_RUN := MISE_GLOBAL_CONFIG_FILE=$(MISE_CONFIG) $(MISE)
-SHFMT_FILES := dotfiles/config/zsh/*.zsh dotfiles/home/.zshrc dotfiles/home/.p10k.mise.zsh dotfiles/home/.p10k.zsh dotfiles/local/bin/tmux-sesh
-TOML_FILES := taplo.toml 'dotfiles/**/*.toml'
+SHFMT_FILES := config/zsh/*.zsh home/.zshrc home/.p10k.mise.zsh home/.p10k.zsh local/bin/tmux-sesh
+TOML_FILES := '**/*.toml'
 
 .PHONY: help install setup tools test update dev-update fmt lint mise-tasks
 

@@ -2,11 +2,13 @@ shell-integration       = zsh
 macos-titlebar-style    = transparent
 macos-option-as-alt     = true
 font-family             = Jetbrain Mono
+theme                   = Monokai Classic
 cursor-style            = block
 cursor-style-blink      = false
 mouse-hide-while-typing = true
 scrollback-limit        = 1000000
 copy-on-select          = clipboard
+clipboard-trim-trailing-spaces = true
 window-padding-x        = 6
 window-padding-y        = 4
 

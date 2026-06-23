@@ -14,76 +14,75 @@ My dotfiles. Hope it's useful for others. Primarily using it for:
 This repo is managed by mise dotfiles instead of GNU Stow.
 
 ```text
-dotfiles/
-  home/          # files linked directly into $HOME
-  config/        # XDG config directories linked under ~/.config
-  local/bin/     # user executables linked under ~/.local/bin
-  macos/         # macOS-specific app config
+home/          # files linked directly into $HOME
+config/        # XDG config directories linked under ~/.config
+local/bin/     # user executables linked under ~/.local/bin
+macos/         # macOS-specific app config
 ```
 
 Key examples:
 
-- `dotfiles/home/.zshrc` -> `~/.zshrc`
-- `dotfiles/config/zsh` -> `~/.config/zsh`
-- `dotfiles/config/nvim` -> `~/.config/nvim`
-- `dotfiles/config/mise/config.toml` -> `~/.config/mise/config.toml`
-- `dotfiles/local/bin/dev-update` -> `~/.local/bin/dev-update`
-- `dotfiles/macos/hammerspoon` -> `~/.hammerspoon`
+- `home/.zshrc` -> `~/.zshrc`
+- `config/zsh` -> `~/.config/zsh`
+- `config/nvim` -> `~/.config/nvim`
+- `config/mise/config.toml` -> `~/.config/mise/config.toml`
+- `local/bin/dev-update` -> `~/.local/bin/dev-update`
+- `macos/hammerspoon` -> `~/.hammerspoon`
 
-The full mapping is declared in `dotfiles/config/mise/config.toml` under `[dotfiles]`.
+The full mapping is declared in `config/mise/config.toml` under `[dotfiles]`.
 
 ## Usage
 
 Preview dotfile changes:
 
 ```bash
-mise dotfiles apply --dry-run --force --yes
+MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise dotfiles apply --dry-run --force --yes
 ```
 
 Apply dotfiles:
 
 ```bash
-mise setup
+make setup
 ```
 
 Check status:
 
 ```bash
-mise dotfiles status
+MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise dotfiles status
 ```
 
 Run validation:
 
 ```bash
-just test
+make test
 # or
-mise test
+MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise test
 ```
 
 Update mise-managed tools:
 
 ```bash
-mise run update
+make update
 ```
 
 Update the full development environment:
 
 ```bash
-mise dev-update
+make dev-update
 # or
-mise run dev-update
+MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise run dev-update
 ```
 
 ## Local-Only Configuration Boundaries
 
-Treat files under `dotfiles/` as shared/tracked by default. Keep machine-specific or secret values in local-only files under `$HOME`:
+Treat files under `home/`, `config/`, `local/`, and `macos/` as shared/tracked by default. Keep machine-specific or secret values in local-only files under `$HOME`:
 
 - `~/.config/zsh/aliases.private.zsh`
 - `~/.config/zsh/aliases.local.zsh`
 - `~/.config/zsh/env.local.zsh`
 - `~/.config/zsh/functions.local.zsh`
 
-`~/.config/zsh/init.zsh` sources each of these files only if it exists. This repo ignores `*.local.zsh`, but does not ignore `aliases.private.zsh`, so keep `aliases.private.zsh` outside this repo or add a local Git exclude for `dotfiles/config/zsh/aliases.private.zsh`.
+`~/.config/zsh/init.zsh` sources each of these files only if it exists. This repo ignores `*.local.zsh`, but does not ignore `aliases.private.zsh`, so keep `aliases.private.zsh` outside this repo or add a local Git exclude for `config/zsh/aliases.private.zsh`.
 
 Before committing, verify local-only files are still untracked:
 
