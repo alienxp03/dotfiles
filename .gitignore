@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.env.local
 nvim/plugin/packer_compiled.lua
 config/nvim/plugin/packer_compiled.lua
 tags*

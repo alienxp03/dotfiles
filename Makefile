@@ -9,7 +9,7 @@ endif
 
 MISE ?= mise
 MISE_CONFIG := $(CURDIR)/config/mise/config.toml
-MISE_RUN := MISE_GLOBAL_CONFIG_FILE=$(MISE_CONFIG) $(MISE)
+MISE_RUN := MISE_GLOBAL_CONFIG_FILE=$(MISE_CONFIG) MISE_TRUSTED_CONFIG_PATHS=$(MISE_CONFIG) MISE_TASK_RUN_AUTO_INSTALL=false $(MISE)
 SHFMT_FILES := config/zsh/*.zsh home/.zshrc home/.p10k.mise.zsh home/.p10k.zsh local/bin/tmux-sesh
 TOML_FILES := '**/*.toml'
 

@@ -89,12 +89,12 @@ MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise run dev-update
 
 Treat files under `home/`, `config/`, `local/`, and `macos/` as shared/tracked by default. Keep machine-specific or secret values in local-only files under `$HOME`:
 
+- `~/.env.local` for global secret environment variables loaded by mise (`[settings].env_file`)
 - `~/.config/zsh/aliases.private.zsh`
 - `~/.config/zsh/aliases.local.zsh`
-- `~/.config/zsh/env.local.zsh`
 - `~/.config/zsh/functions.local.zsh`
 
-`~/.config/zsh/init.zsh` sources each of these files only if it exists. This repo ignores `*.local.zsh`, but does not ignore `aliases.private.zsh`, so keep `aliases.private.zsh` outside this repo or add a local Git exclude for `config/zsh/aliases.private.zsh`.
+`~/.config/zsh/init.zsh` sources the zsh local files only if they exist. Secret environment variables should live in `~/.env.local` using `export KEY="value"` syntax, not in `config/zsh/env.local.zsh`. This repo ignores `*.local.zsh` and `.env.local`, but does not ignore `aliases.private.zsh`, so keep `aliases.private.zsh` outside this repo or add a local Git exclude for `config/zsh/aliases.private.zsh`.
 
 Before committing, verify local-only files are still untracked:
 
