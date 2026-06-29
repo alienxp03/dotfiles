@@ -8,6 +8,13 @@ return {
       },
       options = {
         theme = "gruvbox",
+        disabled_filetypes = {
+          statusline = {
+            "snacks_picker_input",
+            "snacks_picker_list",
+            "snacks_picker_preview",
+          },
+        },
       },
       sections = {
         lualine_b = { "diff", "diagnostics" },
