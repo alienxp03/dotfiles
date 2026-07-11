@@ -62,15 +62,21 @@ normalize_path() {
 }
 
 open_paths="$(printf '%s' "$kitty_state" | jq -r '
-  .[]?.tabs[]?.windows[]?
-  | select(.session_name != null and .session_name != "")
-  | (.env.PWD // .cwd // "")
-' | sort -u)"
+  [.[]?.tabs[]?.windows[]?
+    | select(.session_name != null and .session_name != "")
+    | {path: (.env.PWD // .cwd // ""), focused: (.last_focused_at // 0)}]
+  | group_by(.path)[]
+  | [.[0].path, (map(.focused) | max)]
+  | @tsv
+')"
 
-# Build the menu in one awk pass. The numeric prefix sorts open sessions first
-# without spawning realpath and grep once for every zoxide entry.
-menu_entries="$(awk -v home="$HOME" '
-  NR == FNR { if ($0 != "") open[$0] = 1; next }
+# Open sessions come first in most-recently-focused order. Closed projects keep
+# zoxide's frecency order, so recently/frequently used directories stay near the top.
+menu_entries="$(awk -F '\t' -v OFS='\t' -v home="$HOME" '
+  NR == FNR {
+    if ($1 != "") open[$1] = $2
+    next
+  }
   {
     path = $0
     # A root-directory entry has no useful project/session label.
@@ -81,11 +87,14 @@ menu_entries="$(awk -v home="$HOME" '
     if (path == home) display_path = "~"
     else if (index(path, home "/") == 1) display_path = "~" substr(path, length(home) + 1)
     marker = (path in open) ? "●" : "○"
-    rank = (path in open) ? "0" : "1"
-    # First field is the value used after selection; the rest are display columns.
-    printf "%s\t%s\t%s %-28s\t%s\n", rank, path, marker, name, display_path
+    rank = (path in open) ? 0 : 1
+    score = (path in open) ? open[path] : -FNR
+    # The first two fields are temporary sort keys and are removed afterward.
+    print rank, score, path, marker " " sprintf("%-28s", name), display_path
   }
-' <(printf '%s\n' "$open_paths") <(zoxide query -l) | sort -t $'\t' -k1,1 -k4,4 | cut -f2-)"
+' <(printf '%s\n' "$open_paths") <(zoxide query -l) \
+  | sort -t $'\t' -k1,1n -k2,2nr \
+  | cut -f3-)"
 
 selected="$(printf '%s\n' "$menu_entries" | fzf \
   --height=60% \
