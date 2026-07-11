@@ -124,7 +124,7 @@ function inspectAndroidEmulator()
   end)
 end
 
-hs.hotkey.bind({"cmd", "shift"}, "D", function()
+hs.hotkey.bind({"cmd", "shift"}, "I", function()
   if frontmostAppMatches({ "com.apple.iphonesimulator", "simulator" }) then
     inspectIosSimulator()
   elseif frontmostAppMatches({ "android emulator", "emulator", "qemu-system", "com.google.android.emulator", "android studio", "com.google.android.studio" }) then
