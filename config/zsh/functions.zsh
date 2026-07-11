@@ -121,7 +121,7 @@ function unexport-zai() {
 }
 
 # Setup a 3-pane workspace in a new window
-function ide() {
+function ide_tmux() {
 	local dir_name="${PWD##*/}"
 	local remote_url repo_name
 
@@ -139,6 +139,35 @@ function ide() {
 	tmux send-keys -t 1 "nvim" C-m
 	tmux send-keys -t 3 "pix" C-m
 	tmux select-pane -t 1
+}
+
+function ide() {
+	if [[ -n "$KITTY_WINDOW_ID" ]]; then
+		ide_kitty
+	else
+		ide_tmux
+	fi
+}
+
+# Setup a 3-pane workspace in Kitty
+function ide_kitty() {
+	local dir_name="${PWD##*/}"
+
+	kitty @ set-tab-title "${dir_name}-code"
+	kitty @ goto-layout splits
+	kitty @ send-text --match state:focused "nvim\n"
+
+	kitty @ launch \
+		--cwd="$PWD" \
+		--location=vsplit \
+		zsh || return 1
+
+	kitty @ launch \
+		--cwd="$PWD" \
+		--location=hsplit \
+		pi --approve || return 1
+
+	kitty @ focus-window --match "cmdline:nvim"
 }
 
 # Docker exec into running container with fzf
