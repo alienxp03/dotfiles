@@ -31,3 +31,11 @@ zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' menu no
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
+
+# Keep Kitty shell integration active after reloading with `exec zsh`.
+if [[ -n "$KITTY_INSTALLATION_DIR" ]]; then
+	export KITTY_SHELL_INTEGRATION="no-title"
+	autoload -Uz -- "$KITTY_INSTALLATION_DIR"/shell-integration/zsh/kitty-integration
+	kitty-integration
+	unfunction kitty-integration
+fi

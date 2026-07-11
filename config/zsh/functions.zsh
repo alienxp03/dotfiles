@@ -152,22 +152,53 @@ function ide() {
 # Setup a 3-pane workspace in Kitty
 function ide_kitty() {
 	local dir_name="${PWD##*/}"
+	local editor_window="$KITTY_WINDOW_ID"
+	local max_window_id shell_window
 
-	kitty @ set-tab-title "${dir_name}-code"
-	kitty @ goto-layout splits
-	kitty @ send-text --match state:focused "nvim\n"
+	if (( ! $+functions[clone-in-kitty] )); then
+		print -u2 "ide: Kitty shell integration is unavailable; open a new shell and try again"
+		return 1
+	fi
+	if ! command -v jq >/dev/null 2>&1; then
+		print -u2 "ide: jq is required to identify the cloned Kitty window"
+		return 1
+	fi
+
+	kitty @ set-tab-title "${dir_name}-code" || return 1
+	kitty @ goto-layout splits || return 1
+
+	max_window_id=$(kitty @ ls | jq -r '[.[]?.tabs[]?.windows[]?.id] | max // 0') || return 1
+	clone-in-kitty \
+		--next-to "id:$editor_window" \
+		--location=vsplit
+
+	for _ in {1..20}; do
+		shell_window=$(kitty @ ls | jq -r \
+			--argjson editor "$editor_window" \
+			--argjson previous_max "$max_window_id" '
+				[.[]?.tabs[]?
+				 | select(any(.windows[]?; .id == $editor))
+				 | .windows[]?.id
+				 | select(. > $previous_max)]
+				| max // empty
+			') || return 1
+		[[ -n "$shell_window" ]] && break
+		sleep 0.05
+	done
+	if [[ -z "$shell_window" ]]; then
+		print -u2 "ide: timed out waiting for Kitty to clone the shell"
+		return 1
+	fi
 
 	kitty @ launch \
-		--cwd="$PWD" \
-		--location=vsplit \
-		zsh || return 1
-
-	kitty @ launch \
+		--self \
+		--next-to "id:$shell_window" \
 		--cwd="$PWD" \
 		--location=hsplit \
-		pi --approve || return 1
+		pi --approve >/dev/null || return 1
 
-	kitty @ focus-window --match "cmdline:nvim"
+	kitty @ focus-window --match "id:$editor_window" || return 1
+	nvim
 }
 
 # Docker exec into running container with fzf
