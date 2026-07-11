@@ -21,7 +21,13 @@ return {
     vim.o.background = "dark"
 
     -- require("gruvbox").setup({})
-    require("tokyonight").setup({})
+    require("tokyonight").setup({
+      transparent = true,
+      styles = {
+        sidebars = "transparent",
+        floats = "transparent",
+      },
+    })
     vim.cmd([[colorscheme tokyonight-night]])
 
     -- vim.cmd([[colorscheme gruvbox]])
