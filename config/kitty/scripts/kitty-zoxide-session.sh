@@ -4,6 +4,9 @@ set -euo pipefail
 # GUI-launched apps do not inherit the shell's Mise PATH on macOS.
 export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# Identify this window so Kitty can pass Ctrl+J/K through to fzf.
+printf '\033]2;project-picker\007'
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     printf '%s is required but was not found in PATH.\n' "$1" >&2
