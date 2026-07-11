@@ -30,7 +30,23 @@ alias gco='git checkout'
 alias gb='git branch'
 alias gd='git diff'
 alias glo='lazygit log'
-alias git-delete-merged-branches='git branch --merged | egrep -v "(^\*|master|dev)" | xargs git branch -d'
+git-delete-merged-branches() {
+  local branch
+
+  git branch --merged \
+    | sed 's/^[*+ ]*//' \
+    | grep -Ev '^(master|main|dev)$' \
+    | while IFS= read -r branch; do
+        [[ -z "$branch" ]] && continue
+
+        if git worktree list --porcelain | grep -qx "branch refs/heads/$branch"; then
+          echo "Skipping branch '$branch' because it is used by a worktree"
+          continue
+        fi
+
+        git branch -d "$branch"
+      done
+}
 alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format=format:'\''%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)'\'' --all'''"
 alias gpl='git pull && git-delete-merged-branches'
 alias lz='lazygit'
