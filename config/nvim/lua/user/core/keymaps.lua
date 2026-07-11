@@ -150,7 +150,4 @@ vim.api.nvim_create_user_command("OpenInFinder", function()
   vim.fn.jobstart({ "open", "-R", file }, { detach = true })
 end, {})
 
-keymap("n", "<leader>gf", ":LazyGitFilterCurrentFile<cr>", opts({ desc = "Current file git history" }))
-keymap("n", "<leader>fe", ":Yazi<cr>", opts({ desc = "File explore via Yazi" }))
-
 keymap("n", "<leader>gd", ":DiffviewOpen<cr>", opts({ desc = "Diffview" }))

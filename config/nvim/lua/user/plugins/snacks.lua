@@ -190,7 +190,21 @@ return {
       function()
         Snacks.lazygit()
       end,
-      desc = "Lazygit Current File History",
+      desc = "Lazygit",
+    },
+    {
+      "<leader>gl",
+      function()
+        Snacks.lazygit.log()
+      end,
+      desc = "Git Log",
+    },
+    {
+      "<leader>gf",
+      function()
+        Snacks.lazygit.log_file()
+      end,
+      desc = "Current File Git History",
     },
     {
       "<leader>gs",

@@ -2,17 +2,15 @@ return {
   "mikavilpas/yazi.nvim",
   event = "VeryLazy",
   keys = {
-    -- 👇 in this section, choose your own keymappings!
     {
-      "<leader>-",
+      "<leader>ff",
       "<cmd>Yazi<cr>",
-      desc = "Open yazi at the current file",
+      desc = "Open Yazi at current file",
     },
     {
-      -- Open in the current working directory
-      "<leader>cw",
+      "<leader>fF",
       "<cmd>Yazi cwd<cr>",
-      desc = "Open the file manager in nvim's working directory",
+      desc = "Open Yazi at working directory",
     },
   },
   ---@type YaziConfig

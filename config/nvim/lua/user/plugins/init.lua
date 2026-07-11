@@ -2,7 +2,6 @@
 return {
   { "sbdchd/neoformat", cmd = "Neoformat" },
   { "tpope/vim-fugitive", cmd = { "Git", "G" } }, -- Git related plugins
-  { "kdheepak/lazygit.nvim", cmd = "LazyGit" },
   { "tpope/vim-rhubarb", event = "VeryLazy" },
   { "tpope/vim-surround", event = "VeryLazy" }, -- Change surrounding words
   { "tpope/vim-sleuth", event = "VeryLazy" }, -- Detect tabstop and shiftwidth automatically
