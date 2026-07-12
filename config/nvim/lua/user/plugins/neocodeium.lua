@@ -4,7 +4,9 @@ return {
   enabled = vim.env.NEOCODEIUM_DISABLE ~= "1",
   config = function()
     local neocodeium = require("neocodeium")
-    neocodeium.setup()
+    neocodeium.setup({
+      silent = true,
+    })
 
     vim.keymap.set("i", "<Tab>", function()
       if neocodeium.visible() then
