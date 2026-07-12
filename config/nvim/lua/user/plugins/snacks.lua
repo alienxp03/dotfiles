@@ -29,6 +29,11 @@ return {
   "folke/snacks.nvim",
   lazy = false,
   opts = {
+    scope = {
+      treesitter = {
+        injections = false,
+      },
+    },
     picker = {
       hidden = true,
       ignored = true,

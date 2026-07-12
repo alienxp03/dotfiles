@@ -70,6 +70,12 @@ open_paths="$(printf '%s' "$kitty_state" | jq -r '
   | @tsv
 ')"
 
+open_ssh_hosts="$(printf '%s' "$kitty_state" | jq -r '
+  .[]?.tabs[]?.windows[]?.foreground_processes[]?.cmdline
+  | select(length > 1 and ((.[0] | endswith("/ssh")) or .[0] == "ssh"))
+  | .[1]
+' | sort -u)"
+
 # Open sessions come first in most-recently-focused order. Closed projects keep
 # zoxide's frecency order, so recently/frequently used directories stay near the top.
 menu_entries="$(awk -F '\t' -v OFS='\t' -v home="$HOME" '
@@ -96,17 +102,77 @@ menu_entries="$(awk -F '\t' -v OFS='\t' -v home="$HOME" '
   | sort -t $'\t' -k1,1n -k2,2nr \
   | cut -f3-)"
 
+ssh_entries=""
+if [[ -r "$HOME/.ssh/config" ]]; then
+  ssh_hosts="$(awk '
+    /^[[:space:]]*[Hh][Oo][Ss][Tt][[:space:]]+/ {
+      for (i = 2; i <= NF; i++) {
+        host = $i
+        gsub(/^"|"$/, "", host)
+        if (host != "" && host !~ /[*?!]/) print host
+      }
+    }
+  ' "$HOME/.ssh/config" | sort -u)"
+
+  ssh_entries="$(while IFS= read -r host; do
+    [[ -n "$host" ]] || continue
+    marker="○"
+    if printf '%s\n' "$open_ssh_hosts" | grep -Fqx -- "$host"; then
+      marker="●"
+    fi
+    printf 'ssh://%s\t%s %-28s\t~/.ssh/config\n' "$host" "$marker" "$host"
+  done <<< "$ssh_hosts")"
+fi
+
+if [[ -n "$ssh_entries" ]]; then
+  menu_entries="$(printf '%s\n%s' "$menu_entries" "$ssh_entries" \
+    | awk -F '\t' -v OFS='\t' '{ rank = ($2 ~ /^●/) ? 0 : 1; print rank, NR, $0 }' \
+    | sort -t $'\t' -k1,1n -k2,2n \
+    | cut -f3-)"
+fi
+
 selected="$(printf '%s\n' "$menu_entries" | fzf \
   --height=60% \
   --layout=reverse \
   --border \
   --prompt=' kitty session > ' \
-  --header='SESSION                         DIRECTORY     ● open  ○ create  esc: cancel' \
+  --header='SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel' \
   --with-nth=2,3 \
   --delimiter=$'\t' || true)"
 
 [[ -n "$selected" ]] || exit 0
-selected_path="$(normalize_path "${selected%%$'\t'*}")"
+selected_key="${selected%%$'\t'*}"
+
+if [[ "$selected_key" == ssh://* ]]; then
+  ssh_host="${selected_key#ssh://}"
+  session_dir="${TMPDIR:-/tmp}/kitty-zoxide-sessions"
+  mkdir -p "$session_dir"
+  safe_host="$(printf '%s' "$ssh_host" | tr -cs 'A-Za-z0-9._-' '_')"
+  ssh_session_file="$session_dir/ssh-$safe_host.kitty-session"
+  existing_ssh_session="$(printf '%s' "$kitty_state" | jq -r --arg name "ssh-$safe_host" '
+    .[]?.tabs[]?.windows[]?
+    | select(.session_name == $name)
+    | .session_name
+  ' | head -n1)"
+
+  if [[ -n "$existing_ssh_session" ]]; then
+    kitty_at action goto_session "$existing_ssh_session"
+    exit 0
+  fi
+
+  cat >"$ssh_session_file" <<EOF
+layout splits
+cd $HOME
+launch --title "ssh: $ssh_host" ssh "$ssh_host"
+focus
+focus_os_window
+EOF
+
+  kitty_at action goto_session "$ssh_session_file"
+  exit 0
+fi
+
+selected_path="$(normalize_path "$selected_key")"
 
 existing_session="$(printf '%s' "$kitty_state" | jq -r --arg path "$selected_path" '
   .[]?.tabs[]?.windows[]?
