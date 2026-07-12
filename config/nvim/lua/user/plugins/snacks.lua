@@ -43,8 +43,8 @@ return {
       },
       sources = {
         files = { ignored = true, hidden = true, exclude = { "**/.DS_Store" } },
-        explorer = { ignored = false, hidden = true },
-        grep = { ignored = false, hidden = true },
+        explorer = { ignored = false, hidden = true, auto_close = true, jump = { close = true } },
+        grep = { ignored = false, hidden = true, regex = false },
         grep_word = { ignored = false, hidden = true },
         grep_buffers = { ignored = false, hidden = true },
       },
@@ -211,7 +211,7 @@ return {
       function()
         Snacks.picker.git_status()
       end,
-      desc = "Grep",
+      desc = "Git status",
     },
     {
       "<leader>gb",
@@ -295,7 +295,7 @@ return {
       function()
         Snacks.picker.colorschemes()
       end,
-      desc = "Notifications",
+      desc = "Colorschemes",
     },
     {
       "<leader>sf",

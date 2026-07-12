@@ -3,9 +3,6 @@ return {
   dependencies = { "nvim-tree/nvim-web-devicons", "arkav/lualine-lsp-progress" },
   config = function()
     require("lualine").setup({
-      extensions = {
-        "nvim-tree",
-      },
       options = {
         theme = "gruvbox",
         disabled_filetypes = {

@@ -18,8 +18,13 @@ return {
       },
     },
   }, -- Neovim development
-  { "akinsho/toggleterm.nvim", cmd = { "ToggleTerm", "TermExec" } },
-  { "christoomey/vim-tmux-navigator", lazy = false }, -- Keep immediate for tmux integration
+  {
+    "christoomey/vim-tmux-navigator",
+    lazy = false,
+    init = function()
+      vim.g.tmux_navigator_no_mappings = 1
+    end,
+  }, -- Keep immediate for tmux integration
   { "tpope/vim-endwise", event = "InsertEnter" },
   -- { "github/copilot.vim", lazy = false },
   {

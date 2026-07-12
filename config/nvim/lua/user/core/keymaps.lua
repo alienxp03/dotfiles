@@ -4,12 +4,12 @@ function opts(options)
 end
 
 --Remap space as leader key
-vim.api.nvim_set_keymap("", "<Space>", "<Nop>", { noremap = true, silent = true })
+vim.keymap.set("", "<Space>", "<Nop>", { noremap = true, silent = true })
 vim.g.mapleader = " "
 vim.g.maplocalleader = ","
 
 -- Shorten function name
-local keymap = vim.api.nvim_set_keymap
+local keymap = vim.keymap.set
 
 -- Clipboard
 
@@ -21,11 +21,7 @@ keymap("n", "<Esc><Esc>", ":noh<CR>", opts({ desc = "clear search" }))
 keymap("n", "<C-s>", ":w<cr>", opts())
 keymap("i", "<C-s>", "<esc>:w<cr>", opts())
 
--- Better window navigation
-keymap("n", "<C-h>", "<C-w>h", opts())
-keymap("n", "<C-j>", "<C-w>j", opts())
-keymap("n", "<C-k>", "<C-w>k", opts())
-keymap("n", "<C-l>", "<C-w>l", opts())
+-- Better window navigation is configured below with Kitty/tmux edge handling.
 
 -- Resize with arrows
 keymap("n", "<C-Up>", ":resize -2<CR>", opts())
@@ -43,7 +39,7 @@ keymap("n", "<leader>3", ":BufferLineGoToBuffer 3<CR>", opts())
 keymap("n", "<leader>lc", ":lua vim.diagnostic.open_float()<cr>", opts({ desc = "Show diagnostic for line" }))
 keymap("n", "<leader>lr", ":lua vim.lsp.buf.rename()<cr>", opts({ desc = "LSP rename" }))
 keymap("n", "<leader>lh", ":lua vim.lsp.buf.hover()<cr>", opts({ desc = "Show documentation" }))
-keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " Code action" }))
+keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = "Code action" }))
 
 -- fzf-lua
 -- keymap("n", "<C-f>", ":FzfLua live_grep_glob winopts.preview.vertical=down:30%<CR>", opts({ desc = "Find files" }))
@@ -63,8 +59,10 @@ keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = " 
 -- keymap("n", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 -- keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 
--- Ntree explorer
-keymap("n", "<leader>e", ":NvimTreeToggle<cr>", opts())
+-- File explorer
+vim.keymap.set("n", "<leader>e", function()
+  Snacks.explorer.reveal()
+end, opts({ desc = "Reveal current file in explorer" }))
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts())
@@ -111,12 +109,34 @@ keymap(
   opts({ desc = "Replace current word" })
 )
 
--- Tmux navigation
--- Temporary fix. Seems to be a bug, had to manually declare these bindings for now
-keymap("n", "<C-h>", ":TmuxNavigateLeft<cr>", opts())
-keymap("n", "<C-j>", ":TmuxNavigateDown<cr>", opts())
-keymap("n", "<C-k>", ":TmuxNavigateUp<cr>", opts())
-keymap("n", "<C-l>", ":TmuxNavigateRight<cr>", opts())
+-- Navigate Neovim splits first, then cross the tmux/Kitty boundary at an edge.
+local function navigate_window(direction, tmux_command, kitty_direction)
+  if vim.env.TMUX and vim.env.TMUX ~= "" then
+    vim.cmd(tmux_command)
+    return
+  end
+
+  local previous_window = vim.api.nvim_get_current_win()
+  vim.cmd.wincmd(direction)
+  if vim.api.nvim_get_current_win() ~= previous_window or not vim.env.KITTY_WINDOW_ID then
+    return
+  end
+
+  vim.system({ "kitty", "@", "focus-window", "--match", "neighbor:" .. kitty_direction }, { detach = true })
+end
+
+vim.keymap.set("n", "<C-h>", function()
+  navigate_window("h", "TmuxNavigateLeft", "left")
+end, opts())
+vim.keymap.set("n", "<C-j>", function()
+  navigate_window("j", "TmuxNavigateDown", "bottom")
+end, opts())
+vim.keymap.set("n", "<C-k>", function()
+  navigate_window("k", "TmuxNavigateUp", "top")
+end, opts())
+vim.keymap.set("n", "<C-l>", function()
+  navigate_window("l", "TmuxNavigateRight", "right")
+end, opts())
 
 -- trouble
 keymap(
