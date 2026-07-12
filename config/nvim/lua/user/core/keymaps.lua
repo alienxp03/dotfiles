@@ -21,6 +21,9 @@ keymap("n", "<Esc><Esc>", ":noh<CR>", opts({ desc = "clear search" }))
 keymap("n", "<C-s>", ":w<cr>", opts())
 keymap("i", "<C-s>", "<esc>:w<cr>", opts())
 
+-- Quit all
+keymap("n", "<S-q><S-q>", "<cmd>qa<cr>", opts({ desc = "Quit all" }))
+
 -- Better window navigation is configured below with Kitty/tmux edge handling.
 
 -- Resize with arrows

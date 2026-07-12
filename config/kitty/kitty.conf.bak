@@ -3,7 +3,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 font_size 13
 shell_integration no-title
-shell /bin/zsh
 editor nvim
 startup_session ~/.config/kitty/startup-session.conf
 scrollback_lines 10000
@@ -11,7 +10,6 @@ wheel_scroll_multiplier 3.0
 copy_on_select yes
 notify_on_cmd_finish invisible
 allow_remote_control yes
-mouse_hide_wait	-3.0
 listen_on unix:/tmp/kitty
 
 # Window appearance
@@ -19,14 +17,13 @@ hide_window_decorations titlebar-only
 window_padding_width 1 5 2 2
 background_opacity 0.88
 background_blur 0
-remember_window_size yes
-remember_window_position yes
+# active_border_color #a6e22e
+# inactive_border_color #6e7066
 
 # Tabs and layouts
 enabled_layouts splits:split_axis=horizontal,stack
 tab_bar_edge top
 tab_bar_style powerline
-tab_powerline_style slanted
 tab_bar_filter session:~
 # tab_title_template "{tab.active_wd.rsplit('/', 1)[-1]}"
 
@@ -103,11 +100,3 @@ map kitty_mod+z show_scrollback
 
 # Theme: Gruvbox Material Dark Hard
 include current-theme.conf
-
-
-# BEGIN_KITTY_FONTS
-font_family      family="FiraCode Nerd Font Mono"
-bold_font        auto
-italic_font      auto
-bold_italic_font auto
-# END_KITTY_FONTS
