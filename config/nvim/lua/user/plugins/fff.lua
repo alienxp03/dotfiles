@@ -8,11 +8,14 @@ return {
     lazy_sync = true,
     layout = {
       prompt_position = "top",
-      preview_position = "bottom",
+      preview_position = "right",
       flex = {
         size = 130,
         wrap = "bottom",
       },
+    },
+    hl = {
+      directory_path = "SnacksPickerDir",
     },
     keymaps = {
       move_up = { "<Up>", "<C-p>", "<C-k>" },

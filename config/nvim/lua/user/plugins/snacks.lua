@@ -1,3 +1,30 @@
+local function format_file_columns(item, picker)
+  local path = Snacks.picker.util.path(item) or item.file
+  local filename = vim.fn.fnamemodify(path, ":t")
+  local directory = vim.fn.fnamemodify(path, ":h")
+  local filename_width = 32
+  local padding = math.max(2, filename_width - vim.fn.strdisplaywidth(filename))
+
+  if directory == "." then
+    directory = ""
+  end
+
+  if vim.fn.strdisplaywidth(directory) > 60 then
+    directory = Snacks.picker.util.truncpath(directory, 60, {
+      cwd = picker:cwd(),
+      kind = "left",
+    })
+  end
+
+  local base_hl = item.dir and "SnacksPickerDirectory" or "SnacksPickerFile"
+
+  return {
+    { filename, base_hl, field = "file" },
+    { string.rep(" ", padding) },
+    { directory, "SnacksPickerDir", field = "file" },
+  }
+end
+
 return {
   "folke/snacks.nvim",
   lazy = false,
@@ -117,7 +144,7 @@ return {
     {
       "<C-p>",
       function()
-        Snacks.picker.files({})
+        Snacks.picker.files({ format = format_file_columns })
       end,
       desc = "Search files",
     },

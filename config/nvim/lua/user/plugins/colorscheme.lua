@@ -29,6 +29,22 @@ return {
       },
     })
     vim.cmd([[colorscheme tokyonight-night]])
+    vim.api.nvim_set_hl(0, "Visual", {
+      bg = "#3b5b7a",
+      fg = "#ffffff",
+      bold = true,
+    })
+    vim.api.nvim_set_hl(0, "SnacksPickerFile", {
+      fg = "#ffffff",
+      bold = true,
+    })
+    vim.api.nvim_set_hl(0, "SnacksPickerDir", {
+      fg = "#7f849c",
+    })
+    vim.api.nvim_set_hl(0, "SnacksPickerDirectory", {
+      fg = "#7f849c",
+      italic = true,
+    })
 
     -- vim.cmd([[colorscheme gruvbox]])
 
