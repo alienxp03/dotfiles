@@ -42,9 +42,24 @@ return {
 
     for _, server_name in ipairs(all_servers) do
       if not vim.tbl_contains(excluded_servers, server_name) then
-        lspconfig[server_name].setup({
+        local server_config = {
           capabilities = capabilities,
-        })
+        }
+
+        if server_name == "lua_ls" then
+          server_config.settings = {
+            Lua = {
+              runtime = { version = "LuaJIT" },
+              diagnostics = { globals = { "vim" } },
+              workspace = {
+                checkThirdParty = false,
+                library = vim.api.nvim_get_runtime_file("", true),
+              },
+            },
+          }
+        end
+
+        lspconfig[server_name].setup(server_config)
       end
     end
   end,

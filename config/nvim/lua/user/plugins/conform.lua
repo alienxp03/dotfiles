@@ -24,6 +24,7 @@ return {
         yaml = { "prettier" },
         markdown = { "prettier" },
         lua = { "stylua" },
+        toml = { "taplo" },
         ruby = { "rubocop" },
         eruby = { "htmlbeautifier" },
         hcl = { "terraform_fmt" },

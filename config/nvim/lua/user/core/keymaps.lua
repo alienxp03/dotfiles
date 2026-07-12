@@ -93,8 +93,12 @@ keymap("v", "<S-j>", ":m '>+1<CR>gv=gv", opts())
 keymap("v", "<S-k>", ":m '<-2<CR>gv=gv", opts())
 
 -- Copy path
-keymap("n", "<leader>cp", ":let @+=@%<cr>", opts({ desc = "Copy relative path" }))
-keymap("n", "<leader>cf", ":let @+=expand('%:p')<cr>", opts({ desc = "Copy full path" }))
+vim.keymap.set("n", "<leader>cp", function()
+  vim.fn.setreg("+", vim.fn.expand("%:p:."))
+end, opts({ desc = "Copy relative path" }))
+vim.keymap.set("n", "<leader>cf", function()
+  vim.fn.setreg("+", vim.fn.expand("%:p"))
+end, opts({ desc = "Copy full path" }))
 
 -- `il` text object: inner line, trimmed of leading/trailing whitespace
 -- Enables yil, vil, dil, cil, etc.
