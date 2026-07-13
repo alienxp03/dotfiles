@@ -5,7 +5,9 @@
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
 if [[ -o interactive ]] && command -v direnv >/dev/null 2>&1; then
-	eval "$(direnv export zsh)"
+	# Load the initial directory environment before instant prompt without writing
+	# status messages to the console.
+	eval "$(direnv export zsh 2>/dev/null)"
 fi
 
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
@@ -172,6 +174,13 @@ _zsh_deferred_init() {
 
 	# mise initial hook (sets up tool paths for current dir)
 	(($+functions[_mise_hook])) && _mise_hook
+
+	# Mise can alter PATH after the initial direnv export, causing direnv to
+	# reload during the first prompt. Synchronize it silently so Powerlevel10k's
+	# instant prompt does not detect console output during initialization.
+	if (($+functions[_direnv_hook])); then
+		_direnv_hook 2>/dev/null
+	fi
 
 	(($+commands[wktree])) && eval "$(wktree init zsh)"
 	(($+commands[workmux])) && eval "$(workmux completions zsh)"
