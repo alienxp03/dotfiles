@@ -71,13 +71,7 @@ make test
 MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise test
 ```
 
-Update mise-managed tools:
-
-```bash
-make update
-```
-
-Update the full development environment:
+Update the full development environment (Homebrew, mise, and all mise-managed tools):
 
 ```bash
 make dev-update

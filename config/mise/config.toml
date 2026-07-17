@@ -1,7 +1,7 @@
 [bootstrap.packages]
 "brew:ranger" = "latest"
-"brew:witr" = "latest"
-"brew:viu" = "latest"
+"brew:witr"   = "latest"
+"brew:viu"    = "latest"
 
 [tools]
 # Languages / runtimes
@@ -20,11 +20,11 @@ pnpm = "11.9.0"
 # AI agents
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.198", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.80.6"
-"npm:@openai/codex"                   = "0.142.5"
+"npm:@openai/codex"                   = "0.144.4"
 "npm:happy"                           = { version = "1.1.10", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.17.13", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
-"npm:promptfoo"                     = { version = "0.121.18", npm_args = "--ignore-scripts=false" }
+"npm:promptfoo"                       = { version = "0.121.18", npm_args = "--ignore-scripts=false" }
 
 # Python tooling
 "pipx:httpie" = "3.2.4"
@@ -74,7 +74,7 @@ yamlfmt     = "0.21.0"
 # CLI utilities
 bat                                  = "0.26.1"
 cmake                                = "4.3.4"
-eza                                  = "0.23.4"
+"cargo:eza"                          = "0.23.4"
 fd                                   = "10.4.2"
 ffmpeg                               = "8.1.2"
 glow                                 = "2.1.2"
@@ -87,11 +87,17 @@ yazi                                 = "26.5.6"
 yq                                   = "4.53.3"
 
 [settings]
-experimental                        = true
-env_file                            = ".env.local"
+experimental = true
+env_file = ".env.local"
 idiomatic_version_file_enable_tools = ["ruby", "node", "python", "go"]
-http_timeout                        = "30s"
-minimum_release_age                 = "1d"
+http_timeout = "30s"
+minimum_release_age = "1d"
+minimum_release_age_excludes = [
+  "npm:@anthropic-ai/claude-code",
+  "npm:@earendil-works/pi-coding-agent",
+  "npm:opencode-ai",
+  "npm:@openai/codex",
+]
 
 [settings.ruby]
 compile = false
@@ -104,7 +110,7 @@ root         = "~/.dotfiles"
 "~/.config/alacritty"                                        = "~/.dotfiles/config/alacritty"
 "~/.config/atuin"                                            = "~/.dotfiles/config/atuin"
 "~/.config/ghostty"                                          = "~/.dotfiles/config/ghostty"
-"~/.config/kitty"                                             = "~/.dotfiles/config/kitty"
+"~/.config/kitty"                                            = "~/.dotfiles/config/kitty"
 "~/.config/lazygit"                                          = "~/.dotfiles/config/lazygit"
 "~/.config/mise/config.toml"                                 = "~/.dotfiles/config/mise/config.toml"
 "~/.config/nvim"                                             = "~/.dotfiles/config/nvim"
@@ -142,31 +148,12 @@ run = [
 
 [tasks.dev-update]
 description = "Update development environment"
-run = '''
-set -eu
-
-echo "Updating development environment..."
-
-if command -v brew >/dev/null 2>&1; then
-  echo "Updating Homebrew..."
-  brew update -y
-
-  echo "Upgrading Homebrew..."
-  brew upgrade -y
-else
-  echo "Skipping Homebrew update: brew not found"
-fi
-
-echo "Updating mise-managed tools..."
-mise run update
-'''
-
-[tasks.update]
-description = "Update mise-managed tools"
 run = [
+  "brew update",
+  "brew upgrade -y",
   "mise self-update -y",
   "mise install",
-  "mise upgrade",
+  "mise upgrade --bump --yes",
   "mise prune",
   "mise reshim",
 ]
