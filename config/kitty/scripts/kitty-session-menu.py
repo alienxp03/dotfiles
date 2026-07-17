@@ -32,20 +32,36 @@ def main() -> int:
     open_paths: dict[str, float] = {}
     sessions_by_path: dict[str, str] = {}
     session_names: set[str] = set()
+    session_alias_paths: set[str] = set()
+    open_sessions: dict[str, tuple[str, float]] = {}
     open_ssh_hosts: dict[str, float] = {}
 
     for os_window in state:
         for tab in os_window.get("tabs", []):
-            for window in tab.get("windows", []):
-                session = window.get("session_name") or ""
-                path = (window.get("env") or {}).get("PWD") or window.get("cwd") or ""
-                if session:
-                    session_names.add(session)
-                    sessions_by_path.setdefault(path, session)
-                    open_paths[path] = max(
-                        open_paths.get(path, 0), window.get("last_focused_at") or 0
-                    )
+            windows = tab.get("windows", [])
+            named_windows = [window for window in windows if window.get("session_name")]
+            tab_session = named_windows[0].get("session_name") if named_windows else ""
+            if tab_session:
+                session_names.add(tab_session)
+                canonical_window = named_windows[0]
+                canonical_path = (canonical_window.get("env") or {}).get(
+                    "PWD"
+                ) or canonical_window.get("cwd", "")
+                previous_path, previous_focus = open_sessions.get(
+                    tab_session, (canonical_path, 0)
+                )
+                latest_focus = max(
+                    [previous_focus]
+                    + [window.get("last_focused_at") or 0 for window in windows]
+                )
+                open_sessions[tab_session] = (previous_path, latest_focus)
 
+                for window in windows:
+                    path = (window.get("env") or {}).get("PWD") or window.get("cwd") or ""
+                    if path and path != previous_path:
+                        session_alias_paths.add(path)
+
+            for window in windows:
                 for process in window.get("foreground_processes", []):
                     command = process.get("cmdline") or []
                     if len(command) > 1 and (command[0] == "ssh" or command[0].endswith("/ssh")):
@@ -55,14 +71,19 @@ def main() -> int:
                             window.get("last_focused_at") or 0,
                         )
 
+    for session, (path, last_focused_at) in open_sessions.items():
+        if path and not session.startswith("ssh-"):
+            sessions_by_path[path] = session
+            open_paths[path] = last_focused_at
+
     entries: list[tuple[bool, float, int, bool, str]] = []
     projects: list[tuple[int, float, int, str]] = []
     for index, path in enumerate(run("zoxide", "query", "-l").splitlines()):
-        if path and path != "/":
+        if path and path != "/" and path not in session_alias_paths:
             is_open = path in open_paths
             projects.append((0 if is_open else 1, -open_paths.get(path, 0), index, path))
 
-    projects.sort(key=lambda item: (item[0], item[2]))
+    projects.sort(key=lambda item: (item[0], item[1], item[2]))
     order = 0
     for _, _, _, path in projects:
         name = Path(path).name
@@ -110,10 +131,15 @@ def main() -> int:
             entries.append((is_open, open_ssh_hosts.get(host, 0), order, True, line))
             order += 1
 
-    # Keep open sessions first in the unfiltered list. Put closed SSH hosts
+    # Keep open sessions in most-recently-used order. Put closed SSH hosts
     # before closed projects to favor direct host-name matches.
     entries.sort(
-        key=lambda entry: (not entry[0], 0 if not entry[0] and entry[3] else 1, entry[2])
+        key=lambda entry: (
+            not entry[0],
+            -entry[1] if entry[0] else 0,
+            0 if not entry[0] and entry[3] else 1,
+            entry[2],
+        )
     )
     print("\n".join(entry[4] for entry in entries))
     return 0
