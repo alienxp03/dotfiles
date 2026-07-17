@@ -19,9 +19,9 @@ local function format_file_columns(item, picker)
   local base_hl = item.dir and "SnacksPickerDirectory" or "SnacksPickerFile"
 
   return {
-    { filename, base_hl, field = "file" },
+    { filename,                base_hl,           field = "file" },
     { string.rep(" ", padding) },
-    { directory, "SnacksPickerDir", field = "file" },
+    { directory,               "SnacksPickerDir", field = "file" },
   }
 end
 
@@ -57,9 +57,9 @@ return {
           border = "rounded",
           title = "{title} {live} {flags}",
           title_pos = "center",
-          { win = "input", height = 1, border = "bottom" },
-          { win = "list", border = "none" },
-          { win = "preview", title = "{preview}", height = 0.7, border = "top" },
+          { win = "input",   height = 1,          border = "bottom" },
+          { win = "list",    border = "none" },
+          { win = "preview", title = "{preview}", height = 0.7,     border = "top" },
         },
       },
       win = {
@@ -74,8 +74,18 @@ return {
         frecency = true,
       },
       sources = {
-        files = { ignored = true, hidden = true, exclude = { "**/.DS_Store" } },
-        explorer = { ignored = false, hidden = true, auto_close = true, jump = { close = true } },
+        files = {
+          ignored = true,
+          hidden = true,
+          exclude = { "**/.DS_Store", "**/node_modules/**" },
+        },
+        explorer = {
+          ignored = true,
+          hidden = true,
+          exclude = { "**/.DS_Store" },
+          auto_close = true,
+          jump = { close = true },
+        },
         grep = { ignored = false, hidden = true, regex = false },
         grep_word = { ignored = false, hidden = true },
         grep_buffers = { ignored = false, hidden = true },
@@ -218,11 +228,11 @@ return {
       desc = "Resume",
     },
     {
-      "<C-g>",
+      "<leader>gg",
       function()
         Snacks.lazygit()
       end,
-      desc = "Lazygit",
+      desc = "Toggle Lazygit",
     },
     {
       "<leader>gl",

@@ -11,6 +11,12 @@ return {
       { noremap = true, silent = true, desc = "Toggle blame" }
     )
     vim.keymap.set(
+      "x",
+      "<leader>ge",
+      ":Git blame<cr>",
+      { noremap = true, silent = true, desc = "Blame selected lines" }
+    )
+    vim.keymap.set(
       "n",
       "<leader>gh",
       ":Gitsigns preview_hunk_inline<cr>",

@@ -102,6 +102,10 @@ end, opts({ desc = "Copy relative path" }))
 vim.keymap.set("n", "<leader>cf", function()
   vim.fn.setreg("+", vim.fn.expand("%:p"))
 end, opts({ desc = "Copy full path" }))
+vim.keymap.set("n", "<leader>cl", function()
+  local location = string.format("%s:%d", vim.fn.expand("%:p:."), vim.fn.line("."))
+  vim.fn.setreg("+", location)
+end, opts({ desc = "Copy relative path with line number" }))
 
 -- `il` text object: inner line, trimmed of leading/trailing whitespace
 -- Enables yil, vil, dil, cil, etc.
