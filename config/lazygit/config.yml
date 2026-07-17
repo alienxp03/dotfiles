@@ -6,7 +6,7 @@ keybinding:
 git:
   pagers:
     - colorArg: always
-      pager: delta --dark --paging=never --line-numbers --features=arctic-fox
+      pager: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
       # pager: delta --dark --paging=never --line-numbers --features=mellow-barbet
       # pager: delta --dark --paging=never --line-numbers --features=chameleon
 customCommands:
