@@ -17,9 +17,27 @@ return {
     { "<leader>dn", '<cmd> lua require"dap".step_over()<CR>', desc = "Step over" },
     { "<leader>di", '<cmd> lua require"dap".step_into()<CR>', desc = "Step into" },
     { "<leader>du", '<cmd> lua require"dap".step_out()<CR>', desc = "Step out" },
-    { "<F9>", function() require("dap").step_over() end, desc = "Step over" },
-    { "<F10>", function() require("dap").step_into() end, desc = "Step into" },
-    { "<F11>", function() require("dap").step_out() end, desc = "Step out" },
+    {
+      "<F9>",
+      function()
+        require("dap").step_over()
+      end,
+      desc = "Step over",
+    },
+    {
+      "<F10>",
+      function()
+        require("dap").step_into()
+      end,
+      desc = "Step into",
+    },
+    {
+      "<F11>",
+      function()
+        require("dap").step_out()
+      end,
+      desc = "Step out",
+    },
   },
   config = function()
     require("dap-go").setup()

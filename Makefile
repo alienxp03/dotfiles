@@ -10,6 +10,7 @@ endif
 MISE ?= mise
 MISE_CONFIG := $(CURDIR)/config/mise/config.toml
 MISE_RUN := MISE_GLOBAL_CONFIG_FILE=$(MISE_CONFIG) MISE_TRUSTED_CONFIG_PATHS=$(MISE_CONFIG) MISE_TASK_RUN_AUTO_INSTALL=false $(MISE)
+LUA_FILES := config/nvim
 SHFMT_FILES := config/zsh/*.zsh home/.zshrc home/.p10k.mise.zsh home/.p10k.zsh local/bin/tmux-sesh
 TOML_FILES := '**/*.toml'
 
@@ -45,10 +46,12 @@ dev-update:
 	$(MISE_RUN) run dev-update
 
 fmt:
+	$(MISE_RUN) exec stylua -- stylua $(LUA_FILES)
 	$(MISE_RUN) exec taplo -- taplo format --config taplo.toml $(TOML_FILES)
 	$(MISE_RUN) exec shfmt -- shfmt -w $(SHFMT_FILES)
 
 lint:
+	$(MISE_RUN) exec stylua -- stylua --check $(LUA_FILES)
 	$(MISE_RUN) exec taplo -- taplo format --config taplo.toml --check $(TOML_FILES)
 	$(MISE_RUN) exec taplo -- taplo lint --config taplo.toml $(TOML_FILES)
 	$(MISE_RUN) exec shfmt -- shfmt -d $(SHFMT_FILES)

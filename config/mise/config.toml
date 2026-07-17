@@ -28,7 +28,6 @@ pnpm = "11.9.0"
 
 # Python tooling
 "pipx:httpie" = "3.2.4"
-pre-commit    = "4.6.0"
 uv            = "0.11.26"
 
 # Infrastructure as code
@@ -60,6 +59,7 @@ gh                        = "2.95.0"
 just                      = "1.55.1"
 lazydocker                = "0.25.2"
 lazygit                   = "0.62.2"
+prek                      = "0.4.10"
 shellcheck                = "0.11.0"
 shfmt                     = "3.13.1"
 tmux                      = "3.6b"
@@ -67,6 +67,7 @@ zoxide                    = "0.9.9"
 
 # Editors / code tooling
 neovim      = "0.12.3"
+stylua      = "2.5.2"
 taplo       = "0.10.0"
 tree-sitter = "0.26.10"
 yamlfmt     = "0.21.0"
@@ -142,7 +143,7 @@ run = [
   "mise ls --current >/dev/null",
   "zsh -n ~/.dotfiles/home/.zshrc ~/.dotfiles/config/zsh/*.zsh",
   "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads((Path.home() / '.dotfiles/config/mise/config.toml').read_text())\nPY",
-  "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.sidekick\") end); if not ok then error(err) end' -c 'qa!'",
+  "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.octo\") end); if not ok then error(err) end' -c 'qa!'",
   "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 

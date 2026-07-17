@@ -63,9 +63,9 @@ return {
           border = "rounded",
           title = "{title} {live} {flags}",
           title_pos = "center",
-          { win = "input",   height = 1,          border = "bottom" },
-          { win = "list",    border = "none" },
-          { win = "preview", title = "{preview}", height = 0.7,     border = "top" },
+          { win = "input", height = 1, border = "bottom" },
+          { win = "list", border = "none" },
+          { win = "preview", title = "{preview}", height = 0.7, border = "top" },
         },
       },
       win = {
@@ -167,6 +167,13 @@ return {
         Snacks.picker.files({ format = format_file_columns })
       end,
       desc = "Search files",
+    },
+    {
+      "<leader>fg",
+      function()
+        Snacks.picker.grep()
+      end,
+      desc = "Live grep",
     },
     {
       "<C-b>",
