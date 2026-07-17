@@ -24,13 +24,6 @@ return {
   },
   keys = {
     {
-      "<leader>ff",
-      function()
-        require("fff").find_files()
-      end,
-      desc = "Find files",
-    },
-    {
       "<leader>fg",
       function()
         require("fff").live_grep()

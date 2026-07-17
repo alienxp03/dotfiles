@@ -4,16 +4,17 @@ return {
   config = function()
     require("gitsigns").setup()
 
+    local blame_command = ":Git blame --date=format:\\%-d\\ \\%b\\ \\%Y\\ \\%I:\\%M\\ \\%p\\ \\%z<cr>"
     vim.keymap.set(
       "n",
       "<leader>ge",
-      ":Gitsigns toggle_current_line_blame<cr>",
-      { noremap = true, silent = true, desc = "Toggle blame" }
+      blame_command,
+      { noremap = true, silent = true, desc = "Blame current file" }
     )
     vim.keymap.set(
       "x",
       "<leader>ge",
-      ":Git blame<cr>",
+      blame_command,
       { noremap = true, silent = true, desc = "Blame selected lines" }
     )
     vim.keymap.set(

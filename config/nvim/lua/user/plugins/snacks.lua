@@ -17,11 +17,17 @@ local function format_file_columns(item, picker)
   end
 
   local base_hl = item.dir and "SnacksPickerDirectory" or "SnacksPickerFile"
+  local category = item.dir and "directory" or "file"
+  local icon, icon_hl = Snacks.util.icon(path, category, {
+    fallback = picker.opts.icons.files,
+  })
+  icon = Snacks.picker.util.align(icon, picker.opts.formatters.file.icon_width or 2)
 
   return {
-    { filename,                base_hl,           field = "file" },
+    { icon, icon_hl, virtual = true },
+    { filename, icon_hl or base_hl, field = "file" },
     { string.rep(" ", padding) },
-    { directory,               "SnacksPickerDir", field = "file" },
+    { directory, "SnacksPickerDir", field = "file" },
   }
 end
 
@@ -66,7 +72,6 @@ return {
         input = {
           keys = {
             ["<C-h>"] = { "toggle_ignored", mode = { "i", "n" } },
-            ["<Esc>"] = { "close", mode = { "n", "i" } },
           },
         },
       },
@@ -157,7 +162,7 @@ return {
       desc = "Delete buffer",
     },
     {
-      "<C-p>",
+      "<leader>ff",
       function()
         Snacks.picker.files({ format = format_file_columns })
       end,
@@ -338,13 +343,6 @@ return {
         Snacks.picker.colorschemes()
       end,
       desc = "Colorschemes",
-    },
-    {
-      "<leader>sf",
-      function()
-        require("user.util.pick_directory")("files")
-      end,
-      desc = "Search files (pick folder first)",
     },
     {
       "<leader>sg",
