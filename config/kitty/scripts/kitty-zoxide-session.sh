@@ -4,8 +4,10 @@ set -euo pipefail
 # GUI-launched apps do not inherit the shell's Mise PATH on macOS.
 export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-# Identify this window so Kitty can pass Ctrl+J/K through to fzf.
-printf '\033]2;project-picker\007'
+# Identify the interactive window so Kitty can pass Ctrl+J/K through to fzf.
+if [[ "${1:-}" != "--menu-only" ]]; then
+  printf '\033]2;project-picker\007'
+fi
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -15,9 +17,10 @@ require_cmd() {
 }
 
 require_cmd fzf
-require_cmd jq
+require_cmd python3
 require_cmd zoxide
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kitty_bin="$(command -v kitty || true)"
 if [[ -z "$kitty_bin" && -x /Applications/kitty.app/Contents/MacOS/kitty ]]; then
   kitty_bin=/Applications/kitty.app/Contents/MacOS/kitty
@@ -27,10 +30,9 @@ if [[ -z "$kitty_bin" ]]; then
   exit 1
 fi
 
-kitty_socket="${KITTY_SOCKET:-}"
+kitty_socket="${KITTY_SOCKET:-${KITTY_LISTEN_ON:-}}"
 if [[ -z "$kitty_socket" ]]; then
-  # Quick-access terminals create their own Kitty socket. Select only the
-  # main Kitty process so sessions always open in the primary OS window.
+  # Fall back to finding the main Kitty process when no socket was inherited.
   for socket_dir in /private/tmp /tmp "${TMPDIR:-}"; do
     [[ -n "$socket_dir" && -d "$socket_dir" ]] || continue
     while IFS= read -r socket_path; do
@@ -48,11 +50,6 @@ kitty_at() {
   "$kitty_bin" @ --to "$kitty_socket" "$@"
 }
 
-kitty_state="$(kitty_at ls)" || {
-  printf 'Unable to connect to Kitty at %s. Restart Kitty after enabling remote control.\n' "$kitty_socket" >&2
-  exit 1
-}
-
 normalize_path() {
   if command -v realpath >/dev/null 2>&1; then
     realpath "$1"
@@ -61,87 +58,64 @@ normalize_path() {
   fi
 }
 
-open_paths="$(printf '%s' "$kitty_state" | jq -r '
-  [.[]?.tabs[]?.windows[]?
-    | select(.session_name != null and .session_name != "")
-    | {path: (.env.PWD // .cwd // ""), focused: (.last_focused_at // 0)}]
-  | group_by(.path)[]
-  | [.[0].path, (map(.focused) | max)]
-  | @tsv
-')"
+# A cached menu lets the overlay render immediately, then reloads fresh Kitty
+# session state while it is open.
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/kitty"
+menu_cache="$cache_dir/session-picker.tsv"
+build_menu() {
+  "$script_dir/kitty-session-menu.py" "$kitty_bin" "$kitty_socket" "$HOME"
+}
+refresh_cache() {
+  local temporary
+  mkdir -p "$cache_dir"
+  temporary="$menu_cache.$$"
+  if build_menu >"$temporary"; then
+    mv -f "$temporary" "$menu_cache"
+  else
+    rm -f "$temporary"
+    return 1
+  fi
+}
 
-open_ssh_hosts="$(printf '%s' "$kitty_state" | jq -r '
-  .[]?.tabs[]?.windows[]?.foreground_processes[]?.cmdline
-  | select(length > 1 and ((.[0] | endswith("/ssh")) or .[0] == "ssh"))
-  | .[1]
-' | sort -u)"
-
-# Open sessions come first in most-recently-focused order. Closed projects keep
-# zoxide's frecency order, so recently/frequently used directories stay near the top.
-menu_entries="$(awk -F '\t' -v OFS='\t' -v home="$HOME" '
-  NR == FNR {
-    if ($1 != "") open[$1] = $2
-    next
-  }
-  {
-    path = $0
-    # A root-directory entry has no useful project/session label.
-    if (path == "" || path == "/") next
-    count = split(path, parts, "/")
-    name = parts[count]
-    display_path = path
-    if (path == home) display_path = "~"
-    else if (index(path, home "/") == 1) display_path = "~" substr(path, length(home) + 1)
-    marker = (path in open) ? "●" : "○"
-    rank = (path in open) ? 0 : 1
-    score = (path in open) ? open[path] : -FNR
-    # The first two fields are temporary sort keys and are removed afterward.
-    print rank, score, path, marker " " sprintf("%-28s", name), display_path
-  }
-' <(printf '%s\n' "$open_paths") <(zoxide query -l) \
-  | sort -t $'\t' -k1,1n -k2,2nr \
-  | cut -f3-)"
-
-ssh_entries=""
-if [[ -r "$HOME/.ssh/config" ]]; then
-  ssh_hosts="$(awk '
-    /^[[:space:]]*[Hh][Oo][Ss][Tt][[:space:]]+/ {
-      for (i = 2; i <= NF; i++) {
-        host = $i
-        gsub(/^"|"$/, "", host)
-        if (host != "" && host !~ /[*?!]/) print host
-      }
-    }
-  ' "$HOME/.ssh/config" | sort -u)"
-
-  ssh_entries="$(while IFS= read -r host; do
-    [[ -n "$host" ]] || continue
-    marker="○"
-    if printf '%s\n' "$open_ssh_hosts" | grep -Fqx -- "$host"; then
-      marker="●"
-    fi
-    printf 'ssh://%s\t%s %-28s\t~/.ssh/config\n' "$host" "$marker" "$host"
-  done <<< "$ssh_hosts")"
+if [[ "${1:-}" == "--menu-only" ]]; then
+  refresh_cache
+  exec cat "$menu_cache"
 fi
 
-if [[ -n "$ssh_entries" ]]; then
-  menu_entries="$(printf '%s\n%s' "$menu_entries" "$ssh_entries" \
-    | awk -F '\t' -v OFS='\t' '{ rank = ($2 ~ /^●/) ? 0 : 1; print rank, NR, $0 }' \
-    | sort -t $'\t' -k1,1n -k2,2n \
-    | cut -f3-)"
+fzf_options=(
+  "--height=60%"
+  "--layout=reverse"
+  "--scheme=history"
+  "--border"
+  "--prompt= kitty sessions > "
+  "--header=SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel"
+  "--with-nth=2,3"
+  $'--delimiter=\t'
+)
+
+if [[ "${KITTY_PICKER_CACHE:-0}" == "1" && -s "$menu_cache" ]]; then
+  menu_entries="$(<"$menu_cache")"
+  fzf_options+=("--bind=start:reload:$script_dir/kitty-zoxide-session.sh --menu-only")
+else
+  menu_entries="$(build_menu)" || {
+    printf 'Unable to build the Kitty session menu using %s.\n' "$kitty_socket" >&2
+    exit 1
+  }
+  if [[ "${KITTY_PICKER_CACHE:-0}" == "1" ]]; then
+    mkdir -p "$cache_dir"
+    printf '%s\n' "$menu_entries" >"$menu_cache"
+  fi
 fi
 
-selected="$(printf '%s\n' "$menu_entries" | fzf \
-  --height=60% \
-  --layout=reverse \
-  --border \
-  --prompt=' kitty session > ' \
-  --header='SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel' \
-  --with-nth=2,3 \
-  --delimiter=$'\t' || true)"
+selected="$(printf '%s\n' "$menu_entries" | fzf "${fzf_options[@]}" || true)"
 
 [[ -n "$selected" ]] || exit 0
 selected_key="${selected%%$'\t'*}"
+selected_tail="${selected#*$'\t'}"
+selected_tail="${selected_tail#*$'\t'}"
+selected_tail="${selected_tail#*$'\t'}"
+existing_session="${selected_tail%%$'\t'*}"
+name_taken="${selected_tail#*$'\t'}"
 
 if [[ "$selected_key" == ssh://* ]]; then
   ssh_host="${selected_key#ssh://}"
@@ -149,14 +123,8 @@ if [[ "$selected_key" == ssh://* ]]; then
   mkdir -p "$session_dir"
   safe_host="$(printf '%s' "$ssh_host" | tr -cs 'A-Za-z0-9._-' '_')"
   ssh_session_file="$session_dir/ssh-$safe_host.kitty-session"
-  existing_ssh_session="$(printf '%s' "$kitty_state" | jq -r --arg name "ssh-$safe_host" '
-    .[]?.tabs[]?.windows[]?
-    | select(.session_name == $name)
-    | .session_name
-  ' | head -n1)"
-
-  if [[ -n "$existing_ssh_session" ]]; then
-    kitty_at action goto_session "$existing_ssh_session"
+  if [[ "$existing_session" != "-" ]]; then
+    kitty_at action goto_session "$existing_session"
     exit 0
   fi
 
@@ -174,14 +142,7 @@ fi
 
 selected_path="$(normalize_path "$selected_key")"
 
-existing_session="$(printf '%s' "$kitty_state" | jq -r --arg path "$selected_path" '
-  .[]?.tabs[]?.windows[]?
-  | select(.session_name != null and .session_name != "")
-  | select((.env.PWD // .cwd // "") as $cwd | $cwd == $path)
-  | .session_name
-' | head -n1)"
-
-if [[ -n "$existing_session" ]]; then
+if [[ "$existing_session" != "-" ]]; then
   kitty_at action goto_session "$existing_session"
   exit 0
 fi
@@ -198,9 +159,7 @@ else
 fi
 session_name="$base_name"
 # Only add a suffix when another project has the same directory name.
-if printf '%s' "$kitty_state" | jq -e --arg name "$session_name" '
-  any(.[]?.tabs[]?.windows[]?; .session_name == $name)
-' >/dev/null; then
+if [[ "$name_taken" == "1" ]]; then
   session_name="${base_name}-${hash}"
 fi
 session_file="$session_dir/$session_name.kitty-session"

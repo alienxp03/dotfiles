@@ -52,7 +52,7 @@ selected="$(printf '%s\n' "$agents" | fzf \
   --height=60% \
   --layout=reverse \
   --border \
-  --prompt=' agents > ' \
+  --prompt=' coding agents > ' \
   --header='AGENT  DIRECTORY  TAB     enter: focus  esc: cancel' \
   --delimiter=$'\t' \
   --with-nth=2,3,4 || true)"
