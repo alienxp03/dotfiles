@@ -2,6 +2,8 @@ gui:
   sidePanelWidth: 0.2
 keybinding:
   universal:
+    quit: <esc>
+    return: <disabled>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
   pagers:
