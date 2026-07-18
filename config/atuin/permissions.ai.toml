@@ -1,2 +1,2 @@
 [permissions]
-allow = ["AtuinHistory"]
+allow = ["AtuinHistory", "Shell"]
