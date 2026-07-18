@@ -31,6 +31,13 @@ if [[ -z "$kitty_bin" ]]; then
 fi
 
 kitty_socket="${KITTY_SOCKET:-${KITTY_LISTEN_ON:-}}"
+socket_cache="${TMPDIR:-/tmp}/kitty-zoxide.socket"
+if [[ -z "$kitty_socket" && -r "$socket_cache" ]]; then
+  cached_socket="$(<"$socket_cache")"
+  if [[ "$cached_socket" == unix:* && -S "${cached_socket#unix:}" ]]; then
+    kitty_socket="$cached_socket"
+  fi
+fi
 if [[ -z "$kitty_socket" ]]; then
   # Fall back to finding the main Kitty process when no socket was inherited.
   for socket_dir in /private/tmp /tmp "${TMPDIR:-}"; do
@@ -40,6 +47,7 @@ if [[ -z "$kitty_socket" ]]; then
       process="$(ps -p "$pid" -o command= 2>/dev/null || true)"
       if [[ "$process" == "$kitty_bin"* ]]; then
         kitty_socket="unix:$socket_path"
+        printf '%s\n' "$kitty_socket" >"$socket_cache"
         break 2
       fi
     done < <(find "$socket_dir" -maxdepth 1 -type s -name 'kitty-*' -print 2>/dev/null | sort)
