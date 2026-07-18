@@ -9,6 +9,29 @@ if [[ "${1:-}" != "--menu-only" ]]; then
   printf '\033]2;project-picker\007'
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/kitty"
+menu_cache="$cache_dir/session-picker.tsv"
+fzf_options=(
+  "--height=60%"
+  "--layout=reverse"
+  "--scheme=history"
+  "--border"
+  "--prompt= kitty sessions > "
+  "--header=SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel"
+  "--with-nth=2,3"
+  $'--delimiter=\t'
+)
+
+# Keep the visible path minimal: show cached entries before resolving the
+# Kitty socket. The reload subprocess refreshes state while fzf is already up.
+if [[ -z "${1:-}" && "${KITTY_PICKER_CACHE:-0}" == "1" && -s "$menu_cache" ]]; then
+  fzf_options+=("--bind=start:reload:$script_dir/kitty-zoxide-session.sh --menu-only")
+  selected="$(fzf "${fzf_options[@]}" <"$menu_cache" || true)"
+  [[ -n "$selected" ]] || exit 0
+  exec "$script_dir/kitty-zoxide-session.sh" --select "$selected"
+fi
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     printf '%s is required but was not found in PATH.\n' "$1" >&2
@@ -20,7 +43,6 @@ require_cmd fzf
 require_cmd python3
 require_cmd zoxide
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 kitty_bin="$(command -v kitty || true)"
 if [[ -z "$kitty_bin" && -x /Applications/kitty.app/Contents/MacOS/kitty ]]; then
   kitty_bin=/Applications/kitty.app/Contents/MacOS/kitty
@@ -66,10 +88,6 @@ normalize_path() {
   fi
 }
 
-# A cached menu lets the overlay render immediately, then reloads fresh Kitty
-# session state while it is open.
-cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/kitty"
-menu_cache="$cache_dir/session-picker.tsv"
 build_menu() {
   "$script_dir/kitty-session-menu.py" "$kitty_bin" "$kitty_socket" "$HOME"
 }
@@ -90,20 +108,8 @@ if [[ "${1:-}" == "--menu-only" ]]; then
   exec cat "$menu_cache"
 fi
 
-fzf_options=(
-  "--height=60%"
-  "--layout=reverse"
-  "--scheme=history"
-  "--border"
-  "--prompt= kitty sessions > "
-  "--header=SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel"
-  "--with-nth=2,3"
-  $'--delimiter=\t'
-)
-
-if [[ "${KITTY_PICKER_CACHE:-0}" == "1" && -s "$menu_cache" ]]; then
-  menu_entries="$(<"$menu_cache")"
-  fzf_options+=("--bind=start:reload:$script_dir/kitty-zoxide-session.sh --menu-only")
+if [[ "${1:-}" == "--select" ]]; then
+  selected="${2:-}"
 else
   menu_entries="$(build_menu)" || {
     printf 'Unable to build the Kitty session menu using %s.\n' "$kitty_socket" >&2
@@ -113,9 +119,8 @@ else
     mkdir -p "$cache_dir"
     printf '%s\n' "$menu_entries" >"$menu_cache"
   fi
+  selected="$(printf '%s\n' "$menu_entries" | fzf "${fzf_options[@]}" || true)"
 fi
-
-selected="$(printf '%s\n' "$menu_entries" | fzf "${fzf_options[@]}" || true)"
 
 [[ -n "$selected" ]] || exit 0
 selected_key="${selected%%$'\t'*}"
