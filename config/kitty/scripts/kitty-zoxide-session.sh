@@ -26,7 +26,7 @@ fzf_options=(
 # Keep the visible path minimal: show cached entries before resolving the
 # Kitty socket. The reload subprocess refreshes state while fzf is already up.
 if [[ -z "${1:-}" && "${KITTY_PICKER_CACHE:-0}" == "1" && -s "$menu_cache" ]]; then
-  fzf_options+=("--bind=start:reload:$script_dir/kitty-zoxide-session.sh --menu-only")
+  fzf_options+=("--bind=load:reload-sync($script_dir/kitty-zoxide-session.sh --menu-only)+unbind(load)")
   selected="$(fzf "${fzf_options[@]}" <"$menu_cache" || true)"
   [[ -n "$selected" ]] || exit 0
   exec "$script_dir/kitty-zoxide-session.sh" --select "$selected"
