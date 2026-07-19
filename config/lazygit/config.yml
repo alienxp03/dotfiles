@@ -3,7 +3,7 @@ gui:
 keybinding:
   universal:
     quit: <esc>
-    return: <disabled>
+    return: <backspace>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
   pagers:
