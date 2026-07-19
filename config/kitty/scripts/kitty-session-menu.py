@@ -35,6 +35,7 @@ def main() -> int:
     session_alias_paths: set[str] = set()
     open_sessions: dict[str, tuple[str, float]] = {}
     open_ssh_hosts: dict[str, float] = {}
+    live_paths: dict[str, float] = {}
 
     for os_window in state:
         for tab in os_window.get("tabs", []):
@@ -62,6 +63,12 @@ def main() -> int:
                         session_alias_paths.add(path)
 
             for window in windows:
+                path = (window.get("env") or {}).get("PWD") or window.get("cwd") or ""
+                if path and path != "/" and not tab_session.startswith("ssh-"):
+                    live_paths[path] = max(
+                        live_paths.get(path, 0), window.get("last_focused_at") or 0
+                    )
+
                 for process in window.get("foreground_processes", []):
                     command = process.get("cmdline") or []
                     if len(command) > 1 and (command[0] == "ssh" or command[0].endswith("/ssh")):
@@ -76,10 +83,21 @@ def main() -> int:
             sessions_by_path[path] = session
             open_paths[path] = last_focused_at
 
+    # Kitty knows about a newly entered directory before zoxide necessarily
+    # indexes it. Include every live window path immediately, including a
+    # secondary pane inside a named session.
+    for path, last_focused_at in live_paths.items():
+        open_paths[path] = max(open_paths.get(path, 0), last_focused_at)
+
     entries: list[tuple[bool, float, int, bool, str]] = []
     projects: list[tuple[int, float, int, str]] = []
-    for index, path in enumerate(run("zoxide", "query", "-l").splitlines()):
-        if path and path != "/" and path not in session_alias_paths:
+    project_paths = run("zoxide", "query", "-l").splitlines()
+    known_paths = set(project_paths)
+    project_paths.extend(path for path in open_paths if path not in known_paths)
+    for index, path in enumerate(project_paths):
+        if path and path != "/" and (
+            path not in session_alias_paths or path in open_paths
+        ):
             is_open = path in open_paths
             projects.append((0 if is_open else 1, -open_paths.get(path, 0), index, path))
 
