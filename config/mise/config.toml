@@ -19,8 +19,8 @@ pnpm = "11.9.0"
 
 # AI agents
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.198", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "0.80.6"
-"npm:@openai/codex"                   = "0.144.4"
+"npm:@earendil-works/pi-coding-agent" = "0.80.10"
+"npm:@openai/codex"                   = "0.144.6"
 "npm:happy"                           = { version = "1.1.10", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.17.13", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
@@ -158,6 +158,14 @@ run = [
   "mise prune",
   "mise reshim",
 ]
+
+[tasks.update-daily-tools]
+description = "Update AI tools"
+run = [
+  "mise upgrade --bump --yes npm:@earendil-works/pi-coding-agent npm:@openai/codex",
+  "pi update --extensions",
+]
+
 
 [tasks.tmux]
 description = "Install tmux and tmux plugins"
