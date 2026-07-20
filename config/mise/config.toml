@@ -147,7 +147,7 @@ run = [
   "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 
-[tasks.dev-update]
+[tasks.bump-all]
 description = "Update development environment"
 run = [
   "brew update",
@@ -159,7 +159,7 @@ run = [
   "mise reshim",
 ]
 
-[tasks.update-daily-tools]
+[tasks.bump-daily]
 description = "Update AI tools"
 run = [
   "mise upgrade --bump --yes npm:@earendil-works/pi-coding-agent npm:@openai/codex",
