@@ -18,7 +18,7 @@ fzf_options=(
   "--scheme=history"
   "--border"
   "--prompt= kitty sessions > "
-  "--header=SESSION                         DIRECTORY     ⚡ SSH host  ● open  ○ create  esc: cancel"
+  "--header=SESSION                            DIRECTORY      folder  ⚡ SSH  ● open  ○ create  esc: cancel"
   "--with-nth=2,3"
   $'--delimiter=\t'
 )
