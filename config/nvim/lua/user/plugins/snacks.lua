@@ -169,6 +169,13 @@ return {
       desc = "Search files",
     },
     {
+      "<C-p>",
+      function()
+        Snacks.picker.files({ format = format_file_columns })
+      end,
+      desc = "Search files",
+    },
+    {
       "<leader>fg",
       function()
         Snacks.picker.grep()
@@ -176,30 +183,35 @@ return {
       desc = "Live grep",
     },
     {
-      "<C-b>",
+      "<C-f>",
       function()
-        Snacks.picker.buffers({
-          on_show = function()
-            -- Always start in normal mode
-            vim.cmd.stopinsert()
+        Snacks.picker.grep()
+      end,
+      desc = "Grep",
+    },
+    {
+      "<leader>ft",
+      function()
+        Snacks.picker.lines({
+          layout = { preview = true },
+          on_close = function(item)
+            local pattern = item.input.filter.pattern
+            vim.fn.setreg("/", pattern)
           end,
-          finder = "buffers",
-          format = "buffer",
-          hidden = false,
-          unloaded = true,
-          current = true,
-          sort_lastused = true,
-          win = {
-            input = {
-              keys = {
-                ["d"] = "bufdelete",
-              },
+          matcher = {
+            fuzzy = false,
+            smartcase = true,
+            ignorecase = true,
+            sort_empty = false,
+          },
+          sort = {
+            fields = {
+              "lnum",
             },
-            list = { keys = { ["d"] = "bufdelete" } },
           },
         })
       end,
-      desc = "Buffers",
+      desc = "Grep current buffer",
     },
     {
       "<C-t>",
@@ -226,11 +238,30 @@ return {
       desc = "Grep current buffer",
     },
     {
-      "<C-f>",
+      "<C-b>",
       function()
-        Snacks.picker.grep()
+        Snacks.picker.buffers({
+          on_show = function()
+            -- Always start in normal mode
+            vim.cmd.stopinsert()
+          end,
+          finder = "buffers",
+          format = "buffer",
+          hidden = false,
+          unloaded = true,
+          current = true,
+          sort_lastused = true,
+          win = {
+            input = {
+              keys = {
+                ["d"] = "bufdelete",
+              },
+            },
+            list = { keys = { ["d"] = "bufdelete" } },
+          },
+        })
       end,
-      desc = "Grep",
+      desc = "Buffers",
     },
     {
       "<leader>sr",
