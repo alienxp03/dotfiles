@@ -63,6 +63,48 @@ func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
 	}
 }
 
+func TestLoadEntriesQueriesKittyAndZoxideConcurrently(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("KESH_CONCURRENCY_DIR", directory)
+	kitty := filepath.Join(directory, "kitty")
+	kittyScript := `#!/bin/sh
+touch "$KESH_CONCURRENCY_DIR/kitty.started"
+attempt=0
+while [ ! -e "$KESH_CONCURRENCY_DIR/zoxide.started" ] && [ "$attempt" -lt 100 ]; do
+  sleep 0.01
+  attempt=$((attempt + 1))
+done
+[ -e "$KESH_CONCURRENCY_DIR/zoxide.started" ] || exit 1
+printf '%s\n' '[{"tabs":[]}]'
+`
+	if err := os.WriteFile(kitty, []byte(kittyScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	zoxide := filepath.Join(directory, "zoxide")
+	zoxideScript := `#!/bin/sh
+touch "$KESH_CONCURRENCY_DIR/zoxide.started"
+attempt=0
+while [ ! -e "$KESH_CONCURRENCY_DIR/kitty.started" ] && [ "$attempt" -lt 100 ]; do
+  sleep 0.01
+  attempt=$((attempt + 1))
+done
+[ -e "$KESH_CONCURRENCY_DIR/kitty.started" ] || exit 1
+printf '%s\n' '/projects/parallel'
+`
+	if err := os.WriteFile(zoxide, []byte(zoxideScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].key != "/projects/parallel" {
+		t.Fatalf("entries = %#v, want concurrent zoxide project", entries)
+	}
+}
+
 func TestIsKeshTab(t *testing.T) {
 	kesh := kittyWindow{Cmdline: []string{"/Users/stan/.config/kitty/scripts/kesh/kesh"}}
 	if !isKeshTab([]kittyWindow{kesh}) {

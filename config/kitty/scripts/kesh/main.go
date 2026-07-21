@@ -86,6 +86,11 @@ type previewMsg struct {
 	err      error
 }
 
+type commandResult struct {
+	output []byte
+	err    error
+}
+
 type pinTarget struct {
 	Key         string `json:"key"`
 	Name        string `json:"name"`
@@ -1105,6 +1110,15 @@ func truncate(value string, width int) string {
 	return string(runes[:width-1]) + "…"
 }
 
+func commandOutput(name string, args ...string) <-chan commandResult {
+	result := make(chan commandResult, 1)
+	go func() {
+		output, err := exec.Command(name, args...).Output()
+		result <- commandResult{output: output, err: err}
+	}()
+	return result
+}
+
 func loadEntries(kitty, zoxide string) ([]entry, error) {
 	if kitty == "" {
 		return nil, fmt.Errorf("kitty was not found")
@@ -1112,12 +1126,18 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	if zoxide == "" {
 		return nil, fmt.Errorf("zoxide was not found")
 	}
-	output, err := exec.Command(kitty, "@", "ls").Output()
-	if err != nil {
-		return nil, fmt.Errorf("kitty @ ls: %w", err)
+	kittyResult := commandOutput(kitty, "@", "ls")
+	zoxideResult := commandOutput(zoxide, "query", "-l")
+	kittyOutput := <-kittyResult
+	zoxideOutput := <-zoxideResult
+	if kittyOutput.err != nil {
+		return nil, fmt.Errorf("kitty @ ls: %w", kittyOutput.err)
+	}
+	if zoxideOutput.err != nil {
+		return nil, fmt.Errorf("zoxide query: %w", zoxideOutput.err)
 	}
 	var state kittyState
-	if err := json.Unmarshal(output, &state); err != nil {
+	if err := json.Unmarshal(kittyOutput.output, &state); err != nil {
 		return nil, fmt.Errorf("decode kitty state: %w", err)
 	}
 	selfID, _ := strconv.Atoi(os.Getenv("KITTY_WINDOW_ID"))
@@ -1217,11 +1237,7 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		tabsByPath[path] = append(tabsByPath[path], tabs...)
 	}
 
-	zoxideOutput, err := exec.Command(zoxide, "query", "-l").Output()
-	if err != nil {
-		return nil, fmt.Errorf("zoxide query: %w", err)
-	}
-	paths := strings.FieldsFunc(string(zoxideOutput), func(r rune) bool { return r == '\n' || r == '\r' })
+	paths := strings.FieldsFunc(string(zoxideOutput.output), func(r rune) bool { return r == '\n' || r == '\r' })
 	known := map[string]bool{}
 	for _, path := range paths {
 		known[path] = true
