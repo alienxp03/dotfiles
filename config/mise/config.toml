@@ -86,6 +86,7 @@ ripgrep                              = "15.1.0"
 sqlite                               = "3.53.3"
 yazi                                 = "26.5.6"
 yq                                   = "4.53.3"
+herdr = "latest"
 
 [settings]
 experimental = true
