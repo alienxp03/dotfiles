@@ -64,6 +64,7 @@ type entry struct {
 	expanded    bool
 	tabs        []tabItem
 	order       int
+	pin         string
 }
 
 type row struct {
@@ -73,6 +74,15 @@ type row struct {
 }
 
 type actionMsg struct{ err error }
+
+type pinTarget struct {
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind,omitempty"`
+	SessionFile string `json:"session_file,omitempty"`
+}
+
+type pinStore map[string]pinTarget
 
 type renameMsg struct {
 	selected row
@@ -88,6 +98,10 @@ type model struct {
 	searching   bool
 	renaming    bool
 	renameValue string
+	pinning     bool
+	pinEntry    int
+	confirmSlot string
+	pins        pinStore
 	filter      int
 	width       int
 	height      int
@@ -107,20 +121,42 @@ var (
 )
 
 func main() {
+	kitty, zoxide := commands()
+	if len(os.Args) > 1 {
+		if len(os.Args) != 3 || os.Args[1] != "switch" || !validSlot(os.Args[2]) {
+			fmt.Fprintln(os.Stderr, "usage: kesh switch SLOT (SLOT must be 0-9)")
+			os.Exit(2)
+		}
+		if err := switchPin(kitty, zoxide, os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	fmt.Print("\033]2;kesh\007")
+	entries, loadErr := loadEntries(kitty, zoxide)
+	pins, pinErr := loadPins()
+	if loadErr == nil && pinErr != nil {
+		loadErr = pinErr
+	}
+	applyPins(entries, pins)
+	m := model{entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins}
+	m.rebuildRows()
+	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func commands() (string, string) {
 	kitty := findCommand("kitty", "/Applications/kitty.app/Contents/MacOS/kitty")
 	zoxide := findCommand("zoxide",
 		filepath.Join(os.Getenv("HOME"), ".local", "bin", "zoxide"),
 		filepath.Join(os.Getenv("HOME"), ".local", "share", "mise", "shims", "zoxide"),
 		"/opt/homebrew/bin/zoxide",
 	)
-	entries, loadErr := loadEntries(kitty, zoxide)
-	m := model{entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide}
-	m.rebuildRows()
-	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	return kitty, zoxide
 }
 
 func findCommand(name string, fallbacks ...string) string {
@@ -133,6 +169,175 @@ func findCommand(name string, fallbacks ...string) string {
 		}
 	}
 	return ""
+}
+
+func validSlot(slot string) bool {
+	return len(slot) == 1 && slot[0] >= '0' && slot[0] <= '9'
+}
+
+func pinsPath() string {
+	stateHome := os.Getenv("XDG_STATE_HOME")
+	if stateHome == "" {
+		stateHome = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	}
+	return filepath.Join(stateHome, "kesh", "pins.json")
+}
+
+func loadPins() (pinStore, error) {
+	pins := pinStore{}
+	content, err := os.ReadFile(pinsPath())
+	if os.IsNotExist(err) {
+		return pins, nil
+	}
+	if err != nil {
+		return pins, fmt.Errorf("read pins: %w", err)
+	}
+	if err := json.Unmarshal(content, &pins); err != nil {
+		return pinStore{}, fmt.Errorf("invalid pin state: %w", err)
+	}
+	seenTargets := map[string]string{}
+	sessionsDirectory := filepath.Clean(filepath.Join(filepath.Dir(pinsPath()), "sessions")) + string(os.PathSeparator)
+	for slot, target := range pins {
+		if !validSlot(slot) || target.Key == "" {
+			return pinStore{}, fmt.Errorf("invalid pin entry for slot %q", slot)
+		}
+		if target.Kind != "" && target.Kind != "project" && target.Kind != "ssh" {
+			return pinStore{}, fmt.Errorf("invalid pin kind for slot %s", slot)
+		}
+		if target.SessionFile != "" && !strings.HasPrefix(filepath.Clean(target.SessionFile), sessionsDirectory) {
+			return pinStore{}, fmt.Errorf("invalid session file for slot %s", slot)
+		}
+		if previous, exists := seenTargets[target.Key]; exists {
+			return pinStore{}, fmt.Errorf("session is pinned more than once: slots %s and %s", previous, slot)
+		}
+		seenTargets[target.Key] = slot
+	}
+	return pins, nil
+}
+
+func savePins(pins pinStore) error {
+	path := pinsPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create pin directory: %w", err)
+	}
+	content, err := json.MarshalIndent(pins, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode pins: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".pins-*.json")
+	if err != nil {
+		return fmt.Errorf("create pin state: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(append(content, '\n')); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, path); err != nil {
+		return fmt.Errorf("save pins: %w", err)
+	}
+	return nil
+}
+
+func pinTargetForEntry(e entry) (pinTarget, error) {
+	directory := filepath.Join(filepath.Dir(pinsPath()), "sessions")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return pinTarget{}, fmt.Errorf("create pinned session directory: %w", err)
+	}
+	name := e.session
+	if name == "" {
+		if e.kind == "ssh" {
+			name = "ssh-" + safeName(strings.TrimPrefix(e.key, "ssh://"))
+		} else {
+			name = safeName(filepath.Base(e.key))
+			if e.nameTaken {
+				name += "-" + shortHash(e.key)
+			}
+		}
+	}
+	path := filepath.Join(directory, safeName(name)+".kitty-session")
+	var content string
+	if e.kind == "ssh" {
+		host := strings.TrimPrefix(e.key, "ssh://")
+		content = fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"ssh: %s\" ssh \"%s\"\nfocus\nfocus_os_window\n", os.Getenv("HOME"), host, host)
+	} else {
+		content = fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"%s\"\nfocus\nfocus_os_window\n", e.key, filepath.Base(e.key))
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return pinTarget{}, fmt.Errorf("write pinned session: %w", err)
+	}
+	return pinTarget{Key: e.key, Name: e.name, Kind: e.kind, SessionFile: path}, nil
+}
+
+func applyPins(entries []entry, pins pinStore) {
+	for index := range entries {
+		entries[index].pin = ""
+	}
+	for slot, target := range pins {
+		for index := range entries {
+			if entries[index].key == target.Key {
+				entries[index].pin = slot
+				break
+			}
+		}
+	}
+}
+
+func switchPin(kitty, zoxide, slot string) error {
+	pins, err := loadPins()
+	if err != nil {
+		return err
+	}
+	target, ok := pins[slot]
+	if !ok {
+		return fmt.Errorf("no session is pinned to slot %s", slot)
+	}
+	if target.Kind == "project" {
+		if info, err := os.Stat(target.Key); err != nil || !info.IsDir() {
+			return fmt.Errorf("pinned project is unavailable: %s", target.Key)
+		}
+	}
+	if target.SessionFile != "" {
+		if info, err := os.Stat(target.SessionFile); err != nil || info.IsDir() {
+			return fmt.Errorf("pinned session file is unavailable: %s", target.SessionFile)
+		}
+		return run(kitty, "@", "action", "goto_session", target.SessionFile)
+	}
+
+	// Older pin entries are migrated on their first use.
+	os.Unsetenv("KITTY_WINDOW_ID")
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range entries {
+		if candidate.key != target.Key {
+			continue
+		}
+		if candidate.kind == "project" && !candidate.open {
+			if info, err := os.Stat(candidate.key); err != nil || !info.IsDir() {
+				return fmt.Errorf("pinned project is unavailable: %s", candidate.key)
+			}
+		}
+		migrated, err := pinTargetForEntry(candidate)
+		if err != nil {
+			return err
+		}
+		pins[slot] = migrated
+		if err := savePins(pins); err != nil {
+			return err
+		}
+		return run(kitty, "@", "action", "goto_session", migrated.SessionFile)
+	}
+	return fmt.Errorf("pinned session is no longer available: %s", target.Name)
 }
 
 func (m model) Init() tea.Cmd {
@@ -167,6 +372,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 		if key == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if m.pinning {
+			switch {
+			case key == "esc":
+				m.pinning = false
+				m.confirmSlot = ""
+				m.err = nil
+			case key == "x":
+				m.unpinSelected()
+			case validSlot(key):
+				m.assignPin(key)
+			default:
+				m.err = fmt.Errorf("pin slot must be a digit from 0 to 9")
+			}
+			return m, nil
 		}
 		if m.renaming {
 			switch key {
@@ -238,6 +458,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, runAction(m.kitty, m.zoxide, m.entries[r.entryIndex], r)
 		case "r":
 			m.beginRename()
+		case "p":
+			m.beginPin()
 		case "tab":
 			m.filter = (m.filter + 1) % 4
 			m.rebuildRows()
@@ -247,6 +469,70 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *model) beginPin() {
+	if len(m.rows) == 0 {
+		return
+	}
+	selected := m.rows[m.cursor]
+	m.pinEntry = selected.entryIndex
+	m.pinning = true
+	m.confirmSlot = ""
+	m.err = nil
+}
+
+func (m *model) assignPin(slot string) {
+	selected := m.entries[m.pinEntry]
+	if occupied, ok := m.pins[slot]; ok && occupied.Key != selected.key && m.confirmSlot != slot {
+		m.confirmSlot = slot
+		m.err = fmt.Errorf("slot %s is pinned to %s; press %s again to replace it", slot, occupied.Name, slot)
+		return
+	}
+	updated := make(pinStore, len(m.pins)+1)
+	for existingSlot, target := range m.pins {
+		if target.Key != selected.key && existingSlot != slot {
+			updated[existingSlot] = target
+		}
+	}
+	target, err := pinTargetForEntry(selected)
+	if err != nil {
+		m.err = err
+		return
+	}
+	updated[slot] = target
+	if err := savePins(updated); err != nil {
+		m.err = err
+		return
+	}
+	m.pins = updated
+	applyPins(m.entries, m.pins)
+	m.pinning = false
+	m.confirmSlot = ""
+	m.err = nil
+}
+
+func (m *model) unpinSelected() {
+	selected := m.entries[m.pinEntry]
+	updated := make(pinStore, len(m.pins))
+	for slot, target := range m.pins {
+		if target.Key != selected.key {
+			updated[slot] = target
+		}
+	}
+	if len(updated) == len(m.pins) {
+		m.err = fmt.Errorf("%s is not pinned", selected.name)
+		return
+	}
+	if err := savePins(updated); err != nil {
+		m.err = err
+		return
+	}
+	m.pins = updated
+	applyPins(m.entries, m.pins)
+	m.pinning = false
+	m.confirmSlot = ""
+	m.err = nil
 }
 
 func (m *model) beginRename() {
@@ -419,10 +705,6 @@ func (m model) View() string {
 	if m.searching {
 		promptValue = accentStyle.Render("/"+m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
-	if m.renaming {
-		promptLabel = "Rename"
-		promptValue = accentStyle.Render(m.renameValue + "█")
-	}
 	lines := []string{
 		accentStyle.Render("Kitty sessions") + "  " + strings.Join(tabs, " "),
 		fmt.Sprintf("%-6s  %s", promptLabel, promptValue),
@@ -447,18 +729,69 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil {
+	if m.err != nil && !m.renaming && !m.pinning {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  h/l collapse/expand  enter open  r rename  / search  tab filter  q quit"
+	footer := "j/k move  h/l collapse/expand  enter open  p pin  r rename  / search  tab filter  q quit"
 	if m.searching {
 		footer = "type to filter  backspace delete  ctrl+u clear  enter/esc normal mode"
 	}
-	if m.renaming {
-		footer = "type a title  backspace delete  ctrl+u clear  enter save  esc cancel"
-	}
 	lines = append(lines, dimStyle.Render(footer))
+	if popup := m.popupView(width); popup != "" {
+		lines = overlayPopup(lines, popup, width)
+	}
 	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n"))
+}
+
+func (m model) popupView(width int) string {
+	if !m.renaming && !m.pinning {
+		return ""
+	}
+	popupWidth := min(50, max(28, width-10))
+	var title, field, help string
+	if m.renaming {
+		title = "Rename"
+		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
+		help = "Enter save  •  Esc cancel"
+	} else {
+		title = "Pin " + m.entries[m.pinEntry].name
+		slot := "█"
+		if m.confirmSlot != "" {
+			slot = m.confirmSlot
+		}
+		field = selectedStyle.Width(popupWidth - 6).Render("Slot: " + slot)
+		if m.confirmSlot != "" {
+			help = "Press " + m.confirmSlot + " again to replace  •  Esc cancel"
+		} else {
+			help = "0–9 assign  •  x unpin  •  Esc cancel"
+		}
+	}
+	body := accentStyle.Render(title) + "\n\n" + field + "\n\n" + dimStyle.Render(help)
+	if m.err != nil {
+		body += "\n" + errorStyle.Render(m.err.Error())
+	}
+	return lipgloss.NewStyle().
+		Width(popupWidth).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("205")).
+		Render(body)
+}
+
+func overlayPopup(lines []string, popup string, width int) []string {
+	popupLines := strings.Split(popup, "\n")
+	start := max(3, (len(lines)-len(popupLines))/2)
+	if start+len(popupLines) > len(lines) {
+		start = max(3, len(lines)-len(popupLines))
+	}
+	for index, popupLine := range popupLines {
+		lineIndex := start + index
+		if lineIndex >= len(lines) {
+			break
+		}
+		lines[lineIndex] = lipgloss.PlaceHorizontal(width, lipgloss.Center, popupLine)
+	}
+	return lines
 }
 
 func (m model) renderRow(r row, width int) string {
@@ -509,8 +842,12 @@ func (m model) renderRow(r row, width int) string {
 	if e.kind == "ssh" {
 		icon = sshStyle.Render("⚡")
 	}
-	nameWidth := max(8, width*4/10-9)
-	left := fmt.Sprintf("%s %s %s  %-*s", marker, arrow, icon, nameWidth, truncate(e.name, nameWidth))
+	pin := "   "
+	if e.pin != "" {
+		pin = accentStyle.Render("[" + e.pin + "]")
+	}
+	nameWidth := max(8, width*4/10-13)
+	left := fmt.Sprintf("%s %s %s %s  %-*s", marker, pin, arrow, icon, nameWidth, truncate(e.name, nameWidth))
 	return padColumns(left, dimStyle.Render(truncate(e.detail, max(10, width-38))), width)
 }
 
