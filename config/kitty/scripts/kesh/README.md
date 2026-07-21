@@ -19,6 +19,7 @@ The picker starts in normal mode:
 - `p`, then `0`–`9`: pin the selected session to a shortcut slot
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
+- `x`, then `x` again: confirm closing the selected workspace, tab, or window
 - `/`: enter search mode; typing then fuzzy-filters sessions
 - `enter` / `esc`: leave search mode
 - `tab` / `shift+tab`: change filter

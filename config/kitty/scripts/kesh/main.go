@@ -81,6 +81,11 @@ type row struct {
 
 type actionMsg struct{ err error }
 
+type closeMsg struct {
+	entries []entry
+	err     error
+}
+
 type previewMsg struct {
 	windowID int
 	content  string
@@ -121,6 +126,9 @@ type model struct {
 	pinning     bool
 	pinEntry    int
 	confirmSlot string
+	closing     bool
+	closeBusy   bool
+	closeRow    row
 	pins        pinStore
 	names       nameStore
 	filter      int
@@ -486,6 +494,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case closeMsg:
+		m.closeBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.entries = msg.entries
+		applyNames(m.entries, m.names)
+		applyPins(m.entries, m.pins)
+		m.closing = false
+		m.err = nil
+		m.previewID = 0
+		m.preview = ""
+		m.previewErr = nil
+		m.previewBusy = false
+		m.rebuildRows()
+		return m, m.queuePreview()
 	case previewMsg:
 		if msg.windowID != m.previewID {
 			return m, nil
@@ -531,6 +556,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.assignPin(key)
 			default:
 				m.err = fmt.Errorf("pin slot must be a digit from 0 to 9")
+			}
+			return m, nil
+		}
+		if m.closing {
+			if m.closeBusy {
+				return m, nil
+			}
+			switch key {
+			case "esc":
+				m.closing = false
+				m.err = nil
+			case "x":
+				m.closeBusy = true
+				m.err = nil
+				selected := m.closeRow
+				return m, runClose(m.kitty, m.zoxide, m.entries[selected.entryIndex], selected)
+			default:
+				m.err = fmt.Errorf("press x to confirm or esc to cancel")
 			}
 			return m, nil
 		}
@@ -604,6 +647,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, runAction(m.kitty, m.zoxide, m.entries[r.entryIndex], r)
 		case "r":
 			m.beginRename()
+		case "x":
+			m.beginClose()
 		case "p":
 			if m.filter == filterAgents {
 				m.showPreview = !m.showPreview
@@ -623,6 +668,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.queuePreview()
 	}
 	return m, nil
+}
+
+func (m *model) beginClose() {
+	if len(m.rows) == 0 {
+		return
+	}
+	selected := m.rows[m.cursor]
+	entry := m.entries[selected.entryIndex]
+	if selected.tabIndex < 0 && len(entry.tabs) == 0 {
+		m.err = fmt.Errorf("%s is not open", entry.name)
+		return
+	}
+	m.closeRow = selected
+	m.closing = true
+	m.closeBusy = false
+	m.err = nil
 }
 
 func (m *model) beginPin() {
@@ -985,12 +1046,12 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.pinning {
+	if m.err != nil && !m.renaming && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  h/l collapse/expand  enter open  p pin  r rename  / search  tab filter  q quit"
+	footer := "j/k move  h/l collapse/expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
-		footer = "j/k move  enter focus  p preview  r rename  / search  tab filter  q quit"
+		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
 	if m.searching {
 		footer = "type to filter  backspace delete  ctrl+u clear  enter/esc normal mode"
@@ -1026,7 +1087,7 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.pinning {
+	if !m.renaming && !m.pinning && !m.closing {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
@@ -1035,7 +1096,7 @@ func (m model) popupView(width int) string {
 		title = "Rename"
 		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
 		help = "Enter save  •  Esc cancel"
-	} else {
+	} else if m.pinning {
 		title = "Pin " + m.entries[m.pinEntry].name
 		slot := "█"
 		if m.confirmSlot != "" {
@@ -1046,6 +1107,14 @@ func (m model) popupView(width int) string {
 			help = "Press " + m.confirmSlot + " again to replace  •  Esc cancel"
 		} else {
 			help = "0–9 assign  •  x unpin  •  Esc cancel"
+		}
+	} else {
+		title = "Close"
+		field = lipgloss.NewStyle().Width(popupWidth - 6).Render(m.closePrompt())
+		if m.closeBusy {
+			help = "Closing…"
+		} else {
+			help = "Press x to confirm  •  Esc cancel"
 		}
 	}
 	body := accentStyle.Render(title) + "\n\n" + field + "\n\n" + dimStyle.Render(help)
@@ -1058,6 +1127,20 @@ func (m model) popupView(width int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("205")).
 		Render(body)
+}
+
+func (m model) closePrompt() string {
+	selected := m.closeRow
+	entry := m.entries[selected.entryIndex]
+	if selected.windowIndex >= 0 {
+		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
+		return fmt.Sprintf("Close window %q?", window.title)
+	}
+	if selected.tabIndex >= 0 {
+		tab := entry.tabs[selected.tabIndex]
+		return fmt.Sprintf("Close tab %q and its %d window%s?", tab.title, len(tab.windows), plural(len(tab.windows)))
+	}
+	return fmt.Sprintf("Close workspace %q and its %d tab%s?", entry.name, len(entry.tabs), plural(len(entry.tabs)))
 }
 
 func overlayPopup(lines []string, popup string, width int) []string {
@@ -1606,6 +1689,39 @@ func runRename(kitty string, e entry, selected row, title string, names nameStor
 			names = updated
 		}
 		return renameMsg{selected: selected, title: title, names: names, err: err}
+	}
+}
+
+func closeArgs(e entry, selected row) ([]string, error) {
+	if selected.windowIndex >= 0 {
+		window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
+		return []string{"@", "close-window", "--match", "id:" + strconv.Itoa(window.id)}, nil
+	}
+	if selected.tabIndex >= 0 {
+		tab := e.tabs[selected.tabIndex]
+		return []string{"@", "close-tab", "--match", "id:" + strconv.Itoa(tab.id)}, nil
+	}
+	if len(e.tabs) == 0 {
+		return nil, fmt.Errorf("%s is not open", e.name)
+	}
+	matches := make([]string, 0, len(e.tabs))
+	for _, tab := range e.tabs {
+		matches = append(matches, "id:"+strconv.Itoa(tab.id))
+	}
+	return []string{"@", "close-tab", "--match", strings.Join(matches, " or ")}, nil
+}
+
+func runClose(kitty, zoxide string, e entry, selected row) tea.Cmd {
+	return func() tea.Msg {
+		args, err := closeArgs(e, selected)
+		if err == nil {
+			err = run(kitty, args...)
+		}
+		if err != nil {
+			return closeMsg{err: err}
+		}
+		entries, err := loadEntries(kitty, zoxide)
+		return closeMsg{entries: entries, err: err}
 	}
 }
 

@@ -3,8 +3,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestParseArgs(t *testing.T) {
@@ -364,5 +367,75 @@ func TestWorkspaceSearchMatchesOriginalNameAfterRename(t *testing.T) {
 	m.rebuildRows()
 	if len(m.rows) != 1 {
 		t.Fatalf("original workspace name search returned %d rows, want 1", len(m.rows))
+	}
+}
+
+func TestCloseArgsTargetsSelectedHierarchyLevel(t *testing.T) {
+	e := entry{
+		name: "Payments",
+		tabs: []tabItem{
+			{id: 12, windows: []windowItem{{id: 120}, {id: 121}}},
+			{id: 14, windows: []windowItem{{id: 140}}},
+		},
+	}
+	tests := []struct {
+		name     string
+		selected row
+		want     []string
+	}{
+		{
+			name:     "workspace",
+			selected: row{entryIndex: 0, tabIndex: -1, windowIndex: -1},
+			want:     []string{"@", "close-tab", "--match", "id:12 or id:14"},
+		},
+		{
+			name:     "tab",
+			selected: row{entryIndex: 0, tabIndex: 1, windowIndex: -1},
+			want:     []string{"@", "close-tab", "--match", "id:14"},
+		},
+		{
+			name:     "window",
+			selected: row{entryIndex: 0, tabIndex: 0, windowIndex: 1},
+			want:     []string{"@", "close-window", "--match", "id:121"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := closeArgs(e, test.selected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("closeArgs() = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCloseRequiresConfirmationAndRejectsInactiveWorkspace(t *testing.T) {
+	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
+	m := model{
+		entries: []entry{{name: "Payments", tabs: []tabItem{{id: 12}}}},
+		rows:    []row{selected},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(model)
+	if !m.closing || m.closeBusy || cmd != nil {
+		t.Fatalf("first x should open confirmation: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
+	}
+	if popup := m.popupView(80); !strings.Contains(popup, `Close workspace "Payments"`) || !strings.Contains(popup, "Press x to confirm") {
+		t.Fatalf("close popup is missing confirmation details:\n%s", popup)
+	}
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m = updated.(model)
+	if !m.closing || !m.closeBusy || cmd == nil {
+		t.Fatalf("second x should start closing: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
+	}
+
+	inactive := model{entries: []entry{{name: "Payments"}}, rows: []row{selected}}
+	updated, _ = inactive.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	inactive = updated.(model)
+	if inactive.closing || inactive.err == nil || !strings.Contains(inactive.err.Error(), "not open") {
+		t.Fatalf("inactive close state: closing=%v err=%v", inactive.closing, inactive.err)
 	}
 }
