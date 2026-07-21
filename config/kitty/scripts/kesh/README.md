@@ -18,7 +18,7 @@ The picker starts in normal mode:
 - `enter`: open a session, focus a tab, or focus a window
 - `p`, then `0`–`9`: pin the selected session to a shortcut slot
 - `p`, then `x`: unpin the selected session
-- `r`: rename the selected tab or window
+- `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
 - `/`: enter search mode; typing then fuzzy-filters sessions
 - `enter` / `esc`: leave search mode
 - `tab` / `shift+tab`: change filter
@@ -35,3 +35,5 @@ The `Agents` filter is a flat, most-recently-focused list of Kitty windows runni
 Run `kesh agents` to start directly in this view. Kitty invokes it in an overlay for `Cmd+Shift+P`; `Cmd+Shift+I` opens the complete hierarchy in a tab.
 
 Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kitty invokes `kesh switch 0` through `kesh switch 9` in the background for `Cmd+0` through `Cmd+9`.
+
+Workspace names are Kesh aliases stored in `~/config/kesh/names.json`. Kitty's internal session identity remains unchanged, so aliases can be edited without recreating a live session. Search matches both the alias and the original project or SSH name.

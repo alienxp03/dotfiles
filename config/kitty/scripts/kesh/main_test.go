@@ -297,3 +297,72 @@ func TestLoadPinsRejectsInvalidState(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkspaceNamesRoundTripInHomeConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	want := nameStore{
+		"/projects/payments": "Payments",
+		"ssh://production":   "Production",
+	}
+	if err := saveNames(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadNames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) || got["/projects/payments"] != "Payments" || got["ssh://production"] != "Production" {
+		t.Fatalf("workspace names = %#v, want %#v", got, want)
+	}
+	info, err := os.Stat(filepath.Join(home, "config", "kesh", "names.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("workspace name permissions are %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestSessionRenamePersistsAliasAndEmptyNameResetsIt(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	e := entry{key: "/projects/payments", name: "payments", originalName: "payments"}
+	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
+	m := model{entries: []entry{e}, rows: []row{selected}, names: nameStore{}}
+
+	msg := runRename("", e, selected, "  Payments  ", m.names)().(renameMsg)
+	updated, _ := m.Update(msg)
+	m = updated.(model)
+	if m.entries[0].name != "Payments" || m.names[e.key] != "Payments" {
+		t.Fatalf("renamed model = %#v, names = %#v", m.entries[0], m.names)
+	}
+	stored, err := loadNames()
+	if err != nil || stored[e.key] != "Payments" {
+		t.Fatalf("stored names = %#v, err = %v", stored, err)
+	}
+
+	msg = runRename("", m.entries[0], selected, "", m.names)().(renameMsg)
+	updated, _ = m.Update(msg)
+	m = updated.(model)
+	if m.entries[0].name != "payments" {
+		t.Fatalf("reset name = %q, want payments", m.entries[0].name)
+	}
+	stored, err = loadNames()
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("stored names after reset = %#v, err = %v", stored, err)
+	}
+}
+
+func TestWorkspaceSearchMatchesOriginalNameAfterRename(t *testing.T) {
+	m := model{
+		query: "pymnts",
+		entries: []entry{{
+			key: "/projects/payments", name: "Billing", originalName: "payments", detail: "/projects/payments",
+		}},
+	}
+	m.rebuildRows()
+	if len(m.rows) != 1 {
+		t.Fatalf("original workspace name search returned %d rows, want 1", len(m.rows))
+	}
+}

@@ -57,19 +57,20 @@ type tabItem struct {
 }
 
 type entry struct {
-	key         string
-	name        string
-	detail      string
-	kind        string
-	session     string
-	open        bool
-	lastFocused float64
-	nameTaken   bool
-	agent       string
-	expanded    bool
-	tabs        []tabItem
-	order       int
-	pin         string
+	key          string
+	name         string
+	originalName string
+	detail       string
+	kind         string
+	session      string
+	open         bool
+	lastFocused  float64
+	nameTaken    bool
+	agent        string
+	expanded     bool
+	tabs         []tabItem
+	order        int
+	pin          string
 }
 
 type row struct {
@@ -100,9 +101,12 @@ type pinTarget struct {
 
 type pinStore map[string]pinTarget
 
+type nameStore map[string]string
+
 type renameMsg struct {
 	selected row
 	title    string
+	names    nameStore
 	err      error
 }
 
@@ -118,6 +122,7 @@ type model struct {
 	pinEntry    int
 	confirmSlot string
 	pins        pinStore
+	names       nameStore
 	filter      int
 	width       int
 	height      int
@@ -171,12 +176,17 @@ func main() {
 	fmt.Print("\033]2;kesh\007")
 	entries, loadErr := loadEntries(kitty, zoxide)
 	pins, pinErr := loadPins()
+	names, nameErr := loadNames()
 	if loadErr == nil && pinErr != nil {
 		loadErr = pinErr
 	}
+	if loadErr == nil && nameErr != nil {
+		loadErr = nameErr
+	}
+	applyNames(entries, names)
 	applyPins(entries, pins)
 	m := model{
-		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins,
+		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
 		filter: filter, showPreview: true,
 	}
 	m.rebuildRows()
@@ -232,6 +242,74 @@ func pinsPath() string {
 		stateHome = filepath.Join(os.Getenv("HOME"), ".local", "state")
 	}
 	return filepath.Join(stateHome, "kesh", "pins.json")
+}
+
+func namesPath() string {
+	return filepath.Join(os.Getenv("HOME"), "config", "kesh", "names.json")
+}
+
+func loadNames() (nameStore, error) {
+	names := nameStore{}
+	content, err := os.ReadFile(namesPath())
+	if os.IsNotExist(err) {
+		return names, nil
+	}
+	if err != nil {
+		return names, fmt.Errorf("read workspace names: %w", err)
+	}
+	if err := json.Unmarshal(content, &names); err != nil {
+		return nameStore{}, fmt.Errorf("invalid workspace names: %w", err)
+	}
+	for key, name := range names {
+		if key == "" || strings.TrimSpace(name) == "" {
+			return nameStore{}, fmt.Errorf("invalid workspace name for %q", key)
+		}
+	}
+	return names, nil
+}
+
+func saveNames(names nameStore) error {
+	path := namesPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create workspace name directory: %w", err)
+	}
+	content, err := json.MarshalIndent(names, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode workspace names: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".names-*.json")
+	if err != nil {
+		return fmt.Errorf("create workspace name state: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(append(content, '\n')); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, path); err != nil {
+		return fmt.Errorf("save workspace names: %w", err)
+	}
+	return nil
+}
+
+func applyNames(entries []entry, names nameStore) {
+	for index := range entries {
+		if entries[index].originalName == "" {
+			entries[index].originalName = entries[index].name
+		}
+		entries[index].name = entries[index].originalName
+		if alias := names[entries[index].key]; alias != "" {
+			entries[index].name = alias
+		}
+	}
 }
 
 func loadPins() (pinStore, error) {
@@ -423,8 +501,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		entry := &m.entries[msg.selected.entryIndex]
 		if msg.selected.windowIndex >= 0 {
 			entry.tabs[msg.selected.tabIndex].windows[msg.selected.windowIndex].title = msg.title
-		} else {
+		} else if msg.selected.tabIndex >= 0 {
 			entry.tabs[msg.selected.tabIndex].title = msg.title
+		} else {
+			m.names = msg.names
+			entry.name = msg.title
+			if entry.name == "" {
+				entry.name = entry.originalName
+			}
+			m.rebuildRows()
 		}
 		m.renaming = false
 		m.renameValue = ""
@@ -457,7 +542,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				if len(m.rows) > 0 {
 					selected := m.rows[m.cursor]
-					return m, runRename(m.kitty, m.entries[selected.entryIndex], selected, m.renameValue)
+					return m, runRename(m.kitty, m.entries[selected.entryIndex], selected, m.renameValue, m.names)
 				}
 			case "backspace":
 				runes := []rune(m.renameValue)
@@ -622,7 +707,9 @@ func (m *model) beginRename() {
 		m.err = nil
 		return
 	}
-	m.err = fmt.Errorf("Kitty session names cannot be changed; select a tab or window")
+	m.renameValue = entry.name
+	m.renaming = true
+	m.err = nil
 }
 
 func (m *model) expandOrDescend() {
@@ -705,7 +792,7 @@ func (m *model) rebuildRows() {
 	var rows []row
 	for i := range m.entries {
 		e := &m.entries[i]
-		if !m.matchesFilter(*e) || !fuzzyMatch(m.query, e.name+" "+e.detail) {
+		if !m.matchesFilter(*e) || !fuzzyMatch(m.query, e.name+" "+e.originalName+" "+e.detail) {
 			continue
 		}
 		rows = append(rows, row{entryIndex: i, tabIndex: -1, windowIndex: -1})
@@ -792,7 +879,7 @@ func (m *model) rebuildAgentRows() {
 					continue
 				}
 				searchValue := strings.Join([]string{
-					window.agent, e.name, e.detail, tab.title, window.title, window.command, window.detail,
+					window.agent, e.name, e.originalName, e.detail, tab.title, window.title, window.command, window.detail,
 				}, " ")
 				if !fuzzyMatch(m.query, searchValue) {
 					continue
@@ -1259,7 +1346,7 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		session := byPath[path]
 		tabs := tabsByPath[path]
 		entries = append(entries, entry{
-			key: path, name: name, detail: displayPath(path, home), kind: "project",
+			key: path, name: name, originalName: name, detail: displayPath(path, home), kind: "project",
 			session: session, open: len(tabs) > 0, lastFocused: openPaths[path],
 			nameTaken: sessionNames[safeName(name)], agent: mergedTabAgents(tabs), tabs: tabs, order: order,
 		})
@@ -1275,7 +1362,7 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 			}
 		}
 		entries = append(entries, entry{
-			key: "ssh://" + host.name, name: host.name, detail: host.target, kind: "ssh",
+			key: "ssh://" + host.name, name: host.name, originalName: host.name, detail: host.target, kind: "ssh",
 			session: session, open: session != "", lastFocused: openSSH[host.name],
 			agent: mergedTabAgents(tabs), tabs: tabs, order: order,
 		})
@@ -1495,17 +1582,30 @@ func readSSHHosts(path string) []sshConfigHost {
 	return result
 }
 
-func runRename(kitty string, e entry, selected row, title string) tea.Cmd {
+func runRename(kitty string, e entry, selected row, title string, names nameStore) tea.Cmd {
 	return func() tea.Msg {
 		var err error
 		if selected.windowIndex >= 0 {
 			window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
 			err = run(kitty, "@", "set-window-title", "--match", "id:"+strconv.Itoa(window.id), title)
-		} else {
+		} else if selected.tabIndex >= 0 {
 			tab := e.tabs[selected.tabIndex]
 			err = run(kitty, "@", "set-tab-title", "--match", "id:"+strconv.Itoa(tab.id), title)
+		} else {
+			title = strings.TrimSpace(title)
+			updated := make(nameStore, len(names)+1)
+			for key, name := range names {
+				updated[key] = name
+			}
+			if title == "" {
+				delete(updated, e.key)
+			} else {
+				updated[e.key] = title
+			}
+			err = saveNames(updated)
+			names = updated
 		}
-		return renameMsg{selected: selected, title: title, err: err}
+		return renameMsg{selected: selected, title: title, names: names, err: err}
 	}
 }
 
