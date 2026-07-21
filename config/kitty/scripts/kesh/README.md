@@ -1,6 +1,6 @@
 # kesh
 
-Bubble Tea picker for browsing zoxide projects, Kitty sessions, tabs, windows, and SSH hosts.
+Bubble Tea picker for browsing zoxide projects, Kitty sessions, tabs, windows, SSH hosts, and active Codex/Pi agents.
 
 Build the binary used directly by `kitty.conf`:
 
@@ -25,5 +25,13 @@ The picker starts in normal mode:
 - `q` / `esc`: close from normal mode
 
 Arrow keys remain available as alternatives to `hjkl`.
+
+The `Agents` filter is a flat, most-recently-focused list of Kitty windows running Codex or Pi. It includes a live snapshot of the selected window's terminal:
+
+- `enter`: focus the selected agent window
+- `p`: show or hide the terminal preview
+- `/`: fuzzy-search agent, project, tab, command, and directory fields
+
+Run `kesh agents` to start directly in this view. Kitty invokes it in an overlay for `Cmd+Shift+P`; `Cmd+Shift+I` opens the complete hierarchy in a tab.
 
 Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kitty invokes `kesh switch 0` through `kesh switch 9` in the background for `Cmd+0` through `Cmd+9`.

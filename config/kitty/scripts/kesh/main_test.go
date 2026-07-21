@@ -3,8 +3,33 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestParseArgs(t *testing.T) {
+	tests := []struct {
+		args       []string
+		wantFilter int
+		wantSlot   string
+		wantError  bool
+	}{
+		{wantFilter: filterAll},
+		{args: []string{"agents"}, wantFilter: filterAgents},
+		{args: []string{"switch", "4"}, wantFilter: filterAll, wantSlot: "4"},
+		{args: []string{"switch", "10"}, wantError: true},
+		{args: []string{"unknown"}, wantError: true},
+	}
+	for _, test := range tests {
+		filter, slot, err := parseArgs(test.args)
+		if (err != nil) != test.wantError {
+			t.Fatalf("parseArgs(%q) error = %v, wantError %v", test.args, err, test.wantError)
+		}
+		if err == nil && (filter != test.wantFilter || slot != test.wantSlot) {
+			t.Errorf("parseArgs(%q) = (%d, %q), want (%d, %q)", test.args, filter, slot, test.wantFilter, test.wantSlot)
+		}
+	}
+}
 
 func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
 	directory := t.TempDir()
@@ -71,6 +96,97 @@ func TestAgentFromWindow(t *testing.T) {
 				t.Errorf("agentFromWindow() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestAgentRowsAreFlatSearchableAndMostRecentFirst(t *testing.T) {
+	m := model{
+		filter: filterAgents,
+		entries: []entry{
+			{
+				name: "dotfiles",
+				tabs: []tabItem{{
+					title: "config",
+					windows: []windowItem{
+						{id: 10, title: "shell", lastFocused: 30},
+						{id: 11, title: "kesh", agent: "codex", detail: "~/.dotfiles", lastFocused: 20},
+					},
+				}},
+			},
+			{
+				name: "api",
+				tabs: []tabItem{{
+					title:   "review",
+					windows: []windowItem{{id: 12, title: "pi review", agent: "pi", detail: "~/api", lastFocused: 40}},
+				}},
+			},
+		},
+	}
+	m.rebuildRows()
+	if len(m.rows) != 2 {
+		t.Fatalf("agent rows = %d, want 2", len(m.rows))
+	}
+	first := m.entries[m.rows[0].entryIndex].tabs[m.rows[0].tabIndex].windows[m.rows[0].windowIndex]
+	if first.id != 12 {
+		t.Fatalf("first agent window = %d, want most recently focused window 12", first.id)
+	}
+
+	m.query = "dtfls"
+	m.rebuildRows()
+	if len(m.rows) != 1 {
+		t.Fatalf("project search returned %d rows, want 1", len(m.rows))
+	}
+	got := m.entries[m.rows[0].entryIndex].tabs[m.rows[0].tabIndex].windows[m.rows[0].windowIndex]
+	if got.id != 11 {
+		t.Errorf("project search selected window %d, want 11", got.id)
+	}
+}
+
+func TestPreviewIgnoresStaleResponse(t *testing.T) {
+	m := model{previewID: 12, previewBusy: true}
+	updated, _ := m.Update(previewMsg{windowID: 11, content: "old"})
+	got := updated.(model)
+	if got.preview != "" || !got.previewBusy {
+		t.Fatalf("stale preview changed model: %#v", got)
+	}
+}
+
+func TestAgentViewRendersFlatRowAndPreview(t *testing.T) {
+	m := model{
+		filter: filterAgents, showPreview: true, width: 120, height: 30,
+		entries: []entry{{
+			name: "dotfiles",
+			tabs: []tabItem{{
+				title:   "agents",
+				windows: []windowItem{{id: 11, agent: "codex", detail: "~/.dotfiles", lastFocused: 20}},
+			}},
+		}},
+	}
+	m.rebuildRows()
+	m.queuePreview()
+	view := m.View()
+	for _, expected := range []string{"Agents", "Codex", "dotfiles", "Agent screen", "Loading preview"} {
+		if !strings.Contains(view, expected) {
+			t.Errorf("agent view does not contain %q:\n%s", expected, view)
+		}
+	}
+}
+
+func TestFetchPreviewRemovesBackgroundAndTrailingBlankLines(t *testing.T) {
+	directory := t.TempDir()
+	kitty := filepath.Join(directory, "kitty")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '\\033[38;5;42m\\033[48;5;22mready\\033[0m\\n\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	msg := fetchPreview(kitty, 42)().(previewMsg)
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	if strings.Contains(msg.content, "[48;") {
+		t.Errorf("preview retained background colour: %q", msg.content)
+	}
+	if !strings.Contains(msg.content, "[38;5;42m") || !strings.HasSuffix(msg.content, "ready\x1b[0m") {
+		t.Errorf("preview = %q, want foreground colour and no trailing blank lines", msg.content)
 	}
 }
 

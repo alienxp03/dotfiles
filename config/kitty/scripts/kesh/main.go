@@ -39,11 +39,12 @@ type kittyWindow struct {
 }
 
 type windowItem struct {
-	id      int
-	title   string
-	detail  string
-	command string
-	agent   string
+	id          int
+	title       string
+	detail      string
+	command     string
+	agent       string
+	lastFocused float64
 }
 
 type tabItem struct {
@@ -79,6 +80,12 @@ type row struct {
 
 type actionMsg struct{ err error }
 
+type previewMsg struct {
+	windowID int
+	content  string
+	err      error
+}
+
 type pinTarget struct {
 	Key         string `json:"key"`
 	Name        string `json:"name"`
@@ -112,7 +119,20 @@ type model struct {
 	err         error
 	kitty       string
 	zoxide      string
+	preview     string
+	previewErr  error
+	previewID   int
+	previewBusy bool
+	showPreview bool
 }
+
+const (
+	filterAll = iota
+	filterOpen
+	filterProjects
+	filterSSH
+	filterAgents
+)
 
 var (
 	accentStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
@@ -124,16 +144,19 @@ var (
 	piStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
 	codexStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	ansiPattern   = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	backgroundSGR = regexp.MustCompile(`\x1b\[(48(:[0-9]*)+|48(;[0-9]*)+|49)m`)
 )
 
 func main() {
 	kitty, zoxide := commands()
-	if len(os.Args) > 1 {
-		if len(os.Args) != 3 || os.Args[1] != "switch" || !validSlot(os.Args[2]) {
-			fmt.Fprintln(os.Stderr, "usage: kesh switch SLOT (SLOT must be 0-9)")
-			os.Exit(2)
-		}
-		if err := switchPin(kitty, zoxide, os.Args[2]); err != nil {
+	filter, switchSlot, err := parseArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if switchSlot != "" {
+		if err := switchPin(kitty, zoxide, switchSlot); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -147,11 +170,28 @@ func main() {
 		loadErr = pinErr
 	}
 	applyPins(entries, pins)
-	m := model{entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins}
+	m := model{
+		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins,
+		filter: filter, showPreview: true,
+	}
 	m.rebuildRows()
+	m.queuePreview()
 	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+func parseArgs(args []string) (filter int, switchSlot string, err error) {
+	switch {
+	case len(args) == 0:
+		return filterAll, "", nil
+	case len(args) == 1 && args[0] == "agents":
+		return filterAgents, "", nil
+	case len(args) == 2 && args[0] == "switch" && validSlot(args[1]):
+		return filterAll, args[1], nil
+	default:
+		return 0, "", fmt.Errorf("usage: kesh [agents | switch SLOT] (SLOT must be 0-9)")
 	}
 }
 
@@ -347,6 +387,9 @@ func switchPin(kitty, zoxide, slot string) error {
 }
 
 func (m model) Init() tea.Cmd {
+	if m.previewBusy && m.previewID != 0 {
+		return fetchPreview(m.kitty, m.previewID)
+	}
 	return nil
 }
 
@@ -360,6 +403,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case previewMsg:
+		if msg.windowID != m.previewID {
+			return m, nil
+		}
+		m.previewBusy = false
+		m.preview = msg.content
+		m.previewErr = msg.err
 	case renameMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -437,7 +487,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.rebuildRows()
 				}
 			}
-			return m, nil
+			return m, m.queuePreview()
 		}
 		switch key {
 		case "ctrl+c", "esc", "q":
@@ -465,14 +515,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			m.beginRename()
 		case "p":
-			m.beginPin()
+			if m.filter == filterAgents {
+				m.showPreview = !m.showPreview
+				if m.showPreview {
+					m.previewID = 0
+				}
+			} else {
+				m.beginPin()
+			}
 		case "tab":
-			m.filter = (m.filter + 1) % 4
+			m.filter = (m.filter + 1) % 5
 			m.rebuildRows()
 		case "shift+tab":
-			m.filter = (m.filter + 3) % 4
+			m.filter = (m.filter + 4) % 5
 			m.rebuildRows()
 		}
+		return m, m.queuePreview()
 	}
 	return m, nil
 }
@@ -635,6 +693,10 @@ func (m *model) ascendOrCollapse() {
 }
 
 func (m *model) rebuildRows() {
+	if m.filter == filterAgents {
+		m.rebuildAgentRows()
+		return
+	}
 	var rows []row
 	for i := range m.entries {
 		e := &m.entries[i]
@@ -659,13 +721,100 @@ func (m *model) rebuildRows() {
 	}
 }
 
+func (m *model) queuePreview() tea.Cmd {
+	if m.filter != filterAgents || !m.showPreview || len(m.rows) == 0 {
+		if m.filter == filterAgents && len(m.rows) == 0 {
+			m.previewID = 0
+			m.preview = ""
+			m.previewErr = nil
+			m.previewBusy = false
+		}
+		return nil
+	}
+	r := m.rows[m.cursor]
+	if r.windowIndex < 0 {
+		return nil
+	}
+	windowID := m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].id
+	if windowID == m.previewID {
+		return nil
+	}
+	m.previewID = windowID
+	m.preview = ""
+	m.previewErr = nil
+	m.previewBusy = true
+	return fetchPreview(m.kitty, windowID)
+}
+
+func fetchPreview(kitty string, windowID int) tea.Cmd {
+	return func() tea.Msg {
+		if kitty == "" {
+			return previewMsg{windowID: windowID, err: fmt.Errorf("kitty was not found")}
+		}
+		output, err := exec.Command(
+			kitty, "@", "get-text", "--match", "id:"+strconv.Itoa(windowID), "--extent", "screen", "--ansi",
+		).CombinedOutput()
+		content := cleanPreview(string(output))
+		if err != nil {
+			message := strings.TrimSpace(ansiPattern.ReplaceAllString(content, ""))
+			if message != "" {
+				err = fmt.Errorf("%s: %s", err, message)
+			}
+		}
+		return previewMsg{windowID: windowID, content: content, err: err}
+	}
+}
+
+func cleanPreview(content string) string {
+	content = backgroundSGR.ReplaceAllString(content, "")
+	lines := strings.Split(content, "\n")
+	for len(lines) > 0 && strings.TrimSpace(ansiPattern.ReplaceAllString(lines[len(lines)-1], "")) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *model) rebuildAgentRows() {
+	rows := make([]row, 0)
+	seen := map[int]bool{}
+	for entryIndex := range m.entries {
+		e := m.entries[entryIndex]
+		for tabIndex := range e.tabs {
+			tab := e.tabs[tabIndex]
+			for windowIndex := range tab.windows {
+				window := tab.windows[windowIndex]
+				if window.agent == "" || seen[window.id] {
+					continue
+				}
+				searchValue := strings.Join([]string{
+					window.agent, e.name, e.detail, tab.title, window.title, window.command, window.detail,
+				}, " ")
+				if !fuzzyMatch(m.query, searchValue) {
+					continue
+				}
+				seen[window.id] = true
+				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex})
+			}
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a := m.entries[rows[i].entryIndex].tabs[rows[i].tabIndex].windows[rows[i].windowIndex]
+		b := m.entries[rows[j].entryIndex].tabs[rows[j].tabIndex].windows[rows[j].windowIndex]
+		return a.lastFocused > b.lastFocused
+	})
+	m.rows = rows
+	if m.cursor >= len(rows) {
+		m.cursor = max(0, len(rows)-1)
+	}
+}
+
 func (m model) matchesFilter(e entry) bool {
 	switch m.filter {
-	case 1:
+	case filterOpen:
 		return e.open
-	case 2:
+	case filterProjects:
 		return e.kind == "project"
-	case 3:
+	case filterSSH:
 		return e.kind == "ssh"
 	default:
 		return true
@@ -694,8 +843,14 @@ func fuzzyMatch(query, value string) bool {
 }
 
 func (m model) View() string {
-	width := max(40, m.width-4)
-	tabs := []string{"All", "Open", "Projects", "SSH"}
+	outerWidth := max(40, m.width-4)
+	showSidePreview := m.filter == filterAgents && m.showPreview && outerWidth >= 88
+	showBottomPreview := m.filter == filterAgents && m.showPreview && !showSidePreview
+	width := outerWidth
+	if showSidePreview {
+		width = max(40, outerWidth*43/100)
+	}
+	tabs := []string{"All", "Open", "Projects", "SSH", "Agents"}
 	for i := range tabs {
 		if i == m.filter {
 			tabs[i] = accentStyle.Render("[" + tabs[i] + "]")
@@ -718,6 +873,9 @@ func (m model) View() string {
 	}
 
 	available := max(3, m.height-7)
+	if showBottomPreview {
+		available = max(3, m.height/2-7)
+	}
 	start := 0
 	if m.cursor >= available {
 		start = m.cursor - available + 1
@@ -739,6 +897,9 @@ func (m model) View() string {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
 	footer := "j/k move  h/l collapse/expand  enter open  p pin  r rename  / search  tab filter  q quit"
+	if m.filter == filterAgents {
+		footer = "j/k move  enter focus  p preview  r rename  / search  tab filter  q quit"
+	}
 	if m.searching {
 		footer = "type to filter  backspace delete  ctrl+u clear  enter/esc normal mode"
 	}
@@ -746,7 +907,30 @@ func (m model) View() string {
 	if popup := m.popupView(width); popup != "" {
 		lines = overlayPopup(lines, popup, width)
 	}
-	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n"))
+	list := strings.Join(lines, "\n")
+	if showSidePreview {
+		previewWidth := max(30, outerWidth-width-3)
+		divider := dimStyle.Render(" │ ")
+		list = lipgloss.JoinHorizontal(lipgloss.Top, list, divider, m.previewView(previewWidth, max(5, m.height-4)))
+	} else if showBottomPreview {
+		list += "\n\n" + m.previewView(width, max(5, m.height/2-1))
+	}
+	return lipgloss.NewStyle().Padding(1, 2).Render(list)
+}
+
+func (m model) previewView(width, height int) string {
+	content := m.preview
+	switch {
+	case m.previewBusy:
+		content = dimStyle.Render("Loading preview…")
+	case m.previewErr != nil:
+		content = errorStyle.Render("Preview unavailable: " + m.previewErr.Error())
+	case content == "":
+		content = dimStyle.Render("No terminal content")
+	}
+	header := accentStyle.Render("Agent screen")
+	body := lipgloss.NewStyle().Width(width).MaxWidth(width).MaxHeight(height - 2).Render(content)
+	return lipgloss.NewStyle().Width(width).Height(height).Render(header + "\n" + strings.Repeat("─", width) + "\n" + body)
 }
 
 func (m model) popupView(width int) string {
@@ -804,6 +988,9 @@ func (m model) renderRow(r row, width int) string {
 	e := m.entries[r.entryIndex]
 	if r.windowIndex >= 0 {
 		window := e.tabs[r.tabIndex].windows[r.windowIndex]
+		if m.filter == filterAgents {
+			return m.renderAgentRow(e, e.tabs[r.tabIndex], window, width)
+		}
 		branch := "├─"
 		if r.windowIndex == len(e.tabs[r.tabIndex].windows)-1 {
 			branch = "└─"
@@ -855,6 +1042,34 @@ func (m model) renderRow(r row, width int) string {
 	nameWidth := max(8, width*4/10-13)
 	left := fmt.Sprintf("%s %s %s %s %s %-*s", marker, pin, arrow, icon, agentIcon(e.agent), nameWidth, truncate(e.name, nameWidth))
 	return padColumns(left, dimStyle.Render(truncate(e.detail, max(10, width-38))), width)
+}
+
+func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int) string {
+	agent := agentLabel(window.agent)
+	context := e.name
+	if tab.title != "" && tab.title != e.name {
+		context += " / " + tab.title
+	}
+	leftWidth := max(12, width*4/10)
+	left := agentIcon(window.agent) + " " + agent + "  " + truncate(context, max(8, leftWidth-len(agent)-3))
+	detail := window.detail
+	if window.command != "" && window.command != window.title {
+		detail = window.command + "  " + detail
+	}
+	return padColumns(left, dimStyle.Render(truncate(detail, max(10, width-leftWidth-2))), width)
+}
+
+func agentLabel(agent string) string {
+	switch agent {
+	case "pi":
+		return "Pi"
+	case "codex":
+		return "Codex"
+	case "pi,codex":
+		return "Pi+Codex"
+	default:
+		return agent
+	}
 }
 
 func agentIcon(agent string) string {
@@ -1120,7 +1335,10 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 	if title == "" {
 		title = "window " + strconv.Itoa(window.ID)
 	}
-	return windowItem{id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command, agent: agentFromWindow(window)}
+	return windowItem{
+		id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command,
+		agent: agentFromWindow(window), lastFocused: window.LastFocusedAt,
+	}
 }
 
 func agentFromWindow(window kittyWindow) string {
