@@ -473,8 +473,8 @@ func (m model) renderRow(r row, width int) string {
 		if window.command != "" && window.command != window.title {
 			detail = window.command + "  " + detail
 		}
-		nameWidth := max(8, width*4/10-16)
-		left := "        " + branch + " " + projectStyle.Render("󱂬") + "  " + truncate(window.title, nameWidth)
+		nameWidth := max(8, width*4/10-13)
+		left := "        " + branch + " " + truncate(window.title, nameWidth)
 		return padColumns(left, dimStyle.Render(truncate(detail, max(10, width-44))), width)
 	}
 	if r.tabIndex >= 0 {
@@ -491,7 +491,7 @@ func (m model) renderRow(r row, width int) string {
 			}
 		}
 		nameWidth := max(8, width*4/10-14)
-		left := fmt.Sprintf("    %s %s ▣  %s", branch, arrow, truncate(tab.title, nameWidth))
+		left := fmt.Sprintf("    %s %s %s  %s", branch, arrow, projectStyle.Render("󱂬"), truncate(tab.title, nameWidth))
 		return padColumns(left, dimStyle.Render(tab.detail), width)
 	}
 	marker := dimStyle.Render("○")
