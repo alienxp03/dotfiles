@@ -26,6 +26,7 @@ type kittyState []struct {
 
 type kittyWindow struct {
 	ID                  int               `json:"id"`
+	Cmdline             []string          `json:"cmdline"`
 	Title               string            `json:"title"`
 	CWD                 string            `json:"cwd"`
 	SessionName         string            `json:"session_name"`
@@ -42,12 +43,14 @@ type windowItem struct {
 	title   string
 	detail  string
 	command string
+	agent   string
 }
 
 type tabItem struct {
 	id       int
 	title    string
 	detail   string
+	agent    string
 	expanded bool
 	windows  []windowItem
 }
@@ -61,6 +64,7 @@ type entry struct {
 	open        bool
 	lastFocused float64
 	nameTaken   bool
+	agent       string
 	expanded    bool
 	tabs        []tabItem
 	order       int
@@ -117,6 +121,8 @@ var (
 	selectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("230")).Bold(true)
 	projectStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 	sshStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	piStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	codexStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 )
 
@@ -807,7 +813,7 @@ func (m model) renderRow(r row, width int) string {
 			detail = window.command + "  " + detail
 		}
 		nameWidth := max(8, width*4/10-13)
-		left := "        " + branch + " " + truncate(window.title, nameWidth)
+		left := "        " + branch + " " + agentIcon(window.agent) + " " + truncate(window.title, nameWidth)
 		return padColumns(left, dimStyle.Render(truncate(detail, max(10, width-44))), width)
 	}
 	if r.tabIndex >= 0 {
@@ -824,7 +830,7 @@ func (m model) renderRow(r row, width int) string {
 			}
 		}
 		nameWidth := max(8, width*4/10-14)
-		left := fmt.Sprintf("    %s %s %s  %s", branch, arrow, projectStyle.Render("󱂬"), truncate(tab.title, nameWidth))
+		left := fmt.Sprintf("    %s %s %s %s %s", branch, arrow, projectStyle.Render("󱂬"), agentIcon(tab.agent), truncate(tab.title, nameWidth))
 		return padColumns(left, dimStyle.Render(tab.detail), width)
 	}
 	marker := dimStyle.Render("○")
@@ -847,8 +853,21 @@ func (m model) renderRow(r row, width int) string {
 		pin = accentStyle.Render("[" + e.pin + "]")
 	}
 	nameWidth := max(8, width*4/10-13)
-	left := fmt.Sprintf("%s %s %s %s  %-*s", marker, pin, arrow, icon, nameWidth, truncate(e.name, nameWidth))
+	left := fmt.Sprintf("%s %s %s %s %s %-*s", marker, pin, arrow, icon, agentIcon(e.agent), nameWidth, truncate(e.name, nameWidth))
 	return padColumns(left, dimStyle.Render(truncate(e.detail, max(10, width-38))), width)
+}
+
+func agentIcon(agent string) string {
+	switch agent {
+	case "pi":
+		return piStyle.Render("π")
+	case "codex":
+		return codexStyle.Render("󰚩")
+	case "pi,codex":
+		return piStyle.Render("π") + codexStyle.Render("󰚩")
+	default:
+		return " "
+	}
 }
 
 func padColumns(left, right string, width int) string {
@@ -895,48 +914,66 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	sessions := map[string]*openSession{}
 	sessionNames := map[string]bool{}
 	aliasPaths := map[string]bool{}
+	unscopedTabs := map[string][]tabItem{}
+	unscopedFocus := map[string]float64{}
 	openSSH := map[string]float64{}
 
 	for _, osWindow := range state {
 		for _, tab := range osWindow.Tabs {
+			if isKeshTab(tab.Windows) {
+				continue
+			}
 			sessionName := ""
 			canonicalPath := ""
+			var windows []windowItem
+			focused := float64(0)
 			for _, window := range tab.Windows {
-				if window.ID != selfID && window.SessionName != "" {
+				if window.ID == selfID {
+					continue
+				}
+				path := windowPath(window)
+				if canonicalPath == "" {
+					canonicalPath = path
+				}
+				if sessionName == "" && window.SessionName != "" {
 					sessionName = window.SessionName
-					canonicalPath = windowPath(window)
-					break
+					canonicalPath = path
 				}
+				focused = max(focused, window.LastFocusedAt)
+				windows = append(windows, windowItemFromKitty(window))
 			}
-			if sessionName != "" {
-				sessionNames[sessionName] = true
-				s := sessions[sessionName]
-				if s == nil {
-					s = &openSession{path: canonicalPath}
-					sessions[sessionName] = s
+			if len(windows) > 0 {
+				title := tab.Title
+				if title == "" {
+					title = "tab " + strconv.Itoa(tab.ID)
 				}
-				var windows []windowItem
-				for _, window := range tab.Windows {
-					if window.ID == selfID {
-						continue
-					}
-					path := windowPath(window)
-					if path != "" && path != s.path {
-						aliasPaths[path] = true
-					}
-					s.focused = max(s.focused, window.LastFocusedAt)
-					windows = append(windows, windowItemFromKitty(window))
+				item := tabItem{
+					id: tab.ID, title: title,
+					detail:  fmt.Sprintf("%d window%s", len(windows), plural(len(windows))),
+					agent:   mergedAgents(windows),
+					windows: windows,
 				}
-				if len(windows) > 0 {
-					title := tab.Title
-					if title == "" {
-						title = "tab " + strconv.Itoa(tab.ID)
+				if sessionName == "" && canonicalPath != "" {
+					unscopedTabs[canonicalPath] = append(unscopedTabs[canonicalPath], item)
+					unscopedFocus[canonicalPath] = max(unscopedFocus[canonicalPath], focused)
+				} else if sessionName != "" {
+					sessionNames[sessionName] = true
+					s := sessions[sessionName]
+					if s == nil {
+						s = &openSession{path: canonicalPath}
+						sessions[sessionName] = s
 					}
-					s.tabs = append(s.tabs, tabItem{
-						id: tab.ID, title: title,
-						detail:  fmt.Sprintf("%d window%s", len(windows), plural(len(windows))),
-						windows: windows,
-					})
+					for _, window := range tab.Windows {
+						if window.ID == selfID {
+							continue
+						}
+						path := windowPath(window)
+						if path != "" && path != s.path {
+							aliasPaths[path] = true
+						}
+					}
+					s.focused = max(s.focused, focused)
+					s.tabs = append(s.tabs, item)
 				}
 			}
 			for _, window := range tab.Windows {
@@ -959,6 +996,10 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 			openPaths[session.path] = session.focused
 			tabsByPath[session.path] = session.tabs
 		}
+	}
+	for path, tabs := range unscopedTabs {
+		openPaths[path] = max(openPaths[path], unscopedFocus[path])
+		tabsByPath[path] = append(tabsByPath[path], tabs...)
 	}
 
 	zoxideOutput, err := exec.Command(zoxide, "query", "-l").Output()
@@ -985,10 +1026,11 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		}
 		name := filepath.Base(path)
 		session := byPath[path]
+		tabs := tabsByPath[path]
 		entries = append(entries, entry{
 			key: path, name: name, detail: displayPath(path, home), kind: "project",
-			session: session, open: session != "", lastFocused: openPaths[path],
-			nameTaken: sessionNames[safeName(name)], tabs: tabsByPath[path], order: order,
+			session: session, open: len(tabs) > 0, lastFocused: openPaths[path],
+			nameTaken: sessionNames[safeName(name)], agent: mergedTabAgents(tabs), tabs: tabs, order: order,
 		})
 		order++
 	}
@@ -1004,7 +1046,7 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		entries = append(entries, entry{
 			key: "ssh://" + host.name, name: host.name, detail: host.target, kind: "ssh",
 			session: session, open: session != "", lastFocused: openSSH[host.name],
-			tabs: tabs, order: order,
+			agent: mergedTabAgents(tabs), tabs: tabs, order: order,
 		})
 		order++
 	}
@@ -1022,6 +1064,34 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		return a.order < b.order
 	})
 	return entries, nil
+}
+
+func isKeshTab(windows []kittyWindow) bool {
+	if len(windows) == 0 {
+		return false
+	}
+	for _, window := range windows {
+		commands := append([][]string{window.Cmdline}, foregroundCmdlines(window)...)
+		found := false
+		for _, command := range commands {
+			if len(command) > 0 && strings.Contains(command[0], "/kitty/scripts/kesh/kesh") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func foregroundCmdlines(window kittyWindow) [][]string {
+	commands := make([][]string, 0, len(window.ForegroundProcesses))
+	for _, process := range window.ForegroundProcesses {
+		commands = append(commands, process.Cmdline)
+	}
+	return commands
 }
 
 func windowPath(window kittyWindow) string {
@@ -1050,7 +1120,62 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 	if title == "" {
 		title = "window " + strconv.Itoa(window.ID)
 	}
-	return windowItem{id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command}
+	return windowItem{id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command, agent: agentFromWindow(window)}
+}
+
+func agentFromWindow(window kittyWindow) string {
+	pi, codex := false, false
+	for _, process := range window.ForegroundProcesses {
+		command := " " + strings.ToLower(strings.Join(process.Cmdline, " ")) + " "
+		pi = pi || strings.Contains(command, " pi ") || strings.Contains(command, "/pi ")
+		codex = codex || strings.Contains(command, " codex ") || strings.Contains(command, "/codex ")
+	}
+	if pi && codex {
+		return "pi,codex"
+	}
+	if pi {
+		return "pi"
+	}
+	if codex {
+		return "codex"
+	}
+	return ""
+}
+
+func mergedAgents(windows []windowItem) string {
+	pi, codex := false, false
+	for _, window := range windows {
+		pi = pi || strings.Contains(window.agent, "pi")
+		codex = codex || strings.Contains(window.agent, "codex")
+	}
+	if pi && codex {
+		return "pi,codex"
+	}
+	if pi {
+		return "pi"
+	}
+	if codex {
+		return "codex"
+	}
+	return ""
+}
+
+func mergedTabAgents(tabs []tabItem) string {
+	pi, codex := false, false
+	for _, tab := range tabs {
+		pi = pi || strings.Contains(tab.agent, "pi")
+		codex = codex || strings.Contains(tab.agent, "codex")
+	}
+	if pi && codex {
+		return "pi,codex"
+	}
+	if pi {
+		return "pi"
+	}
+	if codex {
+		return "codex"
+	}
+	return ""
 }
 
 func plural(count int) string {
@@ -1161,6 +1286,9 @@ func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 		}
 		if e.session != "" {
 			return actionMsg{err: run(kitty, "@", "action", "goto_session", e.session)}
+		}
+		if len(e.tabs) > 0 {
+			return actionMsg{err: run(kitty, "@", "focus-tab", "--match", "id:"+strconv.Itoa(e.tabs[0].id))}
 		}
 		sessionDir := filepath.Join(os.TempDir(), "kitty-zoxide-sessions")
 		if err := os.MkdirAll(sessionDir, 0o755); err != nil {

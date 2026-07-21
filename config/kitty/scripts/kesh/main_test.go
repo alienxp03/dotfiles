@@ -6,6 +6,74 @@ import (
 	"testing"
 )
 
+func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
+	directory := t.TempDir()
+	project := "/projects/homelab"
+	kitty := filepath.Join(directory, "kitty")
+	kittyState := `[{"tabs":[{"id":6,"title":"homelab-code","windows":[{"id":70,"cwd":"/projects/homelab","last_focused_at":12,"foreground_processes":[{"cmdline":["codex"],"cwd":"/projects/homelab"}]}]}]}]`
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '"+kittyState+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	zoxide := filepath.Join(directory, "zoxide")
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '"+project+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var homelab *entry
+	for index := range entries {
+		if entries[index].key == project {
+			homelab = &entries[index]
+			break
+		}
+	}
+	if homelab == nil || !homelab.open || len(homelab.tabs) != 1 {
+		t.Fatalf("unscoped tab was not included: %#v", homelab)
+	}
+	if got := homelab.tabs[0]; got.title != "homelab-code" || got.agent != "codex" {
+		t.Errorf("tab = %#v, want homelab-code Codex tab", got)
+	}
+}
+
+func TestIsKeshTab(t *testing.T) {
+	kesh := kittyWindow{Cmdline: []string{"/Users/stan/.config/kitty/scripts/kesh/kesh"}}
+	if !isKeshTab([]kittyWindow{kesh}) {
+		t.Fatal("expected dedicated Kesh tab to be excluded")
+	}
+	if isKeshTab([]kittyWindow{kesh, {Cmdline: []string{"zsh"}}}) {
+		t.Fatal("expected a mixed tab to remain visible")
+	}
+}
+
+func TestAgentFromWindow(t *testing.T) {
+	tests := map[string]struct {
+		processes [][]string
+		want      string
+	}{
+		"pi":          {processes: [][]string{{"/Users/stan/.local/bin/pi"}}, want: "pi"},
+		"codex":       {processes: [][]string{{"node", "/opt/homebrew/bin/codex"}}, want: "codex"},
+		"both agents": {processes: [][]string{{"pi"}, {"codex"}}, want: "pi,codex"},
+		"other shell": {processes: [][]string{{"zsh"}}, want: ""},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			window := kittyWindow{}
+			for _, cmdline := range test.processes {
+				window.ForegroundProcesses = append(window.ForegroundProcesses, struct {
+					Cmdline []string `json:"cmdline"`
+					CWD     string   `json:"cwd"`
+				}{Cmdline: cmdline})
+			}
+			if got := agentFromWindow(window); got != test.want {
+				t.Errorf("agentFromWindow() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestValidSlot(t *testing.T) {
 	for _, slot := range []string{"0", "1", "9"} {
 		if !validSlot(slot) {
