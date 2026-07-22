@@ -2,7 +2,8 @@ gui:
   sidePanelWidth: 0.2
 keybinding:
   universal:
-    quit: <esc>
+    quit: q
+    quit-alt1: <esc>
     return: <backspace>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
