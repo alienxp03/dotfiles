@@ -115,6 +115,8 @@ type renameMsg struct {
 	err      error
 }
 
+type createMsg struct{ err error }
+
 type model struct {
 	entries     []entry
 	rows        []row
@@ -123,6 +125,9 @@ type model struct {
 	searching   bool
 	renaming    bool
 	renameValue string
+	creating    bool
+	createValue string
+	selected    map[string]bool
 	pinning     bool
 	pinEntry    int
 	confirmSlot string
@@ -195,7 +200,7 @@ func main() {
 	applyPins(entries, pins)
 	m := model{
 		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
-		filter: filter, showPreview: true,
+		filter: filter, showPreview: true, selected: map[string]bool{},
 	}
 	m.rebuildRows()
 	m.queuePreview()
@@ -539,6 +544,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renaming = false
 		m.renameValue = ""
 		m.err = nil
+	case createMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		return m, tea.Quit
 	case tea.KeyMsg:
 		key := msg.String()
 		if key == "ctrl+c" {
@@ -567,13 +578,40 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.closing = false
 				m.err = nil
-			case "x":
+			case "y":
 				m.closeBusy = true
 				m.err = nil
 				selected := m.closeRow
 				return m, runClose(m.kitty, m.zoxide, m.entries[selected.entryIndex], selected)
 			default:
-				m.err = fmt.Errorf("press x to confirm or esc to cancel")
+				m.err = fmt.Errorf("press y to confirm or esc to cancel")
+			}
+			return m, nil
+		}
+		if m.creating {
+			switch key {
+			case "esc":
+				m.creating = false
+				m.createValue = ""
+				m.err = nil
+			case "enter":
+				name := safeName(m.createValue)
+				if name == "" {
+					m.err = fmt.Errorf("session name is required")
+				} else {
+					return m, runCreateSession(m.kitty, m.selectedEntries(), name)
+				}
+			case "backspace":
+				runes := []rune(m.createValue)
+				if len(runes) > 0 {
+					m.createValue = string(runes[:len(runes)-1])
+				}
+			case "ctrl+u":
+				m.createValue = ""
+			default:
+				if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
+					m.createValue += string(msg.Runes)
+				}
 			}
 			return m, nil
 		}
@@ -639,12 +677,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.expandOrDescend()
 		case "left", "h":
 			m.ascendOrCollapse()
+		case " ":
+			m.toggleSelected()
 		case "enter":
 			if len(m.rows) == 0 {
 				return m, nil
 			}
 			r := m.rows[m.cursor]
 			return m, runAction(m.kitty, m.zoxide, m.entries[r.entryIndex], r)
+		case "n":
+			if len(m.selected) == 0 {
+				m.err = fmt.Errorf("select at least one project or SSH host first")
+				return m, nil
+			}
+			m.creating = true
+			m.createValue = ""
+			m.err = nil
+			return m, nil
 		case "r":
 			m.beginRename()
 		case "x":
@@ -668,6 +717,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.queuePreview()
 	}
 	return m, nil
+}
+
+func (m *model) toggleSelected() {
+	if len(m.rows) == 0 {
+		return
+	}
+	r := m.rows[m.cursor]
+	if r.tabIndex >= 0 {
+		m.err = fmt.Errorf("select a project or SSH host, not a tab or window")
+		return
+	}
+	key := m.entries[r.entryIndex].key
+	if m.selected == nil {
+		m.selected = map[string]bool{}
+	}
+	if m.selected[key] {
+		delete(m.selected, key)
+	} else {
+		m.selected[key] = true
+	}
+	m.err = nil
+}
+
+func (m model) selectedEntries() []entry {
+	entries := make([]entry, 0, len(m.selected))
+	for _, candidate := range m.entries {
+		if m.selected[candidate.key] {
+			entries = append(entries, candidate)
+		}
+	}
+	return entries
 }
 
 func (m *model) beginClose() {
@@ -1019,8 +1099,12 @@ func (m model) View() string {
 	if m.searching {
 		promptValue = accentStyle.Render("/"+m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
+	header := accentStyle.Render("Kitty sessions") + "  " + strings.Join(tabs, " ")
+	if len(m.selected) > 0 {
+		header += "  " + accentStyle.Render(fmt.Sprintf("Selected: %d", len(m.selected)))
+	}
 	lines := []string{
-		accentStyle.Render("Kitty sessions") + "  " + strings.Join(tabs, " "),
+		header,
 		fmt.Sprintf("%-6s  %s", promptLabel, promptValue),
 		strings.Repeat("─", width),
 	}
@@ -1046,10 +1130,10 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.pinning && !m.closing {
+	if m.err != nil && !m.renaming && !m.creating && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  h/l collapse/expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new session  h/l collapse/expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
@@ -1087,12 +1171,16 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.pinning && !m.closing {
+	if !m.renaming && !m.creating && !m.pinning && !m.closing {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
 	var title, field, help string
-	if m.renaming {
+	if m.creating {
+		title = fmt.Sprintf("Create session (%d tabs)", len(m.selected))
+		field = selectedStyle.Width(popupWidth - 6).Render(m.createValue + "█")
+		help = "Enter create  •  Esc cancel"
+	} else if m.renaming {
 		title = "Rename"
 		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
 		help = "Enter save  •  Esc cancel"
@@ -1114,7 +1202,7 @@ func (m model) popupView(width int) string {
 		if m.closeBusy {
 			help = "Closing…"
 		} else {
-			help = "Press x to confirm  •  Esc cancel"
+			help = "Press y to confirm  •  Esc cancel"
 		}
 	}
 	body := accentStyle.Render(title) + "\n\n" + field + "\n\n" + dimStyle.Render(help)
@@ -1195,6 +1283,10 @@ func (m model) renderRow(r row, width int) string {
 		left := fmt.Sprintf("    %s %s %s %s %s", branch, arrow, projectStyle.Render("󱂬"), agentIcon(tab.agent), truncate(tab.title, nameWidth))
 		return padColumns(left, dimStyle.Render(tab.detail), width)
 	}
+	selection := dimStyle.Render("☐")
+	if m.selected[e.key] {
+		selection = accentStyle.Render("☑")
+	}
 	marker := dimStyle.Render("○")
 	if e.open {
 		marker = openStyle.Render("●")
@@ -1215,7 +1307,7 @@ func (m model) renderRow(r row, width int) string {
 		pin = accentStyle.Render("[" + e.pin + "]")
 	}
 	nameWidth := max(8, width*4/10-13)
-	left := fmt.Sprintf("%s %s %s %s %s %-*s", marker, pin, arrow, icon, agentIcon(e.agent), nameWidth, truncate(e.name, nameWidth))
+	left := fmt.Sprintf("%s %s %s %s %s %s %-*s", selection, marker, pin, arrow, icon, agentIcon(e.agent), nameWidth, truncate(e.name, nameWidth))
 	return padColumns(left, dimStyle.Render(truncate(e.detail, max(10, width-38))), width)
 }
 
@@ -1427,6 +1519,9 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		}
 		name := filepath.Base(path)
 		session := byPath[path]
+		if composedName, ok := composedSessionName(session); ok {
+			name = composedName
+		}
 		tabs := tabsByPath[path]
 		entries = append(entries, entry{
 			key: path, name: name, originalName: name, detail: displayPath(path, home), kind: "project",
@@ -1459,9 +1554,8 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		if a.open && a.lastFocused != b.lastFocused {
 			return a.lastFocused > b.lastFocused
 		}
-		if !a.open && a.kind != b.kind {
-			return a.kind == "ssh"
-		}
+		// Keep unopened entries in their discovery order (zoxide projects,
+		// followed by SSH hosts), rather than promoting SSH above projects.
 		return a.order < b.order
 	})
 	return entries, nil
@@ -1722,6 +1816,81 @@ func runClose(kitty, zoxide string, e entry, selected row) tea.Cmd {
 		}
 		entries, err := loadEntries(kitty, zoxide)
 		return closeMsg{entries: entries, err: err}
+	}
+}
+
+func composedSessionPath(name string) string {
+	// The file only bootstraps the in-memory Kitty session, so keep it outside
+	// persistent pin state and remove it once goto_session has loaded it.
+	return filepath.Join(os.TempDir(), "kitty-kesh-sessions", "kesh-"+name+".kitty-session")
+}
+
+func composedSessionName(session string) (string, bool) {
+	name := strings.TrimPrefix(session, "kesh-")
+	return name, name != session && name != ""
+}
+
+func composedSessionContent(name string, entries []entry) string {
+	var content strings.Builder
+	content.WriteString("os_window_title ")
+	content.WriteString(name)
+	content.WriteString("\nlayout splits\n")
+	for _, entry := range entries {
+		title := entry.name
+		// Kitty treats the rest of a new_tab line as its title, including any
+		// quote characters, so do not shell-quote it.
+		content.WriteString("new_tab ")
+		content.WriteString(title)
+		content.WriteByte('\n')
+		if entry.kind == "ssh" {
+			host := strings.TrimPrefix(entry.key, "ssh://")
+			content.WriteString("cd ")
+			content.WriteString(os.Getenv("HOME"))
+			content.WriteString("\nlaunch --title ")
+			content.WriteString(strconv.Quote("ssh: " + host))
+			content.WriteString(" ssh ")
+			content.WriteString(strconv.Quote(host))
+			content.WriteByte('\n')
+			continue
+		}
+		content.WriteString("cd ")
+		content.WriteString(entry.key)
+		content.WriteString("\nlaunch --title ")
+		content.WriteString(strconv.Quote(title))
+		content.WriteByte('\n')
+	}
+	content.WriteString("focus\nfocus_os_window\n")
+	return content.String()
+}
+
+func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
+	return func() tea.Msg {
+		if len(entries) == 0 {
+			return createMsg{err: fmt.Errorf("select at least one project or SSH host")}
+		}
+		path := composedSessionPath(name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return createMsg{err: fmt.Errorf("create session directory: %w", err)}
+		}
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			if os.IsExist(err) {
+				return createMsg{err: fmt.Errorf("a session named %q already exists", name)}
+			}
+			return createMsg{err: fmt.Errorf("create session file: %w", err)}
+		}
+		defer os.Remove(path)
+		if _, err := file.WriteString(composedSessionContent(name, entries)); err != nil {
+			file.Close()
+			return createMsg{err: fmt.Errorf("write session file: %w", err)}
+		}
+		if err := file.Close(); err != nil {
+			return createMsg{err: fmt.Errorf("close session file: %w", err)}
+		}
+		if err := run(kitty, "@", "action", "goto_session", path); err != nil {
+			return createMsg{err: err}
+		}
+		return createMsg{}
 	}
 }
 

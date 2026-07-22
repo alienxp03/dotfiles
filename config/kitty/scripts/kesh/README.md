@@ -13,13 +13,15 @@ Keys:
 The picker starts in normal mode:
 
 - `j` / `k`: select a row
+- `space`: toggle a project or SSH host for a new multi-tab session
+- `n`: name and create a session with one tab per selected item
 - `l`: expand or descend through session → tabs → windows
 - `h`: return to the parent or collapse the current level
 - `enter`: open a session, focus a tab, or focus a window
 - `p`, then `0`–`9`: pin the selected session to a shortcut slot
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
-- `x`, then `x` again: confirm closing the selected workspace, tab, or window
+- `x`, then `y`: close the selected workspace, tab, or window
 - `/`: enter search mode; typing then fuzzy-filters sessions
 - `enter` / `esc`: leave search mode
 - `tab` / `shift+tab`: change filter

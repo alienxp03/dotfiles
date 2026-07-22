@@ -412,6 +412,50 @@ func TestCloseArgsTargetsSelectedHierarchyLevel(t *testing.T) {
 	}
 }
 
+func TestComposedSessionContentCreatesOneTabPerEntry(t *testing.T) {
+	t.Setenv("HOME", "/Users/stan")
+	content := composedSessionContent("release", []entry{
+		{key: "/projects/api", name: "API", kind: "project"},
+		{key: "ssh://production", name: "production", kind: "ssh"},
+	})
+	want := "os_window_title release\nlayout splits\n" +
+		"new_tab API\ncd /projects/api\nlaunch --title \"API\"\n" +
+		"new_tab production\ncd /Users/stan\nlaunch --title \"ssh: production\" ssh \"production\"\n" +
+		"focus\nfocus_os_window\n"
+	if content != want {
+		t.Fatalf("composedSessionContent() = %q, want %q", content, want)
+	}
+}
+
+func TestComposedSessionName(t *testing.T) {
+	if name, ok := composedSessionName("kesh-release"); !ok || name != "release" {
+		t.Fatalf("composedSessionName() = (%q, %v), want (release, true)", name, ok)
+	}
+	if _, ok := composedSessionName("dotfiles"); ok {
+		t.Fatal("ordinary session was identified as composed")
+	}
+}
+
+func TestSpaceTogglesTopLevelSelection(t *testing.T) {
+	m := model{entries: []entry{{key: "/projects/api", name: "API"}}, rows: []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}}}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(model)
+	if !m.selected["/projects/api"] {
+		t.Fatalf("space did not select the project: %#v", m.selected)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = updated.(model)
+	if !m.creating {
+		t.Fatal("n did not open the create-session prompt")
+	}
+	m.creating = false
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(model)
+	if len(m.selected) != 0 {
+		t.Fatalf("space did not clear the project selection: %#v", m.selected)
+	}
+}
+
 func TestCloseRequiresConfirmationAndRejectsInactiveWorkspace(t *testing.T) {
 	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
 	m := model{
@@ -423,13 +467,13 @@ func TestCloseRequiresConfirmationAndRejectsInactiveWorkspace(t *testing.T) {
 	if !m.closing || m.closeBusy || cmd != nil {
 		t.Fatalf("first x should open confirmation: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
 	}
-	if popup := m.popupView(80); !strings.Contains(popup, `Close workspace "Payments"`) || !strings.Contains(popup, "Press x to confirm") {
+	if popup := m.popupView(80); !strings.Contains(popup, `Close workspace "Payments"`) || !strings.Contains(popup, "Press y to confirm") {
 		t.Fatalf("close popup is missing confirmation details:\n%s", popup)
 	}
-	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updated.(model)
 	if !m.closing || !m.closeBusy || cmd == nil {
-		t.Fatalf("second x should start closing: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
+		t.Fatalf("y should start closing: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
 	}
 
 	inactive := model{entries: []entry{{name: "Payments"}}, rows: []row{selected}}
