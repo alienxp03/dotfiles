@@ -17,6 +17,7 @@ The picker starts in normal mode:
 - `j` / `k` or `ctrl+j` / `ctrl+k`: select a row
 - `space`: toggle a project or SSH host for a new multi-tab session
 - `n`: name and create a session with one tab per selected item
+- `c`: clone a Git repository into an editable destination and open it
 - `l`: expand or descend through session → tabs → windows
 - `h`: return to the parent or collapse the current level
 - `enter`: open a session, focus a tab, or focus a window
@@ -41,4 +42,13 @@ Run `kesh agents` to start directly in this view. Kitty invokes it in a tab for 
 
 Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kesh also generates `kitty-pins.conf` beside that file and reloads Kitty whenever pins change. `Cmd+0` through `Cmd+9` therefore invoke Kitty's native `goto_session` action directly, without starting Kesh on every switch.
 
-Workspace names are Kesh aliases stored in `~/config/kesh/names.json`. Kitty's internal session identity remains unchanged, so aliases can be edited without recreating a live session. Search matches both the alias and the original project or SSH name.
+The clone destination defaults to `~/workspace`. Override it in `${XDG_CONFIG_HOME:-~/.config}/kesh/config.toml`:
+
+```toml
+[clone]
+root = "~/workspace"
+```
+
+Press `c` to open a form with the Git URL and inferred destination together. Use `tab` to switch fields, edit either value, then press `enter` to clone. After a successful clone, Kesh adds the directory to zoxide and opens its Kitty workspace.
+
+Workspace names are Kesh aliases stored in `${XDG_CONFIG_HOME:-~/.config}/kesh/names.json`. Kitty's internal session identity remains unchanged, so aliases can be edited without recreating a live session. Search matches both the alias and the original project or SSH name.

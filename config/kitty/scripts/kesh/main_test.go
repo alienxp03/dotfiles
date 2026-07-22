@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestParseArgs(t *testing.T) {
@@ -288,6 +290,144 @@ func TestValidSlot(t *testing.T) {
 	}
 }
 
+func TestLoadCloneRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	root, err := loadCloneRoot()
+	if err != nil || root != filepath.Join(home, "workspace") {
+		t.Fatalf("default clone root = (%q, %v)", root, err)
+	}
+
+	path := filepath.Join(home, ".config", "kesh", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[clone]\nroot = \"~/code\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err = loadCloneRoot()
+	if err != nil || root != filepath.Join(home, "code") {
+		t.Fatalf("configured clone root = (%q, %v)", root, err)
+	}
+}
+
+func TestRepositoryNameAndCloneDestination(t *testing.T) {
+	for repository, want := range map[string]string{
+		"https://github.com/example/project.git": "project",
+		"git@github.com:example/project.git":     "project",
+		"example/project":                        "project",
+		"/tmp/local-project/":                    "local-project",
+	} {
+		got, err := repositoryName(repository)
+		if err != nil || got != want {
+			t.Errorf("repositoryName(%q) = (%q, %v), want (%q, nil)", repository, got, err, want)
+		}
+	}
+	for _, repository := range []string{"", "https://github.com/", "-option"} {
+		if _, err := repositoryName(repository); err == nil {
+			t.Errorf("repositoryName(%q) did not fail", repository)
+		}
+	}
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, "workspace")
+	got, err := resolveCloneDestination("custom/project", root)
+	if err != nil || got != filepath.Join(root, "custom", "project") {
+		t.Fatalf("relative clone destination = (%q, %v)", got, err)
+	}
+	got, err = resolveCloneDestination("~/code/project", root)
+	if err != nil || got != filepath.Join(home, "code", "project") {
+		t.Fatalf("home clone destination = (%q, %v)", got, err)
+	}
+}
+
+func TestCloneFormShowsAndUpdatesBothFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := filepath.Join(home, "workspace")
+	m := model{
+		cloning:          true,
+		cloneRoot:        root,
+		cloneDestination: "~/workspace",
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("git@github.com:example/project.git"), Paste: true})
+	m = updated.(model)
+	if cmd != nil || m.cloneDestination != "~/workspace/project" {
+		t.Fatalf("clone form destination = %q, cmd = %v", m.cloneDestination, cmd)
+	}
+	popup := m.popupView(100)
+	plainPopup := ansi.Strip(popup)
+	if !strings.Contains(plainPopup, "Repository: git@github.com:example/project.git") || !strings.Contains(plainPopup, "Clone into: ~/workspace/project") {
+		t.Fatalf("clone popup does not show both fields:\n%s", popup)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(model)
+	if !m.cloneDestinationFocus {
+		t.Fatal("tab did not focus the clone destination")
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = updated.(model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("~/code/custom")})
+	m = updated.(model)
+	if m.cloneDestination != "~/code/custom" || !m.cloneDestinationEdited {
+		t.Fatalf("edited clone destination = %q, edited = %t", m.cloneDestination, m.cloneDestinationEdited)
+	}
+}
+
+func TestRunCloneOpensProjectAndAddsItToZoxide(t *testing.T) {
+	directory := t.TempDir()
+	logPath := filepath.Join(directory, "commands.log")
+	writeCommand := func(name, body string) string {
+		path := filepath.Join(directory, name)
+		script := fmt.Sprintf("#!/bin/sh\nprintf '%s:%%s\\n' \"$*\" >> %q\n%s\n", name, logPath, body)
+		if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	writeCommand("git", `mkdir -p "$4"`)
+	kitty := writeCommand("kitty", "")
+	zoxide := writeCommand("zoxide", "")
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMPDIR", directory)
+
+	destination := filepath.Join(directory, "clones", "project")
+	msg := runClone(kitty, zoxide, "git@github.com:example/project.git", destination)().(cloneMsg)
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	if info, err := os.Stat(destination); err != nil || !info.IsDir() {
+		t.Fatalf("clone destination was not created: %v", err)
+	}
+	sessionPath := filepath.Join(os.TempDir(), "kitty-zoxide-sessions", "project.kitty-session")
+	session, err := os.ReadFile(sessionPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(session), "cd "+destination+"\n") || strings.Contains(string(session), "cd \"") {
+		t.Fatalf("generated session has an invalid working directory:\n%s", session)
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(commands)
+	for _, expected := range []string{
+		"git:clone -- git@github.com:example/project.git " + destination,
+		"kitty:@ action goto_session ",
+		"zoxide:add -- " + destination,
+	} {
+		if !strings.Contains(log, expected) {
+			t.Errorf("command log does not contain %q:\n%s", expected, log)
+		}
+	}
+}
+
 func TestPinsRoundTrip(t *testing.T) {
 	stateHome := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateHome)
@@ -400,9 +540,10 @@ func TestLegacyProjectPinMigratesToMatchingWorkspace(t *testing.T) {
 	}
 }
 
-func TestWorkspaceNamesRoundTripInHomeConfig(t *testing.T) {
+func TestWorkspaceNamesRoundTripInConfigHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	want := nameStore{
 		"/projects/payments": "Payments",
 		"ssh://production":   "Production",
@@ -417,7 +558,7 @@ func TestWorkspaceNamesRoundTripInHomeConfig(t *testing.T) {
 	if len(got) != len(want) || got["/projects/payments"] != "Payments" || got["ssh://production"] != "Production" {
 		t.Fatalf("workspace names = %#v, want %#v", got, want)
 	}
-	info, err := os.Stat(filepath.Join(home, "config", "kesh", "names.json"))
+	info, err := os.Stat(filepath.Join(home, ".config", "kesh", "names.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,6 +570,7 @@ func TestWorkspaceNamesRoundTripInHomeConfig(t *testing.T) {
 func TestSessionRenamePersistsAliasAndEmptyNameResetsIt(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	e := entry{key: "workspace:payments", name: "payments", originalName: "payments", kind: "workspace", path: "/projects/payments"}
 	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
 	m := model{entries: []entry{e}, rows: []row{selected}, names: nameStore{}}

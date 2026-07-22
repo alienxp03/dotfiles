@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -123,36 +125,51 @@ type renameMsg struct {
 
 type createMsg struct{ err error }
 
+type cloneMsg struct{ err error }
+
+type keshConfig struct {
+	Clone struct {
+		Root string `toml:"root"`
+	} `toml:"clone"`
+}
+
 type model struct {
-	entries     []entry
-	rows        []row
-	cursor      int
-	query       string
-	searching   bool
-	renaming    bool
-	renameValue string
-	creating    bool
-	createValue string
-	selected    map[string]bool
-	pinning     bool
-	pinEntry    int
-	confirmSlot string
-	closing     bool
-	closeBusy   bool
-	closeRow    row
-	pins        pinStore
-	names       nameStore
-	filter      int
-	width       int
-	height      int
-	err         error
-	kitty       string
-	zoxide      string
-	preview     string
-	previewErr  error
-	previewID   int
-	previewBusy bool
-	showPreview bool
+	entries                []entry
+	rows                   []row
+	cursor                 int
+	query                  string
+	searching              bool
+	renaming               bool
+	renameValue            string
+	creating               bool
+	createValue            string
+	cloning                bool
+	cloneBusy              bool
+	cloneDestinationFocus  bool
+	cloneDestinationEdited bool
+	cloneRepository        string
+	cloneDestination       string
+	cloneRoot              string
+	selected               map[string]bool
+	pinning                bool
+	pinEntry               int
+	confirmSlot            string
+	closing                bool
+	closeBusy              bool
+	closeRow               row
+	pins                   pinStore
+	names                  nameStore
+	filter                 int
+	width                  int
+	height                 int
+	err                    error
+	kitty                  string
+	zoxide                 string
+	preview                string
+	previewErr             error
+	previewID              int
+	previewBusy            bool
+	showPreview            bool
 }
 
 const (
@@ -164,18 +181,19 @@ const (
 )
 
 var (
-	accentStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
-	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	openStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	selectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("230")).Bold(true)
-	focusStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
-	projectStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
-	sshStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	piStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
-	codexStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	ansiPattern   = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
-	backgroundSGR = regexp.MustCompile(`\x1b\[(48(:[0-9]*)+|48(;[0-9]*)+|49)m`)
+	accentStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	dimStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	openStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	selectedStyle     = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("230")).Bold(true)
+	selectedTextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
+	focusStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
+	projectStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	sshStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	piStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	codexStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	errorStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	ansiPattern       = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	backgroundSGR     = regexp.MustCompile(`\x1b\[(48(:[0-9]*)+|48(;[0-9]*)+|49)m`)
 )
 
 func main() {
@@ -278,8 +296,65 @@ func pinShortcutsPath() string {
 	return filepath.Join(filepath.Dir(pinsPath()), "kitty-pins.conf")
 }
 
+func configDirectory() string {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		configHome = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return filepath.Join(configHome, "kesh")
+}
+
+func configPath() string {
+	return filepath.Join(configDirectory(), "config.toml")
+}
+
 func namesPath() string {
-	return filepath.Join(os.Getenv("HOME"), "config", "kesh", "names.json")
+	return filepath.Join(configDirectory(), "names.json")
+}
+
+func loadCloneRoot() (string, error) {
+	home := os.Getenv("HOME")
+	root := filepath.Join(home, "workspace")
+	content, err := os.ReadFile(configPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return root, nil
+		}
+		return "", fmt.Errorf("read Kesh config: %w", err)
+	}
+	var config keshConfig
+	if _, err := toml.Decode(string(content), &config); err != nil {
+		return "", fmt.Errorf("invalid Kesh config: %w", err)
+	}
+	if configured := strings.TrimSpace(config.Clone.Root); configured != "" {
+		root, err = expandHomePath(configured)
+		if err != nil {
+			return "", fmt.Errorf("invalid clone root: %w", err)
+		}
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("clone root must be an absolute or home-relative path")
+	}
+	return filepath.Clean(root), nil
+}
+
+func expandHomePath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if strings.ContainsAny(path, "\r\n") {
+		return "", fmt.Errorf("path cannot contain a line break")
+	}
+	switch {
+	case path == "":
+		return "", fmt.Errorf("path is required")
+	case path == "~":
+		return os.Getenv("HOME"), nil
+	case strings.HasPrefix(path, "~/"):
+		return filepath.Join(os.Getenv("HOME"), strings.TrimPrefix(path, "~/")), nil
+	case strings.HasPrefix(path, "~"):
+		return "", fmt.Errorf("user-specific home paths are not supported: %s", path)
+	default:
+		return filepath.Clean(path), nil
+	}
 }
 
 func loadNames() (nameStore, error) {
@@ -683,6 +758,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case cloneMsg:
+		m.cloneBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		return m, tea.Quit
 	case tea.KeyMsg:
 		key := msg.String()
 		if key == "ctrl+c" {
@@ -718,6 +800,61 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, runClose(m.kitty, m.zoxide, m.entries[selected.entryIndex], selected)
 			default:
 				m.err = fmt.Errorf("press y to confirm or esc to cancel")
+			}
+			return m, nil
+		}
+		if m.cloning {
+			if m.cloneBusy {
+				return m, nil
+			}
+			switch key {
+			case "esc":
+				m.resetClone()
+			case "tab", "shift+tab":
+				m.cloneDestinationFocus = !m.cloneDestinationFocus
+				m.err = nil
+			case "enter":
+				if _, err := repositoryName(m.cloneRepository); err != nil {
+					m.err = err
+					return m, nil
+				}
+				destination, err := resolveCloneDestination(m.cloneDestination, m.cloneRoot)
+				if err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.cloneBusy = true
+				m.err = nil
+				return m, runClone(m.kitty, m.zoxide, m.cloneRepository, destination)
+			case "backspace":
+				value := &m.cloneRepository
+				if m.cloneDestinationFocus {
+					value = &m.cloneDestination
+					m.cloneDestinationEdited = true
+				}
+				runes := []rune(*value)
+				if len(runes) > 0 {
+					*value = string(runes[:len(runes)-1])
+				}
+				m.refreshCloneDestination()
+			case "ctrl+u":
+				if m.cloneDestinationFocus {
+					m.cloneDestination = ""
+					m.cloneDestinationEdited = true
+				} else {
+					m.cloneRepository = ""
+				}
+				m.refreshCloneDestination()
+			default:
+				if len(msg.Runes) > 0 && !msg.Alt {
+					if m.cloneDestinationFocus {
+						m.cloneDestination += string(msg.Runes)
+						m.cloneDestinationEdited = true
+					} else {
+						m.cloneRepository += string(msg.Runes)
+					}
+					m.refreshCloneDestination()
+				}
 			}
 			return m, nil
 		}
@@ -842,6 +979,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.createValue = ""
 			m.err = nil
 			return m, nil
+		case "c":
+			root, err := loadCloneRoot()
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			m.cloning = true
+			m.cloneRoot = root
+			m.cloneRepository = ""
+			m.cloneDestination = displayPath(root, os.Getenv("HOME"))
+			m.cloneDestinationFocus = false
+			m.cloneDestinationEdited = false
+			m.err = nil
+			return m, nil
 		case "r":
 			m.beginRename()
 		case "x":
@@ -911,6 +1062,27 @@ func (m *model) beginClose() {
 	m.closeRow = selected
 	m.closing = true
 	m.closeBusy = false
+	m.err = nil
+}
+
+func (m *model) refreshCloneDestination() {
+	if m.cloneDestinationEdited {
+		return
+	}
+	m.cloneDestination = displayPath(m.cloneRoot, os.Getenv("HOME"))
+	if name, err := repositoryName(m.cloneRepository); err == nil {
+		m.cloneDestination = displayPath(filepath.Join(m.cloneRoot, name), os.Getenv("HOME"))
+	}
+}
+
+func (m *model) resetClone() {
+	m.cloning = false
+	m.cloneBusy = false
+	m.cloneDestinationFocus = false
+	m.cloneDestinationEdited = false
+	m.cloneRepository = ""
+	m.cloneDestination = ""
+	m.cloneRoot = ""
 	m.err = nil
 }
 
@@ -1307,10 +1479,10 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.pinning && !m.closing {
+	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new  h/l expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  h/l expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
@@ -1348,12 +1520,47 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.pinning && !m.closing {
+	if !m.renaming && !m.creating && !m.cloning && !m.pinning && !m.closing {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
+	if m.cloning {
+		popupWidth = min(72, max(36, width-6))
+	}
 	var title, field, help string
-	if m.creating {
+	if m.cloning {
+		title = "Clone repository"
+		repositoryCursor := ""
+		destinationCursor := ""
+		if !m.cloneBusy {
+			if m.cloneDestinationFocus {
+				destinationCursor = "█"
+			} else {
+				repositoryCursor = "█"
+			}
+		}
+		repositoryValueStyle := focusStyle
+		destinationValueStyle := focusStyle
+		if !m.cloneBusy && !m.cloneDestinationFocus {
+			repositoryValueStyle = selectedTextStyle
+		}
+		if !m.cloneBusy && m.cloneDestinationFocus {
+			destinationValueStyle = selectedTextStyle
+		}
+		fieldWidth := popupWidth - 6
+		repositoryField := lipgloss.NewStyle().Width(fieldWidth).Render(
+			dimStyle.Render("Repository: ") + repositoryValueStyle.Render(m.cloneRepository+repositoryCursor),
+		)
+		destinationField := lipgloss.NewStyle().Width(fieldWidth).Render(
+			dimStyle.Render("Clone into: ") + destinationValueStyle.Render(m.cloneDestination+destinationCursor),
+		)
+		field = repositoryField + "\n\n" + destinationField
+		if m.cloneBusy {
+			help = "Cloning…"
+		} else {
+			help = "Tab switch field  •  Enter clone  •  Esc cancel"
+		}
+	} else if m.creating {
 		title = fmt.Sprintf("Create session (%d tabs)", len(m.selected))
 		field = selectedStyle.Width(popupWidth - 6).Render(m.createValue + "█")
 		help = "Enter create  •  Esc cancel"
@@ -2075,6 +2282,71 @@ func composedSessionContent(name string, entries []entry) string {
 	return content.String()
 }
 
+func repositoryName(repository string) (string, error) {
+	repository = strings.TrimSpace(strings.TrimRight(repository, "/"))
+	if strings.ContainsAny(repository, "\r\n") {
+		return "", fmt.Errorf("repository cannot contain a line break")
+	}
+	if repository == "" {
+		return "", fmt.Errorf("repository is required")
+	}
+	if strings.HasPrefix(repository, "-") {
+		return "", fmt.Errorf("repository cannot start with a dash")
+	}
+	source := repository
+	if strings.Contains(repository, "://") {
+		parsed, err := url.Parse(repository)
+		if err != nil || parsed.Host == "" || strings.Trim(parsed.Path, "/") == "" {
+			return "", fmt.Errorf("could not determine a repository name from %q", repository)
+		}
+		source = strings.Trim(parsed.Path, "/")
+	}
+	separator := max(strings.LastIndex(source, "/"), strings.LastIndex(source, ":"))
+	name := strings.TrimSuffix(source[separator+1:], ".git")
+	if name == "" || name == "." || name == ".." {
+		return "", fmt.Errorf("could not determine a repository name from %q", repository)
+	}
+	if strings.ContainsAny(name, `/\\`) {
+		return "", fmt.Errorf("invalid repository name %q", name)
+	}
+	return name, nil
+}
+
+func resolveCloneDestination(value, root string) (string, error) {
+	destination, err := expandHomePath(value)
+	if err != nil {
+		return "", fmt.Errorf("invalid clone destination: %w", err)
+	}
+	if !filepath.IsAbs(destination) {
+		destination = filepath.Join(root, destination)
+	}
+	return filepath.Clean(destination), nil
+}
+
+func runClone(kitty, zoxide, repository, destination string) tea.Cmd {
+	return func() tea.Msg {
+		repository = strings.TrimSpace(repository)
+		if _, err := repositoryName(repository); err != nil {
+			return cloneMsg{err: err}
+		}
+		if _, err := os.Stat(destination); err == nil {
+			return cloneMsg{err: fmt.Errorf("clone destination already exists: %s", destination)}
+		} else if !os.IsNotExist(err) {
+			return cloneMsg{err: fmt.Errorf("check clone destination: %w", err)}
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return cloneMsg{err: fmt.Errorf("create clone directory: %w", err)}
+		}
+		if err := run("git", "clone", "--", repository, destination); err != nil {
+			return cloneMsg{err: fmt.Errorf("clone repository: %w", err)}
+		}
+		if err := openProjectSession(kitty, zoxide, destination, false); err != nil {
+			return cloneMsg{err: err}
+		}
+		return cloneMsg{}
+	}
+}
+
 func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
 	return func() tea.Msg {
 		if len(entries) == 0 {
@@ -2121,11 +2393,11 @@ func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 		if len(e.tabs) > 0 {
 			return actionMsg{err: run(kitty, "@", "focus-tab", "--match", "id:"+strconv.Itoa(e.tabs[0].id))}
 		}
-		sessionDir := filepath.Join(os.TempDir(), "kitty-zoxide-sessions")
-		if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-			return actionMsg{err: err}
-		}
 		if e.kind == "ssh" {
+			sessionDir := filepath.Join(os.TempDir(), "kitty-zoxide-sessions")
+			if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+				return actionMsg{err: err}
+			}
 			host := strings.TrimPrefix(e.key, "ssh://")
 			file := filepath.Join(sessionDir, "ssh-"+safeName(host)+".kitty-session")
 			content := fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"ssh: %s\" ssh \"%s\"\nfocus\nfocus_os_window\n", os.Getenv("HOME"), host, host)
@@ -2134,21 +2406,29 @@ func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 			}
 			return actionMsg{err: run(kitty, "@", "action", "goto_session", file)}
 		}
-		name := safeName(filepath.Base(e.key))
-		if e.nameTaken {
-			name += "-" + shortHash(e.key)
-		}
-		file := filepath.Join(sessionDir, name+".kitty-session")
-		content := fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"%s\"\nfocus\nfocus_os_window\n", e.key, filepath.Base(e.key))
-		if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
-			return actionMsg{err: err}
-		}
-		if err := run(kitty, "@", "action", "goto_session", file); err != nil {
-			return actionMsg{err: err}
-		}
-		_ = run(zoxide, "add", "--", e.key)
-		return actionMsg{}
+		return actionMsg{err: openProjectSession(kitty, zoxide, e.key, e.nameTaken)}
 	}
+}
+
+func openProjectSession(kitty, zoxide, project string, nameTaken bool) error {
+	sessionDir := filepath.Join(os.TempDir(), "kitty-zoxide-sessions")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		return err
+	}
+	name := safeName(filepath.Base(project))
+	if nameTaken {
+		name += "-" + shortHash(project)
+	}
+	file := filepath.Join(sessionDir, name+".kitty-session")
+	content := fmt.Sprintf("layout splits\ncd %s\nlaunch --title %s\nfocus\nfocus_os_window\n", project, strconv.Quote(filepath.Base(project)))
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		return err
+	}
+	_ = run(zoxide, "add", "--", project)
+	if err := run(kitty, "@", "action", "goto_session", file); err != nil {
+		return err
+	}
+	return nil
 }
 
 func run(name string, args ...string) error {
