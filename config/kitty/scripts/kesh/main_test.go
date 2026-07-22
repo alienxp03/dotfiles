@@ -611,6 +611,24 @@ func TestWorkspaceSearchMatchesOriginalNameAfterRename(t *testing.T) {
 	}
 }
 
+func TestSearchRanksOpenWorkspacesAboveUnopenedProjects(t *testing.T) {
+	m := model{
+		query: "flux",
+		entries: []entry{
+			{key: "/projects/flux", name: "flux", kind: "project"},
+			{key: "workspace:flux", name: "flux service", kind: "workspace", open: true},
+		},
+	}
+	m.rebuildRows()
+	if len(m.rows) != 2 {
+		t.Fatalf("search returned %d rows, want 2", len(m.rows))
+	}
+	first := m.entries[m.rows[0].entryIndex]
+	if !first.open || first.kind != "workspace" {
+		t.Fatalf("first search result = %#v, want open workspace", first)
+	}
+}
+
 func TestCloseArgsTargetsSelectedHierarchyLevel(t *testing.T) {
 	e := entry{
 		name: "Payments",

@@ -1278,6 +1278,11 @@ func (m *model) rebuildRows() {
 		for _, match := range matches {
 			ranked = append(ranked, entryIndexes[match.Index])
 		}
+		// Fuzzy relevance determines the order within each group, but a live
+		// workspace must always rank above an unopened source project.
+		sort.SliceStable(ranked, func(i, j int) bool {
+			return m.entries[ranked[i]].open && !m.entries[ranked[j]].open
+		})
 		entryIndexes = ranked
 	}
 
