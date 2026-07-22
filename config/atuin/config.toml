@@ -4,6 +4,9 @@ update_check = false
 ## possible values: auto, full, compact
 style = "full"
 
+## Start searches with history from the current directory only.
+filter_mode = "directory"
+
 ## Defaults to true. If enabled, upon hitting enter Atuin will immediately execute the command. Press tab to return to the shell and edit.
 # This applies for new installs. Old installs will keep the old behaviour unless configured otherwise.
 enter_accept = false
@@ -15,6 +18,20 @@ enter_accept = false
 ## "vim-normal", the startup keymap mode in the Atuin search is forced to be
 ## the specified one.
 keymap_mode = "vim-normal"
+
+[search]
+# Ctrl-R cycles through these scopes in this order.
+filters = ["directory", "session", "host", "global"]
+
+[keymap.vim-normal]
+"ctrl-r" = "cycle-filter-mode"
+"ctrl-j" = "select-next"
+"ctrl-k" = "select-previous"
+
+[keymap.vim-insert]
+"ctrl-r" = "cycle-filter-mode"
+"ctrl-j" = "select-next"
+"ctrl-k" = "select-previous"
 
 [sync]
 # Enable sync v2 by default
