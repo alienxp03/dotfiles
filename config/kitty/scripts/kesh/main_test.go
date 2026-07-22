@@ -314,6 +314,42 @@ func TestPinsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPinShortcutsGenerateNativeKittyMappings(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	pins := pinStore{
+		"1": {SessionFile: filepath.Join(stateHome, "kesh", "sessions", "project one.kitty-session")},
+		"9": {SessionFile: filepath.Join(stateHome, "kesh", "sessions", "production.kitty-session")},
+	}
+
+	content := string(pinShortcutsContent(pins))
+	for _, expected := range []string{
+		"map cmd+0\n",
+		"map cmd+1 goto_session \"" + pins["1"].SessionFile + "\"\n",
+		"map cmd+9 goto_session \"" + pins["9"].SessionFile + "\"\n",
+	} {
+		if !strings.Contains(content, expected) {
+			t.Errorf("shortcut config does not contain %q:\n%s", expected, content)
+		}
+	}
+
+	changed, err := savePinShortcuts(pins)
+	if err != nil || !changed {
+		t.Fatalf("first shortcut save = (%t, %v), want (true, nil)", changed, err)
+	}
+	changed, err = savePinShortcuts(pins)
+	if err != nil || changed {
+		t.Fatalf("unchanged shortcut save = (%t, %v), want (false, nil)", changed, err)
+	}
+	info, err := os.Stat(filepath.Join(stateHome, "kesh", "kitty-pins.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("shortcut config permissions are %o, want 600", info.Mode().Perm())
+	}
+}
+
 func TestLoadPinsRejectsInvalidState(t *testing.T) {
 	tests := map[string]string{
 		"malformed JSON":      `{`,
