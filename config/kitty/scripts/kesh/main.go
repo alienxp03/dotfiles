@@ -155,10 +155,17 @@ type saveSessionMsg struct {
 	err        error
 }
 
+type worktreeMsg struct {
+	err error
+}
+
 type keshConfig struct {
 	Clone struct {
 		Root string `toml:"root"`
 	} `toml:"clone"`
+	Worktree struct {
+		Root string `toml:"root"`
+	} `toml:"worktree"`
 }
 
 type model struct {
@@ -202,6 +209,12 @@ type model struct {
 	previewID              int
 	previewBusy            bool
 	showPreview            bool
+	worktreeMode           bool
+	worktreeBranch         string
+	worktreePaths          []string
+	worktreeValidated      bool
+	worktreeBusy           bool
+	worktreeRoot           string
 }
 
 const (
@@ -265,9 +278,11 @@ func main() {
 		loadErr = syncPinShortcuts(kitty, pins)
 	}
 	applyPins(entries, pins)
+	worktreeRoot, _ := loadWorktreeRoot()
 	m := model{
 		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
 		filter: filter, showPreview: true, selected: map[string]bool{},
+		worktreeRoot: worktreeRoot,
 	}
 	m.rebuildRows()
 	m.queuePreview()
@@ -377,6 +392,32 @@ func loadCloneRoot() (string, error) {
 	}
 	return filepath.Clean(root), nil
 }
+
+	func loadWorktreeRoot() (string, error) {
+		home := os.Getenv("HOME")
+		root := filepath.Join(home, "worktree")
+		content, err := os.ReadFile(configPath())
+		if err != nil {
+			if os.IsNotExist(err) {
+				return root, nil
+			}
+			return "", fmt.Errorf("read Kesh config: %w", err)
+		}
+		var config keshConfig
+		if _, err := toml.Decode(string(content), &config); err != nil {
+			return "", fmt.Errorf("invalid Kesh config: %w", err)
+		}
+		if configured := strings.TrimSpace(config.Worktree.Root); configured != "" {
+			root, err = expandHomePath(configured)
+			if err != nil {
+				return "", fmt.Errorf("invalid worktree root: %w", err)
+			}
+		}
+		if !filepath.IsAbs(root) {
+			return "", fmt.Errorf("worktree root must be an absolute or home-relative path")
+		}
+		return filepath.Clean(root), nil
+	}
 
 func expandHomePath(path string) (string, error) {
 	path = strings.TrimSpace(path)
@@ -931,6 +972,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+		case worktreeMsg:
+			if m.worktreeBusy {
+				// Creation completed
+				m.worktreeBusy = false
+				m.worktreeMode = false
+				if msg.err != nil {
+					m.err = msg.err
+					return m, nil
+				}
+				return m, tea.Quit
+			} else {
+				// Validation completed
+				if msg.err != nil {
+					m.err = msg.err
+					m.worktreeValidated = false
+					return m, nil
+				}
+				m.worktreeValidated = true
+				return m, nil
+			}
 	case saveSessionMsg:
 		m.saving = false
 		m.saveConfirming = false
@@ -1126,6 +1187,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.worktreeMode {
+			switch key {
+			case "esc":
+				m.worktreeMode = false
+				m.worktreeBranch = ""
+				m.worktreePaths = nil
+				m.worktreeValidated = false
+				m.err = nil
+			case "enter":
+				if m.worktreeBranch == "" {
+					m.err = fmt.Errorf("branch name is required")
+					return m, nil
+				}
+				if !m.worktreeValidated {
+					m.err = fmt.Errorf("branch must be validated first")
+					return m, nil
+				}
+				m.worktreeBusy = true
+				return m, m.createWorktree()
+			case "backspace":
+				runes := []rune(m.worktreeBranch)
+				if len(runes) > 0 {
+					m.worktreeBranch = string(runes[:len(runes)-1])
+					m.worktreePaths = m.calculateWorktreePaths()
+					m.worktreeValidated = false
+				}
+			case "ctrl+u":
+				m.worktreeBranch = ""
+				m.worktreePaths = nil
+				m.worktreeValidated = false
+			default:
+				if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
+					m.worktreeBranch += string(msg.Runes)
+					m.worktreePaths = m.calculateWorktreePaths()
+					m.worktreeValidated = false
+				}
+			}
+			return m, m.validateWorktreeBranch()
+		}
 		if m.searching {
 			switch key {
 			case "esc", "enter":
@@ -1233,6 +1333,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "x":
 			m.beginClose()
+		case "w":
+			if len(m.selected) == 0 {
+				m.err = fmt.Errorf("select at least one project first")
+				return m, nil
+			}
+			m.worktreeMode = true
+			m.worktreeBranch = ""
+			m.worktreePaths = nil
+			m.worktreeValidated = false
+			m.err = nil
+			return m, nil
 		case "p":
 			if m.filter == filterAgents {
 				m.showPreview = !m.showPreview
@@ -1730,10 +1841,10 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing {
+	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new  c clone  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktree  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
@@ -1774,7 +1885,7 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
@@ -1849,6 +1960,38 @@ func (m model) popupView(width int) string {
 		title = "Rename"
 		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
 		help = "Enter save  •  Esc cancel"
+		} else if m.worktreeMode {
+			title = "Create worktree"
+			cursor := "█"
+			if m.worktreeBranch != "" && !m.worktreeBusy {
+				cursor = ""
+			}
+			branchField := dimStyle.Render("Branch: ") + selectedStyle.Render(m.worktreeBranch+cursor)
+			fieldWidth := popupWidth - 6
+			
+			var pathsField string
+			if len(m.worktreePaths) > 0 {
+				pathsField = "\n\n" + dimStyle.Render("Worktrees:") + "\n"
+				for i, path := range m.worktreePaths {
+					if i >= 3 {
+						pathsField += fmt.Sprintf("\n  • …and %d more", len(m.worktreePaths)-i)
+						break
+					}
+					pathsField += "\n  " + path
+				}
+			}
+			
+			validationStatus := ""
+			if m.worktreeValidated {
+				validationStatus = " " + openStyle.Render("✓")
+			}
+			
+			field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + validationStatus + pathsField)
+			if m.worktreeBusy {
+				help = "Creating…"
+			} else {
+				help = "Enter create  •  Esc cancel"
+			}
 	} else if m.pinning {
 		title = "Pin " + m.entries[m.pinEntry].name
 		slot := "█"
@@ -2943,4 +3086,124 @@ func displayPath(path, home string) string {
 		return "~" + strings.TrimPrefix(path, home)
 	}
 	return path
+}
+
+func (m *model) calculateWorktreePaths() []string {
+	if m.worktreeBranch == "" {
+		return nil
+	}
+	entries := m.selectedEntries()
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.kind != "project" {
+			continue
+		}
+		owner, repo := m.getRepoOwner(entry.path)
+		worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
+		paths = append(paths, displayPath(worktreePath, os.Getenv("HOME")))
+	}
+	return paths
+}
+
+func (m *model) validateWorktreeBranch() tea.Cmd {
+	if m.worktreeBranch == "" || len(m.selected) == 0 {
+		return nil
+	}
+	entries := m.selectedEntries()
+	if len(entries) == 0 {
+		return nil
+	}
+	
+	return func() tea.Msg {
+		// Validate branch exists on origin for all selected projects
+		for _, entry := range entries {
+			if entry.kind != "project" {
+				continue
+			}
+			cmd := exec.Command("git", "-C", entry.path, "ls-remote", "--heads", "origin", m.worktreeBranch)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return worktreeMsg{err: fmt.Errorf("branch %q not found in origin for %s: %w", m.worktreeBranch, entry.name, err)}
+			}
+			if strings.TrimSpace(string(output)) == "" {
+				return worktreeMsg{err: fmt.Errorf("branch %q does not exist in origin for %s", m.worktreeBranch, entry.name)}
+			}
+			
+			// Check if worktree path already exists
+			owner, repo := m.getRepoOwner(entry.path)
+			worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
+			if _, err := os.Stat(worktreePath); err == nil {
+				return worktreeMsg{err: fmt.Errorf("worktree already exists at %s", displayPath(worktreePath, os.Getenv("HOME")))}
+			}
+		}
+		// Validation successful - return nil error to indicate valid
+		return worktreeMsg{err: nil}
+	}
+
+}
+func (m *model) createWorktree() tea.Cmd {
+	entries := m.selectedEntries()
+	return func() tea.Msg {
+		for _, entry := range entries {
+			if entry.kind != "project" {
+				continue
+			}
+			owner, repo := m.getRepoOwner(entry.path)
+			worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
+			
+			// Create worktree using the branch from origin
+			cmd := exec.Command("git", "-C", entry.path, "worktree", "add", worktreePath, "origin/"+m.worktreeBranch)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return worktreeMsg{err: fmt.Errorf("failed to create worktree for %s: %w\n%s", entry.name, err, output)}
+			}
+			
+			// Add to zoxide
+			_ = run(m.zoxide, "add", "--", worktreePath)
+		}
+		
+		// Return success - worktrees are created and added to zoxide
+		return worktreeMsg{err: nil}
+	}
+}
+func (m *model) getDefaultBranch(repoPath string) (string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine default branch: %w", err)
+	}
+	ref := strings.TrimSpace(string(output))
+	if strings.HasPrefix(ref, "refs/remotes/origin/") {
+		return strings.TrimPrefix(ref, "refs/remotes/origin/"), nil
+	}
+	return "main", nil
+}
+
+func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
+	cmd := exec.Command("git", "-C", repoPath, "remote", "get-url", "origin")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "user", filepath.Base(repoPath)
+	}
+	url := strings.TrimSpace(string(output))
+	
+	// Parse GitHub URL: git@github.com:owner/repo.git or https://github.com/owner/repo.git
+	if strings.HasPrefix(url, "git@github.com:") {
+		parts := strings.TrimPrefix(url, "git@github.com:")
+		parts = strings.TrimSuffix(parts, ".git")
+		slashes := strings.Split(parts, "/")
+		if len(slashes) >= 2 {
+			return slashes[0], slashes[1]
+		}
+	}
+	if strings.HasPrefix(url, "https://github.com/") {
+		parts := strings.TrimPrefix(url, "https://github.com/")
+		parts = strings.TrimSuffix(parts, ".git")
+		slashes := strings.Split(parts, "/")
+		if len(slashes) >= 2 {
+			return slashes[0], slashes[1]
+		}
+	}
+	// Fallback
+	return "user", filepath.Base(repoPath)
 }
