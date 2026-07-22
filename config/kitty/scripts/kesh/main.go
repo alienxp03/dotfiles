@@ -654,6 +654,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor+1 < len(m.rows) {
 					m.cursor++
 				}
+			case " ":
+				m.query += " "
+				m.rebuildRows()
 			case "backspace":
 				runes := []rune(m.query)
 				if len(runes) > 0 {
@@ -676,11 +679,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "/":
 			m.searching = true
-		case "up", "ctrl+k":
+		case "up", "ctrl+k", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "ctrl+j":
+		case "down", "ctrl+j", "j":
 			if m.cursor+1 < len(m.rows) {
 				m.cursor++
 			}
@@ -724,12 +727,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.filter = (m.filter + 4) % 5
 			m.rebuildRows()
-		default:
-			if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
-				m.searching = true
-				m.query += string(msg.Runes)
-				m.rebuildRows()
-			}
 		}
 		return m, m.queuePreview()
 	}
@@ -1111,16 +1108,23 @@ func (m model) View() string {
 		}
 	}
 	promptLabel := "Search"
-	promptValue := dimStyle.Render("press / to search")
+	promptValue := dimStyle.Render("/ to search")
 	if m.query != "" {
-		promptValue = "/" + m.query
+		promptValue = m.query
 	}
 	if m.searching {
-		promptValue = accentStyle.Render("/"+m.query+"█") + "  " + dimStyle.Render("SEARCH")
+		promptValue = accentStyle.Render(m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
 	header := accentStyle.Render("Kitty sessions") + "  " + strings.Join(tabs, " ")
 	if len(m.selected) > 0 {
-		header += "  " + accentStyle.Render(fmt.Sprintf("Selected: %d", len(m.selected)))
+		names := make([]string, 0, len(m.selected))
+		for _, entry := range m.entries {
+			if m.selected[entry.key] {
+				names = append(names, entry.name)
+			}
+		}
+		summary := fmt.Sprintf("Selected (%d): %s", len(names), strings.Join(names, ", "))
+		header += "  " + accentStyle.Render(truncate(summary, max(12, width-lipgloss.Width(header)-2)))
 	}
 	lines := []string{
 		header,
@@ -1160,9 +1164,9 @@ func (m model) View() string {
 	if m.err != nil && !m.renaming && !m.creating && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "ctrl+j/k move  type search  space select  n new  h/l expand  enter open  p pin  r rename  x close  tab filter  q quit"
+	footer := "j/k move  space select  n new  h/l expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
-		footer = "ctrl+j/k move  type search  enter focus  p preview  r rename  x close  tab filter  q quit"
+		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
 	if m.searching {
 		footer = "type to filter  ctrl+j/k move  backspace delete  ctrl+u clear  enter/esc normal mode"

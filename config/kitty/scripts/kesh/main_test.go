@@ -450,7 +450,7 @@ func TestSearchRanksExactProjectNameFirst(t *testing.T) {
 	}
 }
 
-func TestTypingStartsSearchAndCtrlJKMoves(t *testing.T) {
+func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	m := model{entries: []entry{
 		{key: "/projects/java", name: "java"},
 		{key: "/projects/javascript", name: "javascript"},
@@ -459,19 +459,48 @@ func TestTypingStartsSearchAndCtrlJKMoves(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updated.(model)
-	if !m.searching || m.query != "j" || len(m.rows) != 2 {
-		t.Fatalf("typing did not start search: searching=%v query=%q rows=%d", m.searching, m.query, len(m.rows))
+	if m.searching || m.cursor != 1 {
+		t.Fatalf("j should navigate in command mode: searching=%v cursor=%d", m.searching, m.cursor)
 	}
 
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = updated.(model)
-	if m.cursor != 1 {
-		t.Fatalf("ctrl+j moved cursor to %d, want 1", m.cursor)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(model)
+	if !m.searching || m.query != "j" || len(m.rows) != 2 {
+		t.Fatalf("slash search state: searching=%v query=%q rows=%d", m.searching, m.query, len(m.rows))
 	}
+
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
 	m = updated.(model)
 	if m.cursor != 0 {
 		t.Fatalf("ctrl+k moved cursor to %d, want 0", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(model)
+	if m.searching || m.query != "j" {
+		t.Fatalf("esc did not retain the filter in command mode: searching=%v query=%q", m.searching, m.query)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = updated.(model)
+	if len(m.selected) != 1 || !m.creating {
+		t.Fatalf("command mode actions failed after search: selected=%#v creating=%v", m.selected, m.creating)
+	}
+}
+
+func TestSelectedHeaderIncludesCountAndProjectName(t *testing.T) {
+	m := model{
+		width: 140, height: 30,
+		entries:  []entry{{key: "/projects/api", name: "API"}},
+		selected: map[string]bool{"/projects/api": true},
+	}
+	m.rebuildRows()
+	view := m.View()
+	if !strings.Contains(view, "Selected (1): API") || strings.Contains(view, "Selected: 1") {
+		t.Fatalf("selected header does not include count and name:\n%s", view)
 	}
 }
 

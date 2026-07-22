@@ -12,7 +12,7 @@ Keys:
 
 The picker starts in normal mode:
 
-- `ctrl+j` / `ctrl+k`: select a row
+- `j` / `k` or `ctrl+j` / `ctrl+k`: select a row
 - `space`: toggle a project or SSH host for a new multi-tab session
 - `n`: name and create a session with one tab per selected item
 - `l`: expand or descend through session → tabs → windows
@@ -22,8 +22,8 @@ The picker starts in normal mode:
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
 - `x`, then `y`: close the selected workspace, tab, or window
-- Start typing to fuzzy-filter sessions; `/` still enters search mode explicitly
-- `enter` / `esc`: leave search mode
+- `/`: enter search mode and fuzzy-filter sessions as you type
+- `enter` / `esc`: return to command mode while retaining the filter
 - `tab` / `shift+tab`: change filter
 - `q` / `esc`: close from normal mode
 
@@ -33,7 +33,7 @@ The `Agents` filter is a flat, most-recently-focused list of Kitty windows runni
 
 - `enter`: focus the selected agent window
 - `p`: show or hide the terminal preview
-- Start typing to fuzzy-search agent, project, tab, command, and directory fields
+- `/`: fuzzy-search agent, project, tab, command, and directory fields
 
 Run `kesh agents` to start directly in this view. Kitty invokes it in a tab for `Cmd+Shift+P`; `Cmd+Shift+O` opens the complete hierarchy in an overlay.
 
