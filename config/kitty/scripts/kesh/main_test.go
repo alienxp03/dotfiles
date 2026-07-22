@@ -436,6 +436,45 @@ func TestComposedSessionName(t *testing.T) {
 	}
 }
 
+func TestSearchRanksExactProjectNameFirst(t *testing.T) {
+	m := model{
+		query: "crm",
+		entries: []entry{
+			{key: "/workspace/customer-relations-manager", name: "customer-relations-manager", detail: "/workspace/customer-relations-manager"},
+			{key: "/workspace/crm", name: "crm", detail: "/workspace/crm"},
+		},
+	}
+	m.rebuildRows()
+	if len(m.rows) != 2 || m.entries[m.rows[0].entryIndex].name != "crm" {
+		t.Fatalf("ranked rows = %#v, want crm first", m.rows)
+	}
+}
+
+func TestTypingStartsSearchAndCtrlJKMoves(t *testing.T) {
+	m := model{entries: []entry{
+		{key: "/projects/java", name: "java"},
+		{key: "/projects/javascript", name: "javascript"},
+	}}
+	m.rebuildRows()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(model)
+	if !m.searching || m.query != "j" || len(m.rows) != 2 {
+		t.Fatalf("typing did not start search: searching=%v query=%q rows=%d", m.searching, m.query, len(m.rows))
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = updated.(model)
+	if m.cursor != 1 {
+		t.Fatalf("ctrl+j moved cursor to %d, want 1", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = updated.(model)
+	if m.cursor != 0 {
+		t.Fatalf("ctrl+k moved cursor to %d, want 0", m.cursor)
+	}
+}
+
 func TestSpaceTogglesTopLevelSelection(t *testing.T) {
 	m := model{entries: []entry{{key: "/projects/api", name: "API"}}, rows: []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}}}
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})

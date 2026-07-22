@@ -12,7 +12,7 @@ Keys:
 
 The picker starts in normal mode:
 
-- `j` / `k`: select a row
+- `ctrl+j` / `ctrl+k`: select a row
 - `space`: toggle a project or SSH host for a new multi-tab session
 - `n`: name and create a session with one tab per selected item
 - `l`: expand or descend through session → tabs → windows
@@ -22,20 +22,20 @@ The picker starts in normal mode:
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
 - `x`, then `y`: close the selected workspace, tab, or window
-- `/`: enter search mode; typing then fuzzy-filters sessions
+- Start typing to fuzzy-filter sessions; `/` still enters search mode explicitly
 - `enter` / `esc`: leave search mode
 - `tab` / `shift+tab`: change filter
 - `q` / `esc`: close from normal mode
 
-Arrow keys remain available as alternatives to `hjkl`.
+Arrow keys remain available for moving through rows and the hierarchy.
 
-The `Agents` filter is a flat, most-recently-focused list of Kitty windows running Codex or Pi. It includes a live snapshot of the selected window's terminal:
+The `Agents` filter is a flat, most-recently-focused list of Kitty windows running Codex or pi. It includes a live snapshot of the selected window's terminal:
 
 - `enter`: focus the selected agent window
 - `p`: show or hide the terminal preview
-- `/`: fuzzy-search agent, project, tab, command, and directory fields
+- Start typing to fuzzy-search agent, project, tab, command, and directory fields
 
-Run `kesh agents` to start directly in this view. Kitty invokes it in an overlay for `Cmd+Shift+P`; `Cmd+Shift+I` opens the complete hierarchy in a tab.
+Run `kesh agents` to start directly in this view. Kitty invokes it in a tab for `Cmd+Shift+P`; `Cmd+Shift+O` opens the complete hierarchy in an overlay.
 
 Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kitty invokes `kesh switch 0` through `kesh switch 9` in the background for `Cmd+0` through `Cmd+9`.
 

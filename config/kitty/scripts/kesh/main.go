@@ -13,6 +13,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/sahilm/fuzzy"
 )
 
 type kittyState []struct {
@@ -151,10 +153,10 @@ type model struct {
 
 const (
 	filterAll = iota
+	filterAgents
 	filterOpen
 	filterProjects
 	filterSSH
-	filterAgents
 )
 
 var (
@@ -162,6 +164,7 @@ var (
 	dimStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	openStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	selectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("230")).Bold(true)
+	focusStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
 	projectStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 	sshStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	piStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
@@ -643,6 +646,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch key {
 			case "esc", "enter":
 				m.searching = false
+			case "up", "ctrl+k":
+				if m.cursor > 0 {
+					m.cursor--
+				}
+			case "down", "ctrl+j":
+				if m.cursor+1 < len(m.rows) {
+					m.cursor++
+				}
 			case "backspace":
 				runes := []rune(m.query)
 				if len(runes) > 0 {
@@ -665,11 +676,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "/":
 			m.searching = true
-		case "up", "ctrl+k", "k":
+		case "up", "ctrl+k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "ctrl+j", "j":
+		case "down", "ctrl+j":
 			if m.cursor+1 < len(m.rows) {
 				m.cursor++
 			}
@@ -713,6 +724,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.filter = (m.filter + 4) % 5
 			m.rebuildRows()
+		default:
+			if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
+				m.searching = true
+				m.query += string(msg.Runes)
+				m.rebuildRows()
+			}
 		}
 		return m, m.queuePreview()
 	}
@@ -930,19 +947,35 @@ func (m *model) rebuildRows() {
 		m.rebuildAgentRows()
 		return
 	}
-	var rows []row
+	entryIndexes := make([]int, 0, len(m.entries))
+	searchValues := make([]string, 0, len(m.entries))
 	for i := range m.entries {
-		e := &m.entries[i]
-		if !m.matchesFilter(*e) || !fuzzyMatch(m.query, e.name+" "+e.originalName+" "+e.detail) {
+		e := m.entries[i]
+		if !m.matchesFilter(e) {
 			continue
 		}
-		rows = append(rows, row{entryIndex: i, tabIndex: -1, windowIndex: -1})
+		entryIndexes = append(entryIndexes, i)
+		searchValues = append(searchValues, e.name+" "+e.originalName+" "+e.detail)
+	}
+	if m.query != "" {
+		matches := fuzzy.Find(m.query, searchValues)
+		ranked := make([]int, 0, len(matches))
+		for _, match := range matches {
+			ranked = append(ranked, entryIndexes[match.Index])
+		}
+		entryIndexes = ranked
+	}
+
+	var rows []row
+	for _, entryIndex := range entryIndexes {
+		e := &m.entries[entryIndex]
+		rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1})
 		if e.expanded && m.query == "" {
 			for tabIndex := range e.tabs {
-				rows = append(rows, row{entryIndex: i, tabIndex: tabIndex, windowIndex: -1})
+				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: -1})
 				if e.tabs[tabIndex].expanded {
 					for windowIndex := range e.tabs[tabIndex].windows {
-						rows = append(rows, row{entryIndex: i, tabIndex: tabIndex, windowIndex: windowIndex})
+						rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex})
 					}
 				}
 			}
@@ -1009,6 +1042,7 @@ func cleanPreview(content string) string {
 
 func (m *model) rebuildAgentRows() {
 	rows := make([]row, 0)
+	searchValues := make([]string, 0)
 	seen := map[int]bool{}
 	for entryIndex := range m.entries {
 		e := m.entries[entryIndex]
@@ -1019,22 +1053,28 @@ func (m *model) rebuildAgentRows() {
 				if window.agent == "" || seen[window.id] {
 					continue
 				}
-				searchValue := strings.Join([]string{
-					window.agent, e.name, e.originalName, e.detail, tab.title, window.title, window.command, window.detail,
-				}, " ")
-				if !fuzzyMatch(m.query, searchValue) {
-					continue
-				}
 				seen[window.id] = true
 				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex})
+				searchValues = append(searchValues, strings.Join([]string{
+					window.agent, e.name, e.originalName, e.detail, tab.title, window.title, window.command, window.detail,
+				}, " "))
 			}
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		a := m.entries[rows[i].entryIndex].tabs[rows[i].tabIndex].windows[rows[i].windowIndex]
-		b := m.entries[rows[j].entryIndex].tabs[rows[j].tabIndex].windows[rows[j].windowIndex]
-		return a.lastFocused > b.lastFocused
-	})
+	if m.query != "" {
+		matches := fuzzy.Find(m.query, searchValues)
+		ranked := make([]row, 0, len(matches))
+		for _, match := range matches {
+			ranked = append(ranked, rows[match.Index])
+		}
+		rows = ranked
+	} else {
+		sort.SliceStable(rows, func(i, j int) bool {
+			a := m.entries[rows[i].entryIndex].tabs[rows[i].tabIndex].windows[rows[i].windowIndex]
+			b := m.entries[rows[j].entryIndex].tabs[rows[j].tabIndex].windows[rows[j].windowIndex]
+			return a.lastFocused > b.lastFocused
+		})
+	}
 	m.rows = rows
 	if m.cursor >= len(rows) {
 		m.cursor = max(0, len(rows)-1)
@@ -1054,27 +1094,6 @@ func (m model) matchesFilter(e entry) bool {
 	}
 }
 
-func fuzzyMatch(query, value string) bool {
-	queryRunes := []rune(strings.ToLower(query))
-	valueRunes := []rune(strings.ToLower(value))
-	position := 0
-	for _, wanted := range queryRunes {
-		found := false
-		for position < len(valueRunes) {
-			got := valueRunes[position]
-			position++
-			if got == wanted {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
 func (m model) View() string {
 	outerWidth := max(40, m.width-4)
 	showSidePreview := m.filter == filterAgents && m.showPreview && outerWidth >= 88
@@ -1083,7 +1102,7 @@ func (m model) View() string {
 	if showSidePreview {
 		width = max(40, outerWidth*43/100)
 	}
-	tabs := []string{"All", "Open", "Projects", "SSH", "Agents"}
+	tabs := []string{"All", "Agents", "Open", "Projects", "SSH"}
 	for i := range tabs {
 		if i == m.filter {
 			tabs[i] = accentStyle.Render("[" + tabs[i] + "]")
@@ -1119,9 +1138,17 @@ func (m model) View() string {
 	}
 	end := min(len(m.rows), start+available)
 	for i := start; i < end; i++ {
-		line := m.renderRow(m.rows[i], width-2)
-		if i == m.cursor {
-			line = accentStyle.Render("❯") + " " + selectedStyle.Width(width-2).Render(line)
+		row := m.rows[i]
+		focused := i == m.cursor
+		line := m.renderRow(row, width-2, focused)
+		if focused {
+			if row.tabIndex < 0 && m.entries[row.entryIndex].open {
+				// The row renderer preserves only the green open indicator; the
+				// remaining columns still receive the focus treatment.
+				line = accentStyle.Render("▌") + " " + line
+			} else {
+				line = accentStyle.Render("▌") + " " + focusStyle.Render(ansi.Strip(line))
+			}
 		} else {
 			line = "  " + line
 		}
@@ -1133,12 +1160,12 @@ func (m model) View() string {
 	if m.err != nil && !m.renaming && !m.creating && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new session  h/l collapse/expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "ctrl+j/k move  type search  space select  n new  h/l expand  enter open  p pin  r rename  x close  tab filter  q quit"
 	if m.filter == filterAgents {
-		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
+		footer = "ctrl+j/k move  type search  enter focus  p preview  r rename  x close  tab filter  q quit"
 	}
 	if m.searching {
-		footer = "type to filter  backspace delete  ctrl+u clear  enter/esc normal mode"
+		footer = "type to filter  ctrl+j/k move  backspace delete  ctrl+u clear  enter/esc normal mode"
 	}
 	lines = append(lines, dimStyle.Render(footer))
 	if popup := m.popupView(width); popup != "" {
@@ -1247,7 +1274,7 @@ func overlayPopup(lines []string, popup string, width int) []string {
 	return lines
 }
 
-func (m model) renderRow(r row, width int) string {
+func (m model) renderRow(r row, width int, focused bool) string {
 	e := m.entries[r.entryIndex]
 	if r.windowIndex >= 0 {
 		window := e.tabs[r.tabIndex].windows[r.windowIndex]
@@ -1283,13 +1310,9 @@ func (m model) renderRow(r row, width int) string {
 		left := fmt.Sprintf("    %s %s %s %s %s", branch, arrow, projectStyle.Render("󱂬"), agentIcon(tab.agent), truncate(tab.title, nameWidth))
 		return padColumns(left, dimStyle.Render(tab.detail), width)
 	}
-	selection := dimStyle.Render("☐")
+	selection := " "
 	if m.selected[e.key] {
-		selection = accentStyle.Render("☑")
-	}
-	marker := dimStyle.Render("○")
-	if e.open {
-		marker = openStyle.Render("●")
+		selection = accentStyle.Render("✓")
 	}
 	arrow := " "
 	if len(e.tabs) > 0 {
@@ -1298,17 +1321,35 @@ func (m model) renderRow(r row, width int) string {
 			arrow = "▾"
 		}
 	}
-	icon := projectStyle.Render("󰈹")
+	nameWidth := max(8, width*4/10-13)
+	iconGlyph := "󰈹"
+	icon := projectStyle.Render(iconGlyph)
 	if e.kind == "ssh" {
-		icon = sshStyle.Render("⚡")
+		iconGlyph = "⚡"
+		icon = sshStyle.Render(iconGlyph)
+	}
+	// Pad before styling: fmt counts ANSI escape bytes as printable width, which
+	// otherwise shifts the details column for open (styled) entries.
+	name := fmt.Sprintf("%-*s", nameWidth, truncate(e.name, nameWidth))
+	if e.open {
+		icon = openStyle.Render(iconGlyph)
+		name = openStyle.Bold(true).Render(name)
 	}
 	pin := "   "
 	if e.pin != "" {
 		pin = accentStyle.Render("[" + e.pin + "]")
 	}
-	nameWidth := max(8, width*4/10-13)
-	left := fmt.Sprintf("%s %s %s %s %s %s %-*s", selection, marker, pin, arrow, icon, agentIcon(e.agent), nameWidth, truncate(e.name, nameWidth))
-	return padColumns(left, dimStyle.Render(truncate(e.detail, max(10, width-38))), width)
+	agent := agentIcon(e.agent)
+	detail := dimStyle.Render(truncate(e.detail, max(10, width-38)))
+	if focused && e.open {
+		selection = focusStyle.Render(ansi.Strip(selection))
+		pin = focusStyle.Render(ansi.Strip(pin))
+		arrow = focusStyle.Render(arrow)
+		agent = focusStyle.Render(ansi.Strip(agent))
+		detail = focusStyle.Render(ansi.Strip(detail))
+	}
+	left := fmt.Sprintf("%s   %s %s %s %s %s", selection, pin, arrow, icon, agent, name)
+	return padColumns(left, detail, width)
 }
 
 func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int) string {
@@ -1329,11 +1370,11 @@ func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int
 func agentLabel(agent string) string {
 	switch agent {
 	case "pi":
-		return "Pi"
+		return "pi"
 	case "codex":
 		return "Codex"
 	case "pi,codex":
-		return "Pi+Codex"
+		return "pi+Codex"
 	default:
 		return agent
 	}
