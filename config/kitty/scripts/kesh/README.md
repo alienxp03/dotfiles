@@ -2,7 +2,7 @@
 
 Bubble Tea picker for browsing zoxide projects, Kitty workspaces, tabs, windows, SSH hosts, and active Codex/pi agents.
 
-Live Kitty workspaces and reusable source projects are separate rows, even when they share a directory. Opening a workspace focuses it; selecting its source project with `space` keeps that directory available for composing another workspace with `n`.
+A single-project Kitty session and its zoxide source are one logical folder row, shown with ``. Multi-project sessions created by Kesh remain separate `` session rows so their individual folder sources stay available for composing another session with `n`. SSH locations use ``. Green means an entry is currently open; the icon does not change for saved or closed state.
 
 Build the binary used directly by `kitty.conf`:
 
@@ -21,6 +21,8 @@ The picker starts in normal mode:
 - `l`: expand or descend through session → tabs → windows
 - `h`: return to the parent or collapse the current level
 - `enter`: open a session, focus a tab, or focus a window
+- `s`: safely save the selected open project or workspace's tabs, splits, and working directories
+- `S`: additionally save foreground commands so restoring the project or workspace reruns them
 - `p`, then `0`–`9`: pin the selected session to a shortcut slot
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
@@ -41,6 +43,8 @@ The `Agents` filter is a flat, most-recently-focused list of Kitty windows runni
 Run `kesh agents` to start directly in this view. Kitty invokes it in a tab for `Cmd+Shift+P`; `Cmd+Shift+O` opens the complete hierarchy in an overlay.
 
 Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kesh also generates `kitty-pins.conf` beside that file and reloads Kitty whenever pins change. `Cmd+0` through `Cmd+9` therefore invoke Kitty's native `goto_session` action directly, without starting Kesh on every switch.
+
+Saved states are catalogued in `${XDG_STATE_HOME:-~/.local/state}/kesh/saved-sessions.json`, with Kitty snapshots under the adjacent `sessions/` directory. Press `s` on an open named project or workspace and confirm with `y` to save it safely without capturing shell foreground commands. Use `S` for an explicit command-aware snapshot: Kesh lists the detected foreground commands before confirmation, and Kitty reruns them when restoring. Saved entries remain in Kesh after they are closed; pressing `enter` restores a closed entry or focuses it when already open. Use `x`, then `y` on a closed saved entry to delete its snapshot.
 
 The clone destination defaults to `~/workspace`. Override it in `${XDG_CONFIG_HOME:-~/.config}/kesh/config.toml`:
 

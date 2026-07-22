@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,6 +48,7 @@ type windowItem struct {
 	title       string
 	detail      string
 	command     string
+	fullCommand string
 	agent       string
 	lastFocused float64
 }
@@ -68,6 +70,8 @@ type entry struct {
 	kind         string
 	path         string
 	session      string
+	sessionFile  string
+	saved        bool
 	open         bool
 	lastFocused  float64
 	nameTaken    bool
@@ -87,8 +91,9 @@ type row struct {
 type actionMsg struct{ err error }
 
 type closeMsg struct {
-	entries []entry
-	err     error
+	entries         []entry
+	deletedSavedKey string
+	err             error
 }
 
 type previewMsg struct {
@@ -110,9 +115,26 @@ type pinTarget struct {
 	Version     int    `json:"version,omitempty"`
 }
 
-const currentPinVersion = 2
+const (
+	currentPinVersion          = 2
+	currentSavedSessionVersion = 1
+)
 
 type pinStore map[string]pinTarget
+
+type savedSessionRecord struct {
+	Name               string   `json:"name"`
+	SessionName        string   `json:"session_name"`
+	SessionFile        string   `json:"session_file"`
+	Projects           []string `json:"projects,omitempty"`
+	ForegroundCommands bool     `json:"foreground_commands,omitempty"`
+	SavedAt            string   `json:"saved_at"`
+}
+
+type savedSessionStore struct {
+	Version  int                           `json:"version"`
+	Sessions map[string]savedSessionRecord `json:"sessions"`
+}
 
 type nameStore map[string]string
 
@@ -126,6 +148,12 @@ type renameMsg struct {
 type createMsg struct{ err error }
 
 type cloneMsg struct{ err error }
+
+type saveSessionMsg struct {
+	entryIndex int
+	record     savedSessionRecord
+	err        error
+}
 
 type keshConfig struct {
 	Clone struct {
@@ -145,6 +173,10 @@ type model struct {
 	createValue            string
 	cloning                bool
 	cloneBusy              bool
+	saving                 bool
+	saveConfirming         bool
+	saveForeground         bool
+	saveEntry              int
 	cloneDestinationFocus  bool
 	cloneDestinationEdited bool
 	cloneRepository        string
@@ -292,6 +324,14 @@ func pinsPath() string {
 	return filepath.Join(stateHome, "kesh", "pins.json")
 }
 
+func savedSessionsPath() string {
+	return filepath.Join(filepath.Dir(pinsPath()), "saved-sessions.json")
+}
+
+func savedSessionDirectory() string {
+	return filepath.Join(filepath.Dir(pinsPath()), "sessions")
+}
+
 func pinShortcutsPath() string {
 	return filepath.Join(filepath.Dir(pinsPath()), "kitty-pins.conf")
 }
@@ -416,6 +456,11 @@ func applyNames(entries []entry, names nameStore) {
 		}
 		entries[index].name = entries[index].originalName
 		if entries[index].kind == "project" {
+			if entries[index].session != "" {
+				if alias := names["workspace:"+entries[index].session]; alias != "" {
+					entries[index].name = alias
+				}
+			}
 			continue
 		}
 		alias := names[entries[index].key]
@@ -463,6 +508,86 @@ func loadPins() (pinStore, error) {
 		seenTargets[target.Key] = slot
 	}
 	return pins, nil
+}
+
+func loadSavedSessions() (savedSessionStore, error) {
+	store := savedSessionStore{Version: currentSavedSessionVersion, Sessions: map[string]savedSessionRecord{}}
+	content, err := os.ReadFile(savedSessionsPath())
+	if os.IsNotExist(err) {
+		return store, nil
+	}
+	if err != nil {
+		return store, fmt.Errorf("read saved sessions: %w", err)
+	}
+	if err := json.Unmarshal(content, &store); err != nil {
+		return savedSessionStore{}, fmt.Errorf("invalid saved session state: %w", err)
+	}
+	if store.Version != currentSavedSessionVersion || store.Sessions == nil {
+		return savedSessionStore{}, fmt.Errorf("unsupported saved session state version: %d", store.Version)
+	}
+	directory := filepath.Clean(savedSessionDirectory()) + string(os.PathSeparator)
+	seenNames := map[string]bool{}
+	for key, record := range store.Sessions {
+		file := filepath.Clean(record.SessionFile)
+		if key != file || !strings.HasPrefix(file, directory) {
+			return savedSessionStore{}, fmt.Errorf("invalid saved session file: %s", record.SessionFile)
+		}
+		if record.Name == "" || record.SessionName == "" || seenNames[record.SessionName] {
+			return savedSessionStore{}, fmt.Errorf("invalid saved session metadata for %s", file)
+		}
+		seenNames[record.SessionName] = true
+		for _, project := range record.Projects {
+			if !filepath.IsAbs(project) {
+				return savedSessionStore{}, fmt.Errorf("invalid saved session project: %s", project)
+			}
+		}
+	}
+	return store, nil
+}
+
+func saveSavedSessions(store savedSessionStore) error {
+	path := savedSessionsPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("create saved session directory: %w", err)
+	}
+	store.Version = currentSavedSessionVersion
+	if store.Sessions == nil {
+		store.Sessions = map[string]savedSessionRecord{}
+	}
+	content, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode saved sessions: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".saved-sessions-*.json")
+	if err != nil {
+		return fmt.Errorf("create saved session state: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(append(content, '\n')); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryName, path); err != nil {
+		return fmt.Errorf("save saved sessions: %w", err)
+	}
+	return nil
+}
+
+func savedSessionForName(store savedSessionStore, sessionName string) (savedSessionRecord, bool) {
+	for _, record := range store.Sessions {
+		if record.SessionName == sessionName {
+			return record, true
+		}
+	}
+	return savedSessionRecord{}, false
 }
 
 func savePins(pins pinStore) error {
@@ -555,6 +680,9 @@ func syncPinShortcuts(kitty string, pins pinStore) error {
 }
 
 func pinTargetForEntry(e entry) (pinTarget, error) {
+	if e.sessionFile != "" {
+		return pinTarget{Key: e.key, Name: e.name, Kind: e.kind, SessionFile: e.sessionFile, Version: currentPinVersion}, nil
+	}
 	directory := filepath.Join(filepath.Dir(pinsPath()), "sessions")
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return pinTarget{}, fmt.Errorf("create pinned session directory: %w", err)
@@ -592,31 +720,50 @@ func migrateLegacyPins(entries []entry, pins pinStore) (pinStore, bool) {
 	updated := make(pinStore, len(pins))
 	changed := false
 	for slot, target := range pins {
-		if target.Version != 0 {
-			updated[slot] = target
-			continue
-		}
-		target.Version = currentPinVersion
-		changed = true
-		if target.Kind == "project" {
-			var fallback *entry
-			for index := range entries {
-				candidate := &entries[index]
-				if candidate.kind != "workspace" || candidate.path != target.Key {
-					continue
+		if target.Version == 0 {
+			target.Version = currentPinVersion
+			changed = true
+			if target.Kind == "project" {
+				var fallback *entry
+				for index := range entries {
+					candidate := &entries[index]
+					if candidate.kind != "workspace" || candidate.path != target.Key {
+						continue
+					}
+					if fallback == nil {
+						fallback = candidate
+					}
+					if candidate.name == target.Name {
+						fallback = candidate
+						break
+					}
 				}
-				if fallback == nil {
-					fallback = candidate
-				}
-				if candidate.name == target.Name {
-					fallback = candidate
-					break
+				if fallback != nil {
+					target.Key = fallback.key
+					target.Name = fallback.name
+					target.Kind = "workspace"
 				}
 			}
-			if fallback != nil {
-				target.Key = fallback.key
-				target.Name = fallback.name
-				target.Kind = "workspace"
+		}
+
+		matched := false
+		for _, candidate := range entries {
+			if candidate.key == target.Key {
+				matched = true
+				break
+			}
+		}
+		if !matched && target.Kind == "workspace" {
+			sessionName := strings.TrimPrefix(target.Key, "workspace:")
+			for _, candidate := range entries {
+				if candidate.kind != "project" || candidate.session != sessionName {
+					continue
+				}
+				target.Key = candidate.key
+				target.Name = candidate.name
+				target.Kind = "project"
+				changed = true
+				break
 			}
 		}
 		updated[slot] = target
@@ -713,6 +860,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		if msg.deletedSavedKey != "" {
+			updatedPins := make(pinStore, len(m.pins))
+			for slot, target := range m.pins {
+				if target.Key != msg.deletedSavedKey {
+					updatedPins[slot] = target
+				}
+			}
+			if len(updatedPins) != len(m.pins) {
+				if err := savePins(updatedPins); err != nil {
+					m.err = err
+					return m, nil
+				}
+				if err := syncPinShortcuts(m.kitty, updatedPins); err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.pins = updatedPins
+			}
+		}
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
 		applyPins(m.entries, m.pins)
@@ -765,10 +931,61 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case saveSessionMsg:
+		m.saving = false
+		m.saveConfirming = false
+		m.saveForeground = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		entry := &m.entries[msg.entryIndex]
+		entry.saved = true
+		entry.sessionFile = msg.record.SessionFile
+		pinsChanged := false
+		for slot, target := range m.pins {
+			if target.Key == entry.key && target.SessionFile != msg.record.SessionFile {
+				target.SessionFile = msg.record.SessionFile
+				m.pins[slot] = target
+				pinsChanged = true
+			}
+		}
+		if pinsChanged {
+			if err := savePins(m.pins); err != nil {
+				m.err = err
+				return m, nil
+			}
+			if err := syncPinShortcuts(m.kitty, m.pins); err != nil {
+				m.err = err
+				return m, nil
+			}
+		}
+		m.err = nil
+		return m, nil
 	case tea.KeyMsg:
 		key := msg.String()
 		if key == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if m.saving {
+			return m, nil
+		}
+		if m.saveConfirming {
+			switch key {
+			case "esc":
+				m.saveConfirming = false
+				m.saveForeground = false
+				m.err = nil
+			case "y":
+				m.saveConfirming = false
+				m.saving = true
+				m.err = nil
+				entry := m.entries[m.saveEntry]
+				return m, runSaveSession(m.kitty, entry, m.saveEntry, m.saveForeground)
+			default:
+				m.err = fmt.Errorf("press y to confirm or esc to cancel")
+			}
+			return m, nil
 		}
 		if m.pinning {
 			switch {
@@ -995,6 +1212,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			m.beginRename()
+		case "s", "S":
+			if len(m.rows) == 0 {
+				return m, nil
+			}
+			selected := m.rows[m.cursor]
+			entry := m.entries[selected.entryIndex]
+			if !entry.open {
+				m.err = fmt.Errorf("save an open project or workspace")
+				return m, nil
+			}
+			if entry.session == "" {
+				m.err = fmt.Errorf("unnamed workspaces cannot be saved yet")
+				return m, nil
+			}
+			m.saveConfirming = true
+			m.saveForeground = key == "S"
+			m.saveEntry = selected.entryIndex
+			m.err = nil
+			return m, nil
 		case "x":
 			m.beginClose()
 		case "p":
@@ -1055,7 +1291,7 @@ func (m *model) beginClose() {
 	}
 	selected := m.rows[m.cursor]
 	entry := m.entries[selected.entryIndex]
-	if selected.tabIndex < 0 && len(entry.tabs) == 0 {
+	if selected.tabIndex < 0 && len(entry.tabs) == 0 && !(entry.saved && !entry.open) {
 		m.err = fmt.Errorf("%s is not open", entry.name)
 		return
 	}
@@ -1278,10 +1514,20 @@ func (m *model) rebuildRows() {
 		for _, match := range matches {
 			ranked = append(ranked, entryIndexes[match.Index])
 		}
-		// Fuzzy relevance determines the order within each group, but a live
-		// workspace must always rank above an unopened source project.
+		// Fuzzy relevance determines the order within each group. Live
+		// workspaces rank first, followed by restorable saved workspaces, then
+		// source projects and SSH hosts.
+		priority := func(e entry) int {
+			if e.open {
+				return 0
+			}
+			if e.saved {
+				return 1
+			}
+			return 2
+		}
 		sort.SliceStable(ranked, func(i, j int) bool {
-			return m.entries[ranked[i]].open && !m.entries[ranked[j]].open
+			return priority(m.entries[ranked[i]]) < priority(m.entries[ranked[j]])
 		})
 		entryIndexes = ranked
 	}
@@ -1438,7 +1684,7 @@ func (m model) View() string {
 	if m.searching {
 		promptValue = accentStyle.Render(m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
-	header := accentStyle.Render("Kitty sessions") + "  " + strings.Join(tabs, " ")
+	header := accentStyle.Render("Kesh") + "  " + strings.Join(tabs, " ")
 	if len(m.selected) > 0 {
 		names := make([]string, 0, len(m.selected))
 		for _, entry := range m.entries {
@@ -1484,15 +1730,18 @@ func (m model) View() string {
 	if len(m.rows) == 0 {
 		lines = append(lines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.pinning && !m.closing {
+	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new  c clone  h/l expand  enter open  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
 	if m.searching {
 		footer = "type to filter  ctrl+j/k move  backspace delete  ctrl+u clear  enter/esc normal mode"
+	}
+	if m.saving {
+		footer = "Saving workspace…"
 	}
 	lines = append(lines, dimStyle.Render(footer))
 	if popup := m.popupView(width); popup != "" {
@@ -1525,15 +1774,42 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.pinning && !m.closing {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
-	if m.cloning {
+	if m.cloning || m.saveForeground {
 		popupWidth = min(72, max(36, width-6))
 	}
 	var title, field, help string
-	if m.cloning {
+	if m.saveConfirming {
+		entry := m.entries[m.saveEntry]
+		if m.saveForeground {
+			title = "Save with running commands"
+			lines := []string{fmt.Sprintf("Save %q and rerun foreground commands when restored?", entry.name)}
+			commands := workspaceForegroundCommands(entry)
+			if len(commands) == 0 {
+				lines = append(lines, "", dimStyle.Render("No non-shell foreground commands detected."))
+			} else {
+				lines = append(lines, "", "Restoring will rerun:")
+				for index, command := range commands {
+					if index == 4 {
+						lines = append(lines, fmt.Sprintf("  • …and %d more", len(commands)-index))
+						break
+					}
+					lines = append(lines, "  • "+truncate(command, popupWidth-12))
+				}
+			}
+			field = lipgloss.NewStyle().Width(popupWidth - 6).Render(strings.Join(lines, "\n"))
+		} else if entry.saved {
+			title = "Update saved workspace"
+			field = lipgloss.NewStyle().Width(popupWidth - 6).Render(fmt.Sprintf("Update the saved snapshot for %q?", entry.name))
+		} else {
+			title = "Save workspace"
+			field = lipgloss.NewStyle().Width(popupWidth - 6).Render(fmt.Sprintf("Save %q for later restoration?", entry.name))
+		}
+		help = "Press y to confirm  •  Esc cancel"
+	} else if m.cloning {
 		title = "Clone repository"
 		repositoryCursor := ""
 		destinationCursor := ""
@@ -1609,6 +1885,9 @@ func (m model) popupView(width int) string {
 func (m model) closePrompt() string {
 	selected := m.closeRow
 	entry := m.entries[selected.entryIndex]
+	if entry.saved && !entry.open {
+		return fmt.Sprintf("Delete saved workspace %q?", entry.name)
+	}
 	if selected.windowIndex >= 0 {
 		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
 		return fmt.Sprintf("Close window %q?", window.title)
@@ -1684,10 +1963,13 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		}
 	}
 	nameWidth := max(8, width*4/10-13)
-	iconGlyph := "󰈹"
+	iconGlyph := ""
+	if e.kind == "workspace" {
+		iconGlyph = ""
+	}
 	icon := projectStyle.Render(iconGlyph)
 	if e.kind == "ssh" {
-		iconGlyph = "⚡"
+		iconGlyph = ""
 		icon = sshStyle.Render(iconGlyph)
 	}
 	// Pad before styling: fmt counts ANSI escape bytes as printable width, which
@@ -1790,6 +2072,10 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	}
 	if zoxide == "" {
 		return nil, fmt.Errorf("zoxide was not found")
+	}
+	savedStore, err := loadSavedSessions()
+	if err != nil {
+		return nil, err
 	}
 	kittyResult := commandOutput(kitty, "@", "ls")
 	zoxideResult := commandOutput(zoxide, "query", "-l")
@@ -1896,9 +2182,10 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	order := 0
 	home := os.Getenv("HOME")
 
-	// Live Kitty workspaces and reusable source projects are deliberately
-	// separate entries. Multiple workspaces can therefore originate from the
-	// same project without consuming that project from the creation list.
+	// A Kitty session rooted in one project is the open state of that project,
+	// not a second workspace row. Sessions composed by Kesh remain separate so
+	// their individual project sources can still be selected independently.
+	mergedProjects := map[string]bool{}
 	namedWorkspaces := make([]string, 0, len(sessions))
 	for name := range sessions {
 		if !strings.HasPrefix(name, "ssh-") {
@@ -1906,22 +2193,40 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		}
 	}
 	sort.Strings(namedWorkspaces)
+	seenSavedSessions := map[string]bool{}
 	for _, sessionName := range namedWorkspaces {
 		session := sessions[sessionName]
 		name := sessionName
 		if session.path != "" {
 			name = filepath.Base(session.path)
 		}
+		_, composed := composedSessionName(sessionName)
 		if composedName, ok := composedSessionName(sessionName); ok {
 			name = composedName
+		}
+		record, saved := savedSessionForName(savedStore, sessionName)
+		sessionFile := ""
+		if saved {
+			name = record.Name
+			sessionFile = record.SessionFile
+			seenSavedSessions[record.SessionFile] = true
+			composed = composed || len(record.Projects) > 1
 		}
 		detail := displayPath(session.path, home)
 		if session.path == "" {
 			detail = fmt.Sprintf("%d tab%s", len(session.tabs), plural(len(session.tabs)))
 		}
+		kind := "workspace"
+		key := "workspace:" + sessionName
+		if !composed && session.path != "" && !mergedProjects[session.path] {
+			kind = "project"
+			key = session.path
+			mergedProjects[session.path] = true
+		}
 		entries = append(entries, entry{
-			key: "workspace:" + sessionName, name: name, originalName: name, detail: detail,
-			kind: "workspace", path: session.path, session: sessionName, open: true, lastFocused: session.focused,
+			key: key, name: name, originalName: name, detail: detail,
+			kind: kind, path: session.path, session: sessionName, sessionFile: sessionFile, saved: saved,
+			open: true, lastFocused: session.focused,
 			agent: mergedTabAgents(session.tabs), tabs: session.tabs, order: order,
 		})
 		order++
@@ -1934,17 +2239,57 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	sort.Strings(unscopedPaths)
 	for _, path := range unscopedPaths {
 		tabs := unscopedTabs[path]
+		if mergedProjects[path] {
+			continue
+		}
 		name := filepath.Base(path)
 		entries = append(entries, entry{
-			key: "workspace:unscoped:" + path, name: name, originalName: name, detail: displayPath(path, home),
-			kind: "workspace", path: path, open: true, lastFocused: unscopedFocus[path],
+			key: path, name: name, originalName: name, detail: displayPath(path, home),
+			kind: "project", path: path, open: true, lastFocused: unscopedFocus[path],
 			agent: mergedTabAgents(tabs), tabs: tabs, order: order,
 		})
+		mergedProjects[path] = true
+		order++
+	}
+
+	savedFiles := make([]string, 0, len(savedStore.Sessions))
+	for file := range savedStore.Sessions {
+		savedFiles = append(savedFiles, file)
+	}
+	sort.Strings(savedFiles)
+	for _, file := range savedFiles {
+		if seenSavedSessions[file] {
+			continue
+		}
+		record := savedStore.Sessions[file]
+		path := ""
+		if len(record.Projects) > 0 {
+			path = record.Projects[0]
+		}
+		detail := "saved session"
+		if path != "" {
+			detail = displayPath(path, home)
+		}
+		_, composed := composedSessionName(record.SessionName)
+		composed = composed || len(record.Projects) > 1 || path == ""
+		kind := "workspace"
+		key := "workspace:" + record.SessionName
+		if !composed && !mergedProjects[path] {
+			kind = "project"
+			key = path
+			mergedProjects[path] = true
+		}
+		entries = append(entries, entry{
+			key: key, name: record.Name, originalName: record.Name, detail: detail,
+			kind: kind, path: path, session: record.SessionName, sessionFile: record.SessionFile,
+			saved: true, order: order,
+		})
+		sessionNames[record.SessionName] = true
 		order++
 	}
 
 	for _, path := range paths {
-		if path == "" || path == "/" {
+		if path == "" || path == "/" || mergedProjects[path] {
 			continue
 		}
 		name := filepath.Base(path)
@@ -2022,11 +2367,13 @@ func windowPath(window kittyWindow) string {
 
 func windowItemFromKitty(window kittyWindow) windowItem {
 	command := ""
+	fullCommand := ""
 	detail := windowPath(window)
 	if len(window.ForegroundProcesses) > 0 {
 		process := window.ForegroundProcesses[len(window.ForegroundProcesses)-1]
 		if len(process.Cmdline) > 0 {
 			command = filepath.Base(process.Cmdline[0])
+			fullCommand = strings.TrimSpace(strings.Join(process.Cmdline, " "))
 		}
 		if process.CWD != "" {
 			detail = process.CWD
@@ -2041,7 +2388,7 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 	}
 	return windowItem{
 		id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command,
-		agent: agentFromWindow(window), lastFocused: window.LastFocusedAt,
+		fullCommand: fullCommand, agent: agentFromWindow(window), lastFocused: window.LastFocusedAt,
 	}
 }
 
@@ -2229,17 +2576,43 @@ func closeArgs(e entry, selected row) ([]string, error) {
 	return []string{"@", "close-tab", "--match", strings.Join(matches, " or ")}, nil
 }
 
+func deleteSavedSession(e entry) error {
+	if !e.saved || e.sessionFile == "" {
+		return fmt.Errorf("workspace is not saved")
+	}
+	store, err := loadSavedSessions()
+	if err != nil {
+		return err
+	}
+	delete(store.Sessions, filepath.Clean(e.sessionFile))
+	if err := saveSavedSessions(store); err != nil {
+		return err
+	}
+	if err := os.Remove(e.sessionFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete saved session file: %w", err)
+	}
+	return nil
+}
+
 func runClose(kitty, zoxide string, e entry, selected row) tea.Cmd {
 	return func() tea.Msg {
-		args, err := closeArgs(e, selected)
-		if err == nil {
-			err = run(kitty, args...)
+		deletedSavedKey := ""
+		var err error
+		if e.saved && !e.open && selected.tabIndex < 0 {
+			err = deleteSavedSession(e)
+			deletedSavedKey = e.key
+		} else {
+			var args []string
+			args, err = closeArgs(e, selected)
+			if err == nil {
+				err = run(kitty, args...)
+			}
 		}
 		if err != nil {
 			return closeMsg{err: err}
 		}
 		entries, err := loadEntries(kitty, zoxide)
-		return closeMsg{entries: entries, err: err}
+		return closeMsg{entries: entries, deletedSavedKey: deletedSavedKey, err: err}
 	}
 }
 
@@ -2285,6 +2658,101 @@ func composedSessionContent(name string, entries []entry) string {
 	}
 	content.WriteString("focus\nfocus_os_window\n")
 	return content.String()
+}
+
+func savedSessionFilePath(sessionName string) string {
+	// Preserve the Kitty session name in the filename so goto_session reports
+	// the same identity after a restore and Kesh can merge it with the saved row.
+	name := sessionName
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsAny(name, "\r\n") {
+		name = safeName(sessionName) + "-" + shortHash(sessionName)
+	}
+	return filepath.Join(savedSessionDirectory(), name+".kitty-session")
+}
+
+func workspaceProjects(e entry) []string {
+	seen := map[string]bool{}
+	var projects []string
+	add := func(path string) {
+		path, err := expandHomePath(path)
+		if err != nil || !filepath.IsAbs(path) || seen[path] {
+			return
+		}
+		seen[path] = true
+		projects = append(projects, path)
+	}
+	add(e.path)
+	for _, tab := range e.tabs {
+		for _, window := range tab.windows {
+			add(window.detail)
+		}
+	}
+	return projects
+}
+
+func workspaceForegroundCommands(e entry) []string {
+	shells := map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true, "nu": true}
+	seen := map[string]bool{}
+	var commands []string
+	for _, tab := range e.tabs {
+		for _, window := range tab.windows {
+			command := strings.TrimSpace(window.fullCommand)
+			name := strings.TrimPrefix(filepath.Base(window.command), "-")
+			if command == "" || shells[name] || seen[command] {
+				continue
+			}
+			seen[command] = true
+			commands = append(commands, command)
+		}
+	}
+	return commands
+}
+
+func runSaveSession(kitty string, e entry, entryIndex int, foregroundCommands bool) tea.Cmd {
+	return func() tea.Msg {
+		sessionName := e.session
+		if sessionName == "" {
+			return saveSessionMsg{entryIndex: entryIndex, err: fmt.Errorf("workspace has no Kitty session name")}
+		}
+		file := e.sessionFile
+		if file == "" {
+			file = savedSessionFilePath(sessionName)
+		}
+		if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+			return saveSessionMsg{entryIndex: entryIndex, err: fmt.Errorf("create saved session directory: %w", err)}
+		}
+		match := "session:^" + regexp.QuoteMeta(sessionName) + "$"
+		args := []string{"@", "action", "save_as_session", "--save-only"}
+		if foregroundCommands {
+			args = append(args, "--use-foreground-process")
+		}
+		args = append(args, "--match="+match, file)
+		if err := run(kitty, args...); err != nil {
+			return saveSessionMsg{entryIndex: entryIndex, err: fmt.Errorf("save Kitty session: %w", err)}
+		}
+		if err := os.Chmod(file, 0o600); err != nil {
+			return saveSessionMsg{entryIndex: entryIndex, err: fmt.Errorf("secure saved session: %w", err)}
+		}
+		store, err := loadSavedSessions()
+		if err != nil {
+			return saveSessionMsg{entryIndex: entryIndex, err: err}
+		}
+		for existingFile, record := range store.Sessions {
+			if record.SessionName == sessionName && existingFile != file {
+				delete(store.Sessions, existingFile)
+			}
+		}
+		record := savedSessionRecord{
+			Name: e.name, SessionName: sessionName, SessionFile: filepath.Clean(file),
+			Projects: workspaceProjects(e), ForegroundCommands: foregroundCommands,
+			SavedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+		store.Sessions[record.SessionFile] = record
+		if err := saveSavedSessions(store); err != nil {
+			return saveSessionMsg{entryIndex: entryIndex, err: err}
+		}
+		return saveSessionMsg{entryIndex: entryIndex, record: record}
+	}
 }
 
 func repositoryName(repository string) (string, error) {
@@ -2391,6 +2859,9 @@ func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 		}
 		if selected.tabIndex >= 0 {
 			return actionMsg{err: run(kitty, "@", "focus-tab", "--match", "id:"+strconv.Itoa(e.tabs[selected.tabIndex].id))}
+		}
+		if e.sessionFile != "" {
+			return actionMsg{err: run(kitty, "@", "action", "goto_session", e.sessionFile)}
 		}
 		if e.session != "" {
 			return actionMsg{err: run(kitty, "@", "action", "goto_session", e.session)}

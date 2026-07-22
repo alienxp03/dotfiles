@@ -38,6 +38,8 @@ func TestParseArgs(t *testing.T) {
 
 func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
 	project := "/projects/homelab"
 	kitty := filepath.Join(directory, "kitty")
 	kittyState := `[{"tabs":[{"id":6,"title":"homelab-code","windows":[{"id":70,"cwd":"/projects/homelab","last_focused_at":12,"foreground_processes":[{"cmdline":["codex"],"cwd":"/projects/homelab"}]}]}]}]`
@@ -53,28 +55,22 @@ func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var workspace, source *entry
-	for index := range entries {
-		switch entries[index].kind {
-		case "workspace":
-			workspace = &entries[index]
-		case "project":
-			source = &entries[index]
-		}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v, want one merged project", entries)
 	}
-	if workspace == nil || !workspace.open || workspace.path != project || len(workspace.tabs) != 1 {
-		t.Fatalf("unscoped workspace was not included: %#v", workspace)
+	projectEntry := entries[0]
+	if projectEntry.kind != "project" || !projectEntry.open || projectEntry.path != project || len(projectEntry.tabs) != 1 {
+		t.Fatalf("unscoped project was not merged with its open state: %#v", projectEntry)
 	}
-	if got := workspace.tabs[0]; got.title != "homelab-code" || got.agent != "codex" {
+	if got := projectEntry.tabs[0]; got.title != "homelab-code" || got.agent != "codex" {
 		t.Errorf("tab = %#v, want homelab-code Codex tab", got)
-	}
-	if source == nil || source.key != project || source.open || len(source.tabs) != 0 {
-		t.Fatalf("reusable project source was not retained: %#v", source)
 	}
 }
 
-func TestLoadEntriesKeepsNamedWorkspaceSeparateFromItsProject(t *testing.T) {
+func TestLoadEntriesMergesNamedSingleProjectSession(t *testing.T) {
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
 	project := "/Users/stan/workspace/aurora"
 	kitty := filepath.Join(directory, "kitty")
 	kittyState := `[{"tabs":[{"id":6,"title":"frontier","windows":[{"id":70,"cwd":"/Users/stan/workspace/aurora","session_name":"aurora","last_focused_at":12}]}]}]`
@@ -90,27 +86,131 @@ func TestLoadEntriesKeepsNamedWorkspaceSeparateFromItsProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	applyNames(entries, nameStore{project: "aurora | frontier"})
-	var workspace, source *entry
-	for index := range entries {
-		switch entries[index].kind {
-		case "workspace":
-			workspace = &entries[index]
-		case "project":
-			source = &entries[index]
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v, want one merged project", entries)
+	}
+	projectEntry := entries[0]
+	if projectEntry.kind != "project" || projectEntry.key != project || projectEntry.session != "aurora" || !projectEntry.open {
+		t.Fatalf("project = %#v, want merged live aurora project", projectEntry)
+	}
+}
+
+func TestLoadEntriesKeepsComposedWorkspaceSeparateFromProjectSources(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
+	aurora := filepath.Join(directory, "aurora")
+	frontier := filepath.Join(directory, "frontier")
+	for _, project := range []string{aurora, frontier} {
+		if err := os.MkdirAll(filepath.Join(project, ".git"), 0o755); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if workspace == nil || workspace.name != "aurora | frontier" || workspace.key != "workspace:aurora" {
-		t.Fatalf("workspace = %#v, want aliased live workspace", workspace)
+	kitty := filepath.Join(directory, "kitty")
+	kittyState := fmt.Sprintf(`[{"tabs":[{"id":6,"title":"aurora","windows":[{"id":70,"cwd":%q,"session_name":"kesh-aurora-frontier","last_focused_at":12}]},{"id":7,"title":"frontier","windows":[{"id":71,"cwd":%q,"session_name":"kesh-aurora-frontier","last_focused_at":11}]}]}]`, aurora, frontier)
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '"+kittyState+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
 	}
-	if source == nil || source.name != "aurora" || source.key != project || source.open {
-		t.Fatalf("source = %#v, want reusable aurora project", source)
+	zoxide := filepath.Join(directory, "zoxide")
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '"+aurora+"\n"+frontier+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 3 || entries[0].kind != "workspace" || entries[0].key != "workspace:kesh-aurora-frontier" {
+		t.Fatalf("entries = %#v, want composed workspace followed by two projects", entries)
+	}
+	for _, project := range entries[1:] {
+		if project.kind != "project" || project.open {
+			t.Fatalf("project source = %#v", project)
+		}
+	}
+}
+
+func TestLoadEntriesMergesSavedAndOpenWorkspace(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
+	project := "/projects/ksm"
+	sessionFile := filepath.Join(directory, "kesh", "sessions", "ksm.kitty-session")
+	store := savedSessionStore{
+		Version: currentSavedSessionVersion,
+		Sessions: map[string]savedSessionRecord{
+			sessionFile: {
+				Name: "ksm", SessionName: "ksm", SessionFile: sessionFile,
+				Projects: []string{project}, SavedAt: "2026-07-22T15:00:00Z",
+			},
+		},
+	}
+	if err := saveSavedSessions(store); err != nil {
+		t.Fatal(err)
+	}
+	kitty := filepath.Join(directory, "kitty")
+	kittyState := `[{"tabs":[{"id":6,"title":"ksm","windows":[{"id":70,"cwd":"/projects/ksm","session_name":"ksm","last_focused_at":12}]}]}]`
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '"+kittyState+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	zoxide := filepath.Join(directory, "zoxide")
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '"+project+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v, want one merged saved project", entries)
+	}
+	projectEntry := entries[0]
+	if projectEntry.kind != "project" || !projectEntry.open || !projectEntry.saved || projectEntry.sessionFile != sessionFile || projectEntry.key != project {
+		t.Fatalf("merged saved project = %#v", projectEntry)
+	}
+}
+
+func TestLoadEntriesIncludesClosedSavedWorkspace(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
+	project := "/projects/ksm"
+	sessionFile := filepath.Join(directory, "kesh", "sessions", "ksm.kitty-session")
+	store := savedSessionStore{
+		Version: currentSavedSessionVersion,
+		Sessions: map[string]savedSessionRecord{
+			sessionFile: {
+				Name: "ksm", SessionName: "ksm", SessionFile: sessionFile,
+				Projects: []string{project}, SavedAt: "2026-07-22T15:00:00Z",
+			},
+		},
+	}
+	if err := saveSavedSessions(store); err != nil {
+		t.Fatal(err)
+	}
+	kitty := filepath.Join(directory, "kitty")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '[{\"tabs\":[]}]'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	zoxide := filepath.Join(directory, "zoxide")
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '"+project+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].kind != "project" || !entries[0].saved || entries[0].open || entries[0].sessionFile != sessionFile {
+		t.Fatalf("closed saved project entry = %#v", entries)
 	}
 }
 
 func TestLoadEntriesQueriesKittyAndZoxideConcurrently(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
 	t.Setenv("KESH_CONCURRENCY_DIR", directory)
 	kitty := filepath.Join(directory, "kitty")
 	kittyScript := `#!/bin/sh
@@ -379,6 +479,140 @@ func TestCloneFormShowsAndUpdatesBothFields(t *testing.T) {
 	}
 }
 
+func TestSaveOpenProjectRequiresConfirmation(t *testing.T) {
+	e := entry{key: "/projects/ksm", name: "ksm", kind: "project", session: "ksm", open: true}
+	m := model{
+		entries: []entry{e},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m = updated.(model)
+	if !m.saveConfirming || m.saving || cmd != nil {
+		t.Fatalf("save confirmation state = confirming:%t saving:%t cmd:%v", m.saveConfirming, m.saving, cmd)
+	}
+	popup := ansi.Strip(m.popupView(80))
+	if !strings.Contains(popup, `Save "ksm" for later restoration?`) || !strings.Contains(popup, "Press y to confirm") {
+		t.Fatalf("save confirmation popup:\n%s", popup)
+	}
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(model)
+	if m.saveConfirming || m.saving || cmd != nil {
+		t.Fatalf("escape did not cancel save confirmation: %#v, cmd:%v", m, cmd)
+	}
+}
+
+func TestSaveWithForegroundCommandsShowsStrongConfirmation(t *testing.T) {
+	e := entry{
+		key: "workspace:ksm", name: "ksm", kind: "workspace", session: "ksm", open: true,
+		tabs: []tabItem{{windows: []windowItem{
+			{command: "zsh", fullCommand: "-zsh"},
+			{command: "pnpm", fullCommand: "pnpm run dev"},
+		}}},
+	}
+	m := model{
+		entries: []entry{e},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}})
+	m = updated.(model)
+	if !m.saveConfirming || !m.saveForeground || cmd != nil {
+		t.Fatalf("foreground save confirmation = confirming:%t foreground:%t cmd:%v", m.saveConfirming, m.saveForeground, cmd)
+	}
+	popup := ansi.Strip(m.popupView(100))
+	if !strings.Contains(popup, "Save with running commands") || !strings.Contains(popup, "pnpm run dev") || strings.Contains(popup, "-zsh") {
+		t.Fatalf("foreground save confirmation popup:\n%s", popup)
+	}
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = updated.(model)
+	if m.saveConfirming || !m.saving || cmd == nil {
+		t.Fatalf("foreground save was not confirmed: confirming:%t saving:%t cmd:%v", m.saveConfirming, m.saving, cmd)
+	}
+}
+
+func TestRunSaveSessionPersistsWorkspaceSnapshot(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", directory)
+	logPath := filepath.Join(directory, "kitty.log")
+	kitty := filepath.Join(directory, "kitty")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+for last; do :; done
+printf 'layout splits\ncd /projects/ksm\nlaunch\n' > "$last"
+`, logPath)
+	if err := os.WriteFile(kitty, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	e := entry{
+		key: "workspace:ksm", name: "ksm", kind: "workspace", path: "/projects/ksm",
+		session: "ksm", open: true,
+	}
+	msg := runSaveSession(kitty, e, 3, false)().(saveSessionMsg)
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	if msg.entryIndex != 3 || msg.record.SessionName != "ksm" || msg.record.SessionFile != savedSessionFilePath("ksm") {
+		t.Fatalf("save message = %#v", msg)
+	}
+	info, err := os.Stat(msg.record.SessionFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("saved Kitty session permissions are %o, want 600", info.Mode().Perm())
+	}
+	store, err := loadSavedSessions()
+	if err != nil || !reflect.DeepEqual(store.Sessions[msg.record.SessionFile], msg.record) {
+		t.Fatalf("stored session = %#v, err = %v", store, err)
+	}
+	command, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(command), "@ action save_as_session --save-only --match=session:^ksm$ "+msg.record.SessionFile) {
+		t.Fatalf("Kitty save command = %q", command)
+	}
+
+	msg = runSaveSession(kitty, e, 3, true)().(saveSessionMsg)
+	if msg.err != nil || !msg.record.ForegroundCommands {
+		t.Fatalf("foreground save message = %#v", msg)
+	}
+	command, err = os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(command), "@ action save_as_session --save-only --use-foreground-process --match=session:^ksm$ "+msg.record.SessionFile) {
+		t.Fatalf("foreground Kitty save command = %q", command)
+	}
+}
+
+func TestRunActionUsesSavedSessionFileForOpenAndClosedWorkspace(t *testing.T) {
+	directory := t.TempDir()
+	logPath := filepath.Join(directory, "kitty.log")
+	kitty := filepath.Join(directory, "kitty")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> %q\n", logPath)
+	if err := os.WriteFile(kitty, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(directory, "ksm.kitty-session")
+	e := entry{key: "workspace:ksm", session: "ksm", sessionFile: file, saved: true}
+	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
+	for _, open := range []bool{false, true} {
+		e.open = open
+		msg := runAction(kitty, "", e, selected)().(actionMsg)
+		if msg.err != nil {
+			t.Fatal(msg.err)
+		}
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "@ action goto_session " + file
+	if strings.Count(string(commands), want) != 2 {
+		t.Fatalf("Kitty commands = %q, want two %q actions", commands, want)
+	}
+}
+
 func TestRunCloneOpensProjectAndAddsItToZoxide(t *testing.T) {
 	directory := t.TempDir()
 	logPath := filepath.Join(directory, "commands.log")
@@ -451,6 +685,78 @@ func TestPinsRoundTrip(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("pin state permissions are %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestSavedSessionFilePreservesKittySessionName(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	got := savedSessionFilePath("project workspace")
+	if filepath.Base(got) != "project workspace.kitty-session" {
+		t.Fatalf("saved session filename = %q", got)
+	}
+}
+
+func TestSavedSessionsRoundTrip(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	file := filepath.Join(stateHome, "kesh", "sessions", "ksm.kitty-session")
+	want := savedSessionStore{
+		Version: currentSavedSessionVersion,
+		Sessions: map[string]savedSessionRecord{
+			file: {
+				Name: "ksm", SessionName: "ksm", SessionFile: file,
+				Projects: []string{"/projects/ksm"}, SavedAt: "2026-07-22T15:00:00Z",
+			},
+		},
+	}
+	if err := saveSavedSessions(want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadSavedSessions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("saved sessions = %#v, want %#v", got, want)
+	}
+	info, err := os.Stat(filepath.Join(stateHome, "kesh", "saved-sessions.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("saved session state permissions are %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestDeleteSavedSessionRemovesCatalogAndSnapshot(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	file := savedSessionFilePath("ksm")
+	if err := os.MkdirAll(filepath.Dir(file), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("launch\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := savedSessionStore{
+		Version: currentSavedSessionVersion,
+		Sessions: map[string]savedSessionRecord{
+			file: {Name: "ksm", SessionName: "ksm", SessionFile: file},
+		},
+	}
+	if err := saveSavedSessions(store); err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteSavedSession(entry{saved: true, sessionFile: file}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("saved session file still exists: %v", err)
+	}
+	got, err := loadSavedSessions()
+	if err != nil || len(got.Sessions) != 0 {
+		t.Fatalf("saved session catalog = %#v, err = %v", got, err)
 	}
 }
 
@@ -537,6 +843,21 @@ func TestLegacyProjectPinMigratesToMatchingWorkspace(t *testing.T) {
 	}
 	if target := got["2"]; target.Key != "/projects/closed" || target.Kind != "project" || target.Version != currentPinVersion {
 		t.Fatalf("closed project pin = %#v", target)
+	}
+}
+
+func TestWorkspacePinMigratesToMergedProject(t *testing.T) {
+	project := "/projects/dotfiles"
+	pins := pinStore{
+		"0": {Key: "workspace:.dotfiles", Name: ".dotfiles", Kind: "workspace", Version: currentPinVersion},
+	}
+	entries := []entry{{key: project, name: ".dotfiles", kind: "project", path: project, session: ".dotfiles"}}
+	got, changed := migrateLegacyPins(entries, pins)
+	if !changed {
+		t.Fatal("workspace pin was not migrated to the merged project")
+	}
+	if target := got["0"]; target.Key != project || target.Kind != "project" || target.Version != currentPinVersion {
+		t.Fatalf("merged project pin = %#v", target)
 	}
 }
 
@@ -629,6 +950,24 @@ func TestSearchRanksOpenWorkspacesAboveUnopenedProjects(t *testing.T) {
 	}
 }
 
+func TestSearchRanksSavedWorkspacesAboveSourceProjects(t *testing.T) {
+	m := model{
+		query: "ksm",
+		entries: []entry{
+			{key: "/projects/ksm", name: "ksm", kind: "project"},
+			{key: "workspace:ksm", name: "ksm workspace", kind: "workspace", saved: true},
+		},
+	}
+	m.rebuildRows()
+	if len(m.rows) != 2 {
+		t.Fatalf("search returned %d rows, want 2", len(m.rows))
+	}
+	first := m.entries[m.rows[0].entryIndex]
+	if !first.saved || first.kind != "workspace" {
+		t.Fatalf("first search result = %#v, want saved workspace", first)
+	}
+}
+
 func TestCloseArgsTargetsSelectedHierarchyLevel(t *testing.T) {
 	e := entry{
 		name: "Payments",
@@ -709,6 +1048,30 @@ func TestWorkspaceAndProjectFiltersUseSeparateEntries(t *testing.T) {
 	m.rebuildRows()
 	if len(m.rows) != 1 || m.entries[m.rows[0].entryIndex].kind != "project" {
 		t.Fatalf("project rows = %#v, want source project only", m.rows)
+	}
+}
+
+func TestRowIconsDescribeEntryType(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry entry
+		want  []string
+	}{
+		{name: "local folder", entry: entry{name: "dotfiles", kind: "project", open: true}, want: []string{""}},
+		{name: "open composed session", entry: entry{name: "sideview-mmbot", kind: "workspace", open: true}, want: []string{""}},
+		{name: "closed composed session", entry: entry{name: "sideview-mmbot", kind: "workspace", saved: true}, want: []string{""}},
+		{name: "SSH", entry: entry{name: "hermes", kind: "ssh"}, want: []string{""}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			m := model{entries: []entry{test.entry}}
+			rendered := ansi.Strip(m.renderRow(row{entryIndex: 0, tabIndex: -1, windowIndex: -1}, 100, false))
+			for _, icon := range test.want {
+				if !strings.Contains(rendered, icon) {
+					t.Fatalf("rendered row %q does not contain %q", rendered, icon)
+				}
+			}
+		})
 	}
 }
 
