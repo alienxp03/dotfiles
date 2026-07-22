@@ -1,6 +1,8 @@
 # kesh
 
-Bubble Tea picker for browsing zoxide projects, Kitty sessions, tabs, windows, SSH hosts, and active Codex/Pi agents.
+Bubble Tea picker for browsing zoxide projects, Kitty workspaces, tabs, windows, SSH hosts, and active Codex/pi agents.
+
+Live Kitty workspaces and reusable source projects are separate rows, even when they share a directory. Opening a workspace focuses it; selecting its source project with `space` keeps that directory available for composing another workspace with `n`.
 
 Build the binary used directly by `kitty.conf`:
 
@@ -25,7 +27,7 @@ The picker starts in normal mode:
 - `/`: enter search mode and fuzzy-filter sessions as you type
 - `enter` / `esc`: return to command mode while retaining the filter
 - `tab` / `shift+tab`: change filter
-- `q` / `esc`: close from normal mode
+- `q`: close from command mode; `esc` is a no-op there
 
 Arrow keys remain available for moving through rows and the hierarchy.
 

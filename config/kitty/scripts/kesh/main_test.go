@@ -51,18 +51,58 @@ func TestLoadEntriesIncludesUnscopedTabs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var homelab *entry
+	var workspace, source *entry
 	for index := range entries {
-		if entries[index].key == project {
-			homelab = &entries[index]
-			break
+		switch entries[index].kind {
+		case "workspace":
+			workspace = &entries[index]
+		case "project":
+			source = &entries[index]
 		}
 	}
-	if homelab == nil || !homelab.open || len(homelab.tabs) != 1 {
-		t.Fatalf("unscoped tab was not included: %#v", homelab)
+	if workspace == nil || !workspace.open || workspace.path != project || len(workspace.tabs) != 1 {
+		t.Fatalf("unscoped workspace was not included: %#v", workspace)
 	}
-	if got := homelab.tabs[0]; got.title != "homelab-code" || got.agent != "codex" {
+	if got := workspace.tabs[0]; got.title != "homelab-code" || got.agent != "codex" {
 		t.Errorf("tab = %#v, want homelab-code Codex tab", got)
+	}
+	if source == nil || source.key != project || source.open || len(source.tabs) != 0 {
+		t.Fatalf("reusable project source was not retained: %#v", source)
+	}
+}
+
+func TestLoadEntriesKeepsNamedWorkspaceSeparateFromItsProject(t *testing.T) {
+	directory := t.TempDir()
+	project := "/Users/stan/workspace/aurora"
+	kitty := filepath.Join(directory, "kitty")
+	kittyState := `[{"tabs":[{"id":6,"title":"frontier","windows":[{"id":70,"cwd":"/Users/stan/workspace/aurora","session_name":"aurora","last_focused_at":12}]}]}]`
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '"+kittyState+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	zoxide := filepath.Join(directory, "zoxide")
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '"+project+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := loadEntries(kitty, zoxide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applyNames(entries, nameStore{project: "aurora | frontier"})
+	var workspace, source *entry
+	for index := range entries {
+		switch entries[index].kind {
+		case "workspace":
+			workspace = &entries[index]
+		case "project":
+			source = &entries[index]
+		}
+	}
+	if workspace == nil || workspace.name != "aurora | frontier" || workspace.key != "workspace:aurora" {
+		t.Fatalf("workspace = %#v, want aliased live workspace", workspace)
+	}
+	if source == nil || source.name != "aurora" || source.key != project || source.open {
+		t.Fatalf("source = %#v, want reusable aurora project", source)
 	}
 }
 
@@ -281,6 +321,7 @@ func TestLoadPinsRejectsInvalidState(t *testing.T) {
 		"empty key":           `{"1":{"key":"","name":"empty"}}`,
 		"duplicate pin":       `{"1":{"key":"/same","name":"same"},"2":{"key":"/same","name":"same"}}`,
 		"invalid kind":        `{"1":{"key":"/project","name":"project","kind":"other"}}`,
+		"invalid version":     `{"1":{"key":"/project","name":"project","kind":"project","version":99}}`,
 		"unsafe session file": `{"1":{"key":"/project","name":"project","session_file":"/tmp/outside.kitty-session"}}`,
 	}
 	for name, content := range tests {
@@ -298,6 +339,28 @@ func TestLoadPinsRejectsInvalidState(t *testing.T) {
 				t.Fatal("expected invalid pin state to fail")
 			}
 		})
+	}
+}
+
+func TestLegacyProjectPinMigratesToMatchingWorkspace(t *testing.T) {
+	path := "/projects/aurora"
+	pins := pinStore{
+		"1": {Key: path, Name: "aurora | frontier", Kind: "project"},
+		"2": {Key: "/projects/closed", Name: "closed", Kind: "project"},
+	}
+	workspaces := []entry{
+		{key: "workspace:kesh-aurora", name: "aurora | frontier", kind: "workspace", path: path},
+		{key: path, name: "aurora", kind: "project", path: path},
+	}
+	got, changed := migrateLegacyPins(workspaces, pins)
+	if !changed {
+		t.Fatal("legacy pins were not migrated")
+	}
+	if target := got["1"]; target.Key != "workspace:kesh-aurora" || target.Kind != "workspace" || target.Version != currentPinVersion {
+		t.Fatalf("workspace pin = %#v", target)
+	}
+	if target := got["2"]; target.Key != "/projects/closed" || target.Kind != "project" || target.Version != currentPinVersion {
+		t.Fatalf("closed project pin = %#v", target)
 	}
 }
 
@@ -330,7 +393,7 @@ func TestWorkspaceNamesRoundTripInHomeConfig(t *testing.T) {
 func TestSessionRenamePersistsAliasAndEmptyNameResetsIt(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	e := entry{key: "/projects/payments", name: "payments", originalName: "payments"}
+	e := entry{key: "workspace:payments", name: "payments", originalName: "payments", kind: "workspace", path: "/projects/payments"}
 	selected := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
 	m := model{entries: []entry{e}, rows: []row{selected}, names: nameStore{}}
 
@@ -361,7 +424,7 @@ func TestWorkspaceSearchMatchesOriginalNameAfterRename(t *testing.T) {
 	m := model{
 		query: "pymnts",
 		entries: []entry{{
-			key: "/projects/payments", name: "Billing", originalName: "payments", detail: "/projects/payments",
+			key: "workspace:payments", name: "Billing", originalName: "payments", detail: "/projects/payments", kind: "workspace",
 		}},
 	}
 	m.rebuildRows()
@@ -436,6 +499,23 @@ func TestComposedSessionName(t *testing.T) {
 	}
 }
 
+func TestWorkspaceAndProjectFiltersUseSeparateEntries(t *testing.T) {
+	entries := []entry{
+		{key: "workspace:aurora", name: "aurora | frontier", kind: "workspace", open: true},
+		{key: "/projects/aurora", name: "aurora", kind: "project"},
+	}
+	m := model{entries: entries, filter: filterOpen}
+	m.rebuildRows()
+	if len(m.rows) != 1 || m.entries[m.rows[0].entryIndex].kind != "workspace" {
+		t.Fatalf("open rows = %#v, want workspace only", m.rows)
+	}
+	m.filter = filterProjects
+	m.rebuildRows()
+	if len(m.rows) != 1 || m.entries[m.rows[0].entryIndex].kind != "project" {
+		t.Fatalf("project rows = %#v, want source project only", m.rows)
+	}
+}
+
 func TestSearchRanksExactProjectNameFirst(t *testing.T) {
 	m := model{
 		query: "crm",
@@ -452,8 +532,8 @@ func TestSearchRanksExactProjectNameFirst(t *testing.T) {
 
 func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	m := model{entries: []entry{
-		{key: "/projects/java", name: "java"},
-		{key: "/projects/javascript", name: "javascript"},
+		{key: "/projects/java", name: "java", kind: "project"},
+		{key: "/projects/javascript", name: "javascript", kind: "project"},
 	}}
 	m.rebuildRows()
 
@@ -481,6 +561,11 @@ func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	if m.searching || m.query != "j" {
 		t.Fatalf("esc did not retain the filter in command mode: searching=%v query=%q", m.searching, m.query)
 	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(model)
+	if cmd != nil {
+		t.Fatal("esc in command mode should not close Kesh")
+	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = updated.(model)
@@ -488,6 +573,18 @@ func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	m = updated.(model)
 	if len(m.selected) != 1 || !m.creating {
 		t.Fatalf("command mode actions failed after search: selected=%#v creating=%v", m.selected, m.creating)
+	}
+}
+
+func TestWorkspaceCannotBeSelectedAsProjectSource(t *testing.T) {
+	m := model{
+		entries: []entry{{key: "workspace:aurora", name: "aurora | frontier", kind: "workspace", open: true}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(model)
+	if len(m.selected) != 0 || m.err == nil || !strings.Contains(m.err.Error(), "source project") {
+		t.Fatalf("workspace selection state: selected=%#v err=%v", m.selected, m.err)
 	}
 }
 
@@ -505,7 +602,7 @@ func TestSelectedHeaderIncludesCountAndProjectName(t *testing.T) {
 }
 
 func TestSpaceTogglesTopLevelSelection(t *testing.T) {
-	m := model{entries: []entry{{key: "/projects/api", name: "API"}}, rows: []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}}}
+	m := model{entries: []entry{{key: "/projects/api", name: "API", kind: "project"}}, rows: []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}}}
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = updated.(model)
 	if !m.selected["/projects/api"] {

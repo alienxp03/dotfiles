@@ -64,6 +64,7 @@ type entry struct {
 	originalName string
 	detail       string
 	kind         string
+	path         string
 	session      string
 	open         bool
 	lastFocused  float64
@@ -104,7 +105,10 @@ type pinTarget struct {
 	Name        string `json:"name"`
 	Kind        string `json:"kind,omitempty"`
 	SessionFile string `json:"session_file,omitempty"`
+	Version     int    `json:"version,omitempty"`
 }
+
+const currentPinVersion = 2
 
 type pinStore map[string]pinTarget
 
@@ -200,6 +204,13 @@ func main() {
 		loadErr = nameErr
 	}
 	applyNames(entries, names)
+	if loadErr == nil {
+		var changed bool
+		pins, changed = migrateLegacyPins(entries, pins)
+		if changed {
+			loadErr = savePins(pins)
+		}
+	}
 	applyPins(entries, pins)
 	m := model{
 		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
@@ -322,7 +333,16 @@ func applyNames(entries []entry, names nameStore) {
 			entries[index].originalName = entries[index].name
 		}
 		entries[index].name = entries[index].originalName
-		if alias := names[entries[index].key]; alias != "" {
+		if entries[index].kind == "project" {
+			continue
+		}
+		alias := names[entries[index].key]
+		if alias == "" && entries[index].kind == "workspace" {
+			// Before workspaces and projects had separate identities, workspace
+			// aliases were stored under the project path.
+			alias = names[entries[index].path]
+		}
+		if alias != "" {
 			entries[index].name = alias
 		}
 	}
@@ -346,8 +366,11 @@ func loadPins() (pinStore, error) {
 		if !validSlot(slot) || target.Key == "" {
 			return pinStore{}, fmt.Errorf("invalid pin entry for slot %q", slot)
 		}
-		if target.Kind != "" && target.Kind != "project" && target.Kind != "ssh" {
+		if target.Kind != "" && target.Kind != "workspace" && target.Kind != "project" && target.Kind != "ssh" {
 			return pinStore{}, fmt.Errorf("invalid pin kind for slot %s", slot)
+		}
+		if target.Version != 0 && target.Version != currentPinVersion {
+			return pinStore{}, fmt.Errorf("unsupported pin version for slot %s", slot)
 		}
 		if target.SessionFile != "" && !strings.HasPrefix(filepath.Clean(target.SessionFile), sessionsDirectory) {
 			return pinStore{}, fmt.Errorf("invalid session file for slot %s", slot)
@@ -414,12 +437,52 @@ func pinTargetForEntry(e entry) (pinTarget, error) {
 		host := strings.TrimPrefix(e.key, "ssh://")
 		content = fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"ssh: %s\" ssh \"%s\"\nfocus\nfocus_os_window\n", os.Getenv("HOME"), host, host)
 	} else {
-		content = fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"%s\"\nfocus\nfocus_os_window\n", e.key, filepath.Base(e.key))
+		path := e.key
+		if e.path != "" {
+			path = e.path
+		}
+		content = fmt.Sprintf("layout splits\ncd %s\nlaunch --title \"%s\"\nfocus\nfocus_os_window\n", path, filepath.Base(path))
 	}
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return pinTarget{}, fmt.Errorf("write pinned session: %w", err)
 	}
-	return pinTarget{Key: e.key, Name: e.name, Kind: e.kind, SessionFile: path}, nil
+	return pinTarget{Key: e.key, Name: e.name, Kind: e.kind, SessionFile: path, Version: currentPinVersion}, nil
+}
+
+func migrateLegacyPins(entries []entry, pins pinStore) (pinStore, bool) {
+	updated := make(pinStore, len(pins))
+	changed := false
+	for slot, target := range pins {
+		if target.Version != 0 {
+			updated[slot] = target
+			continue
+		}
+		target.Version = currentPinVersion
+		changed = true
+		if target.Kind == "project" {
+			var fallback *entry
+			for index := range entries {
+				candidate := &entries[index]
+				if candidate.kind != "workspace" || candidate.path != target.Key {
+					continue
+				}
+				if fallback == nil {
+					fallback = candidate
+				}
+				if candidate.name == target.Name {
+					fallback = candidate
+					break
+				}
+			}
+			if fallback != nil {
+				target.Key = fallback.key
+				target.Name = fallback.name
+				target.Kind = "workspace"
+			}
+		}
+		updated[slot] = target
+	}
+	return updated, changed
 }
 
 func applyPins(entries []entry, pins pinStore) {
@@ -675,8 +738,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.queuePreview()
 		}
 		switch key {
-		case "ctrl+c", "esc", "q":
+		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "esc":
+			// Escape returns to command mode from transient modes; once there,
+			// it is intentionally a no-op so a repeated key cannot close Kesh.
+			return m, nil
 		case "/":
 			m.searching = true
 		case "up", "ctrl+k", "k":
@@ -738,8 +805,8 @@ func (m *model) toggleSelected() {
 		return
 	}
 	r := m.rows[m.cursor]
-	if r.tabIndex >= 0 {
-		m.err = fmt.Errorf("select a project or SSH host, not a tab or window")
+	if r.tabIndex >= 0 || (m.entries[r.entryIndex].kind != "project" && m.entries[r.entryIndex].kind != "ssh") {
+		m.err = fmt.Errorf("select a source project or SSH host, not a workspace, tab, or window")
 		return
 	}
 	key := m.entries[r.entryIndex].key
@@ -860,6 +927,10 @@ func (m *model) beginRename() {
 		m.renameValue = entry.tabs[selected.tabIndex].title
 		m.renaming = true
 		m.err = nil
+		return
+	}
+	if entry.kind == "project" {
+		m.err = fmt.Errorf("rename an open workspace, not its source project")
 		return
 	}
 	m.renameValue = entry.name
@@ -1455,7 +1526,7 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	}
 	sessions := map[string]*openSession{}
 	sessionNames := map[string]bool{}
-	aliasPaths := map[string]bool{}
+	livePaths := map[string]bool{}
 	unscopedTabs := map[string][]tabItem{}
 	unscopedFocus := map[string]float64{}
 	openSSH := map[string]float64{}
@@ -1474,6 +1545,9 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 					continue
 				}
 				path := windowPath(window)
+				if path != "" {
+					livePaths[path] = true
+				}
 				if canonicalPath == "" {
 					canonicalPath = path
 				}
@@ -1505,15 +1579,6 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 						s = &openSession{path: canonicalPath}
 						sessions[sessionName] = s
 					}
-					for _, window := range tab.Windows {
-						if window.ID == selfID {
-							continue
-						}
-						path := windowPath(window)
-						if path != "" && path != s.path {
-							aliasPaths[path] = true
-						}
-					}
 					s.focused = max(s.focused, focused)
 					s.tabs = append(s.tabs, item)
 				}
@@ -1529,27 +1594,12 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		}
 	}
 
-	byPath := map[string]string{}
-	openPaths := map[string]float64{}
-	tabsByPath := map[string][]tabItem{}
-	for name, session := range sessions {
-		if session.path != "" && !strings.HasPrefix(name, "ssh-") {
-			byPath[session.path] = name
-			openPaths[session.path] = session.focused
-			tabsByPath[session.path] = session.tabs
-		}
-	}
-	for path, tabs := range unscopedTabs {
-		openPaths[path] = max(openPaths[path], unscopedFocus[path])
-		tabsByPath[path] = append(tabsByPath[path], tabs...)
-	}
-
 	paths := strings.FieldsFunc(string(zoxideOutput.output), func(r rune) bool { return r == '\n' || r == '\r' })
 	known := map[string]bool{}
 	for _, path := range paths {
 		known[path] = true
 	}
-	for path := range openPaths {
+	for path := range livePaths {
 		if !known[path] {
 			paths = append(paths, path)
 		}
@@ -1558,20 +1608,62 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 	var entries []entry
 	order := 0
 	home := os.Getenv("HOME")
+
+	// Live Kitty workspaces and reusable source projects are deliberately
+	// separate entries. Multiple workspaces can therefore originate from the
+	// same project without consuming that project from the creation list.
+	namedWorkspaces := make([]string, 0, len(sessions))
+	for name := range sessions {
+		if !strings.HasPrefix(name, "ssh-") {
+			namedWorkspaces = append(namedWorkspaces, name)
+		}
+	}
+	sort.Strings(namedWorkspaces)
+	for _, sessionName := range namedWorkspaces {
+		session := sessions[sessionName]
+		name := sessionName
+		if session.path != "" {
+			name = filepath.Base(session.path)
+		}
+		if composedName, ok := composedSessionName(sessionName); ok {
+			name = composedName
+		}
+		detail := displayPath(session.path, home)
+		if session.path == "" {
+			detail = fmt.Sprintf("%d tab%s", len(session.tabs), plural(len(session.tabs)))
+		}
+		entries = append(entries, entry{
+			key: "workspace:" + sessionName, name: name, originalName: name, detail: detail,
+			kind: "workspace", path: session.path, session: sessionName, open: true, lastFocused: session.focused,
+			agent: mergedTabAgents(session.tabs), tabs: session.tabs, order: order,
+		})
+		order++
+	}
+
+	unscopedPaths := make([]string, 0, len(unscopedTabs))
+	for path := range unscopedTabs {
+		unscopedPaths = append(unscopedPaths, path)
+	}
+	sort.Strings(unscopedPaths)
+	for _, path := range unscopedPaths {
+		tabs := unscopedTabs[path]
+		name := filepath.Base(path)
+		entries = append(entries, entry{
+			key: "workspace:unscoped:" + path, name: name, originalName: name, detail: displayPath(path, home),
+			kind: "workspace", path: path, open: true, lastFocused: unscopedFocus[path],
+			agent: mergedTabAgents(tabs), tabs: tabs, order: order,
+		})
+		order++
+	}
+
 	for _, path := range paths {
-		if path == "" || path == "/" || (aliasPaths[path] && openPaths[path] == 0) {
+		if path == "" || path == "/" {
 			continue
 		}
 		name := filepath.Base(path)
-		session := byPath[path]
-		if composedName, ok := composedSessionName(session); ok {
-			name = composedName
-		}
-		tabs := tabsByPath[path]
 		entries = append(entries, entry{
-			key: path, name: name, originalName: name, detail: displayPath(path, home), kind: "project",
-			session: session, open: len(tabs) > 0, lastFocused: openPaths[path],
-			nameTaken: sessionNames[safeName(name)], agent: mergedTabAgents(tabs), tabs: tabs, order: order,
+			key: path, name: name, originalName: name, detail: displayPath(path, home), kind: "project", path: path,
+			nameTaken: sessionNames[safeName(name)], order: order,
 		})
 		order++
 	}
