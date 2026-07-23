@@ -52,6 +52,10 @@ type windowItem struct {
 	fullCommand string
 	agent       string
 	lastFocused float64
+	worktrees        []worktreeItem
+	worktreesLoaded  bool
+	worktreesOpen    bool
+	worktreesPending bool
 }
 
 type tabItem struct {
@@ -88,10 +92,6 @@ type entry struct {
 	tabs         []tabItem
 	order        int
 	pin          string
-	worktrees        []worktreeItem
-	worktreesLoaded  bool
-	worktreesOpen    bool
-	worktreesPending bool
 }
 
 type row struct {
@@ -174,10 +174,20 @@ type worktreeMsg struct {
 }
 
 type worktreeListMsg struct {
-	entryIndex int
-	key        string
-	worktrees  []worktreeItem
-	err        error
+	entryIndex  int
+	tabIndex    int
+	windowIndex int
+	dir         string
+	worktrees   []worktreeItem
+	err         error
+}
+
+type worktreeRemoveMsg struct {
+	entryIndex  int
+	tabIndex    int
+	windowIndex int
+	forceTried  bool
+	err         error
 }
 
 type keshConfig struct {
@@ -235,6 +245,7 @@ type model struct {
 	worktreePaths          []string
 	worktreeBusy           bool
 	worktreeRoot           string
+	worktreeForcePrompt    bool
 }
 
 const (
@@ -1014,19 +1025,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreeBusy = true
 			return m, m.createWorktree()
 		case worktreeListMsg:
-			if msg.entryIndex < len(m.entries) && m.entries[msg.entryIndex].key == msg.key {
-				e := &m.entries[msg.entryIndex]
-				e.worktreesPending = false
+			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil && w.cwd == msg.dir {
+				w.worktreesPending = false
 				if msg.err != nil {
-					e.worktreesLoaded = false
+					w.worktreesLoaded = false
 					m.err = msg.err
 					return m, nil
 				}
-				e.worktrees = msg.worktrees
-				e.worktreesLoaded = true
-				e.worktreesOpen = true
+				w.worktrees = msg.worktrees
+				w.worktreesLoaded = true
+				w.worktreesOpen = true
 				m.err = nil
 				m.rebuildRows()
+			}
+			return m, nil
+		case worktreeRemoveMsg:
+			m.closeBusy = false
+			if msg.err != nil {
+				if !msg.forceTried {
+					// Normal remove failed (dirty, locked, etc.) — offer force.
+					m.worktreeForcePrompt = true
+					m.err = msg.err
+					return m, nil
+				}
+				// Force failed too: surface the error and leave the form.
+				m.closing = false
+				m.worktreeForcePrompt = false
+				m.err = msg.err
+				return m, nil
+			}
+			// Removed: refresh that window's worktree list and close the popup.
+			m.closing = false
+			m.worktreeForcePrompt = false
+			m.err = nil
+			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil {
+				return m, fetchWorktrees(w.cwd, msg.entryIndex, msg.tabIndex, msg.windowIndex)
 			}
 			return m, nil
 	case saveSessionMsg:
@@ -1104,15 +1137,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.closeBusy {
 				return m, nil
 			}
+			isWorktreeRow := m.closeRow.section == "wt-item"
 			switch key {
 			case "esc":
 				m.closing = false
+				m.worktreeForcePrompt = false
 				m.err = nil
 			case "y":
+				if isWorktreeRow {
+					if m.worktreeForcePrompt {
+						m.err = fmt.Errorf("press f to force, or esc to cancel")
+						return m, nil
+					}
+					m.closeBusy = true
+					m.err = nil
+					return m, m.runRemoveWorktree(false)
+				}
 				m.closeBusy = true
 				m.err = nil
 				selected := m.closeRow
 				return m, runClose(m.kitty, m.zoxide, m.entries[selected.entryIndex], selected)
+			case "f":
+				if isWorktreeRow && m.worktreeForcePrompt {
+					m.closeBusy = true
+					m.err = nil
+					return m, m.runRemoveWorktree(true)
+				}
+				m.err = fmt.Errorf("press y to confirm or esc to cancel")
 			default:
 				m.err = fmt.Errorf("press y to confirm or esc to cancel")
 			}
@@ -1452,6 +1503,10 @@ func (m *model) beginClose() {
 	}
 	selected := m.rows[m.cursor]
 	entry := m.entries[selected.entryIndex]
+	if selected.section == "wt-head" {
+		m.err = fmt.Errorf("select a worktree to delete")
+		return
+	}
 	if selected.tabIndex < 0 && len(entry.tabs) == 0 && !(entry.saved && !entry.open) {
 		m.err = fmt.Errorf("%s is not open", entry.name)
 		return
@@ -1459,6 +1514,7 @@ func (m *model) beginClose() {
 	m.closeRow = selected
 	m.closing = true
 	m.closeBusy = false
+	m.worktreeForcePrompt = false
 	m.err = nil
 }
 
@@ -1697,19 +1753,19 @@ func (m *model) rebuildRows() {
 	for _, entryIndex := range entryIndexes {
 		e := &m.entries[entryIndex]
 		rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1})
-		if e.worktreesOpen && e.worktreesLoaded && m.query == "" {
-			rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-head"})
-			for wt := range e.worktrees {
-				rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: wt})
-			}
-			rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-foot"})
-		}
 		if e.expanded && m.query == "" {
 			for tabIndex := range e.tabs {
 				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: -1})
 				if e.tabs[tabIndex].expanded {
 					for windowIndex := range e.tabs[tabIndex].windows {
 						rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex})
+						w := e.tabs[tabIndex].windows[windowIndex]
+						if w.worktreesOpen && w.worktreesLoaded {
+							rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, section: "wt-head"})
+							for wt := range w.worktrees {
+								rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, section: "wt-item", wt: wt})
+							}
+						}
 					}
 				}
 			}
@@ -2068,9 +2124,12 @@ func (m model) popupView(width int) string {
 	} else {
 		title = "Close"
 		field = lipgloss.NewStyle().Width(popupWidth - 6).Render(m.closePrompt())
-		if m.closeBusy {
-			help = "Closing…"
-		} else {
+		switch {
+		case m.closeBusy:
+			help = "Removing…"
+		case m.worktreeForcePrompt:
+			help = "Press f to force  •  Esc cancel"
+		default:
 			help = "Press y to confirm  •  Esc cancel"
 		}
 	}
@@ -2089,6 +2148,15 @@ func (m model) popupView(width int) string {
 func (m model) closePrompt() string {
 	selected := m.closeRow
 	entry := m.entries[selected.entryIndex]
+	if selected.section == "wt-item" {
+		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
+		wt := window.worktrees[selected.wt]
+		prefix := "Delete"
+		if m.worktreeForcePrompt {
+			prefix = "Force-delete"
+		}
+		return fmt.Sprintf("%s worktree %q?\n  %s", prefix, wt.branch, displayPath(wt.path, os.Getenv("HOME")))
+	}
 	if entry.saved && !entry.open {
 		return fmt.Sprintf("Delete saved workspace %q?", entry.name)
 	}
@@ -2123,20 +2191,24 @@ func (m model) renderRow(r row, width int, focused bool) string {
 	e := m.entries[r.entryIndex]
 	switch r.section {
 	case "wt-head":
+		window := e.tabs[r.tabIndex].windows[r.windowIndex]
 		label := "worktrees"
-		if len(e.worktrees) != 1 {
-			label = fmt.Sprintf("worktrees (%d)", len(e.worktrees))
+		if len(window.worktrees) != 1 {
+			label = fmt.Sprintf("worktrees (%d)", len(window.worktrees))
 		}
-		fill := width - lipgloss.Width(label) - 5
+		fill := width - lipgloss.Width(label) - 13
 		if fill < 0 {
 			fill = 0
 		}
-		return "   " + dimStyle.Render("┄ "+label+" "+strings.Repeat("┄", fill))
-	case "wt-foot":
-		return "   " + dimStyle.Render(strings.Repeat("┄", max(0, width-3)))
+		return "          " + dimStyle.Render("┄ "+label+" "+strings.Repeat("┄", fill))
 	case "wt-item":
-		wt := e.worktrees[r.wt]
-		left := "     " + branchStyle.Render("󰘬") + " " + truncate(wt.branch, max(6, width*4/10))
+		window := e.tabs[r.tabIndex].windows[r.windowIndex]
+		wt := window.worktrees[r.wt]
+		connector := "├─"
+		if r.wt == len(window.worktrees)-1 {
+			connector = "└─"
+		}
+		left := "          " + connector + " " + branchStyle.Render("󰘬") + " " + truncate(wt.branch, max(6, width*4/10))
 		right := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
 		if wt.current {
 			right = dimStyle.Render("← here")
@@ -3083,8 +3155,11 @@ func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
 
 func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 	return func() tea.Msg {
-		if selected.section == "wt-item" && selected.wt >= 0 && selected.wt < len(e.worktrees) {
-			return actionMsg{err: openProjectSession(kitty, zoxide, e.worktrees[selected.wt].path, false)}
+		if selected.section == "wt-item" && selected.tabIndex >= 0 && selected.windowIndex >= 0 &&
+			selected.tabIndex < len(e.tabs) && selected.wt >= 0 &&
+			selected.wt < len(e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees) {
+			wt := e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees[selected.wt]
+			return actionMsg{err: openProjectSession(kitty, zoxide, wt.path, false)}
 		}
 		if selected.windowIndex >= 0 {
 			window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
@@ -3298,45 +3373,81 @@ func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
 	return "user", filepath.Base(repoPath)
 }
 
-// toggleWorktrees reveals or hides the git worktrees of the repo under the
-// cursor. The source directory is the focused window's cwd when the cursor is
-// on a window, otherwise the entry's own path. Results attach to the entry, so
-// the section renders in place as a labelled group rather than nested folders.
+// toggleWorktrees reveals or hides the git worktrees of the repo in the focused
+// window's folder. It is a no-op unless the cursor is on a window row: a session
+// can span many tabs and windows, each potentially in a different repo, so there
+// is no single folder to inspect at the session level.
 func (m *model) toggleWorktrees() tea.Cmd {
 	if len(m.rows) == 0 {
 		return nil
 	}
 	r := m.rows[m.cursor]
-	e := &m.entries[r.entryIndex]
-	dir := ""
-	if r.windowIndex >= 0 && r.tabIndex >= 0 && r.tabIndex < len(e.tabs) && r.windowIndex < len(e.tabs[r.tabIndex].windows) {
-		dir = e.tabs[r.tabIndex].windows[r.windowIndex].cwd
-	}
-	if dir == "" {
-		dir = e.path
-	}
-	if dir == "" {
-		m.err = fmt.Errorf("no directory to inspect")
+	w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex)
+	if w == nil || w.cwd == "" {
 		return nil
 	}
-	if e.worktreesOpen {
-		e.worktreesOpen = false
-		m.err = nil
+	dir := w.cwd
+	if w.worktreesOpen {
+		w.worktreesOpen = false
 		m.rebuildRows()
 		return nil
 	}
-	if e.worktreesLoaded {
-		e.worktreesOpen = true
-		m.err = nil
+	if w.worktreesLoaded {
+		w.worktreesOpen = true
 		m.rebuildRows()
 		return nil
 	}
-	e.worktreesPending = true
-	m.err = nil
-	return fetchWorktrees(dir, r.entryIndex, e.key)
+	w.worktreesPending = true
+	return fetchWorktrees(dir, r.entryIndex, r.tabIndex, r.windowIndex)
 }
 
-func fetchWorktrees(dir string, entryIndex int, key string) tea.Cmd {
+// runRemoveWorktree deletes the selected worktree via git. A normal attempt
+// runs first; the caller offers --force (worktreeForcePrompt) if it fails.
+func (m *model) runRemoveWorktree(force bool) tea.Cmd {
+	r := m.closeRow
+	w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex)
+	if w == nil || r.wt < 0 || r.wt >= len(w.worktrees) {
+		return func() tea.Msg { return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")} }
+	}
+	dir := w.cwd
+	target := w.worktrees[r.wt].path
+	entryIndex, tabIndex, windowIndex := r.entryIndex, r.tabIndex, r.windowIndex
+	return func() tea.Msg {
+		args := []string{"-C", dir, "worktree", "remove"}
+		if force {
+			args = append(args, "--force")
+		}
+		args = append(args, target)
+		output, err := exec.Command("git", args...).CombinedOutput()
+		if err != nil {
+			message := strings.TrimSpace(string(output))
+			if message != "" {
+				err = fmt.Errorf("%s: %s", err, message)
+			}
+			return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, forceTried: force, err: fmt.Errorf("git worktree remove: %w", err)}
+		}
+		return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, forceTried: force}
+	}
+}
+
+// windowAt returns a pointer to the window at the given coordinates, or nil if
+// any index is out of range or the coordinates do not address a window.
+func (m *model) windowAt(entryIndex, tabIndex, windowIndex int) *windowItem {
+	if entryIndex < 0 || entryIndex >= len(m.entries) {
+		return nil
+	}
+	tabs := m.entries[entryIndex].tabs
+	if tabIndex < 0 || tabIndex >= len(tabs) {
+		return nil
+	}
+	windows := tabs[tabIndex].windows
+	if windowIndex < 0 || windowIndex >= len(windows) {
+		return nil
+	}
+	return &windows[windowIndex]
+}
+
+func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 	return func() tea.Msg {
 		output, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
 		if err != nil {
@@ -3344,7 +3455,7 @@ func fetchWorktrees(dir string, entryIndex int, key string) tea.Cmd {
 			if message != "" {
 				err = fmt.Errorf("%s: %s", err, message)
 			}
-			return worktreeListMsg{entryIndex: entryIndex, key: key, err: fmt.Errorf("git worktree list: %w", err)}
+			return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, err: fmt.Errorf("git worktree list: %w", err)}
 		}
 		worktrees := parseWorktreePorcelain(string(output))
 		for i := range worktrees {
@@ -3352,7 +3463,7 @@ func fetchWorktrees(dir string, entryIndex int, key string) tea.Cmd {
 				worktrees[i].current = true
 			}
 		}
-		return worktreeListMsg{entryIndex: entryIndex, key: key, worktrees: worktrees}
+		return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, worktrees: worktrees}
 	}
 }
 
