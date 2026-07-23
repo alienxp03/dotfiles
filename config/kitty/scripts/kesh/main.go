@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -354,10 +355,30 @@ var (
 
 func main() {
 	kitty, zoxide := commands()
-	filter, switchSlot, err := parseArgs(os.Args[1:])
+	filter, switchSlot, pinCommand, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	}
+	switch pinCommand {
+	case "begin-run":
+		if err := beginKittyRun(kitty, currentKittyPID()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	case "clear-pins":
+		if err := clearAllPins(kitty, true); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	case "end-run":
+		if err := endKittyRun(kitty); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	if switchSlot != "" {
 		if err := switchPin(kitty, zoxide, switchSlot); err != nil {
@@ -403,16 +424,22 @@ func main() {
 	}
 }
 
-func parseArgs(args []string) (filter int, switchSlot string, err error) {
+func parseArgs(args []string) (filter int, switchSlot, pinCommand string, err error) {
 	switch {
 	case len(args) == 0:
-		return filterAll, "", nil
+		return filterAll, "", "", nil
 	case len(args) == 1 && args[0] == "agents":
-		return filterAgents, "", nil
+		return filterAgents, "", "", nil
+	case len(args) == 1 && args[0] == "begin-run":
+		return filterAll, "", "begin-run", nil
+	case len(args) == 1 && args[0] == "clear-pins":
+		return filterAll, "", "clear-pins", nil
+	case len(args) == 2 && args[0] == "clear-pins" && args[1] == "--on-quit":
+		return filterAll, "", "end-run", nil
 	case len(args) == 2 && args[0] == "switch" && validSlot(args[1]):
-		return filterAll, args[1], nil
+		return filterAll, args[1], "", nil
 	default:
-		return 0, "", fmt.Errorf("usage: kesh [agents | switch SLOT] (SLOT must be 0-9)")
+		return 0, "", "", fmt.Errorf("usage: kesh [agents | clear-pins | switch SLOT] (SLOT must be 0-9)")
 	}
 }
 
@@ -460,6 +487,10 @@ func savedSessionDirectory() string {
 
 func pinShortcutsPath() string {
 	return filepath.Join(filepath.Dir(pinsPath()), "kitty-pins.conf")
+}
+
+func kittyRunPath() string {
+	return filepath.Join(filepath.Dir(pinsPath()), "kitty-run")
 }
 
 func configDirectory() string {
@@ -829,6 +860,63 @@ func syncPinShortcuts(kitty string, pins pinStore) error {
 		return err
 	}
 	return run(kitty, "@", "load-config")
+}
+
+func clearAllPins(kitty string, reloadConfig bool) error {
+	pins := pinStore{}
+	if err := savePins(pins); err != nil {
+		return err
+	}
+	if !reloadConfig {
+		_, err := savePinShortcuts(pins)
+		return err
+	}
+	return syncPinShortcuts(kitty, pins)
+}
+
+func currentKittyPID() int {
+	if pid, err := strconv.Atoi(os.Getenv("KESH_KITTY_PID")); err == nil && pid > 0 {
+		return pid
+	}
+	return os.Getppid()
+}
+
+func beginKittyRun(kitty string, pid int) error {
+	marker := kittyRunPath()
+	content, err := os.ReadFile(marker)
+	if err == nil {
+		previousPID, parseErr := strconv.Atoi(strings.TrimSpace(string(content)))
+		if parseErr == nil && previousPID > 0 && kittyProcessRunning(previousPID) {
+			return nil
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read Kitty run marker: %w", err)
+	}
+	if err := clearAllPins(kitty, true); err != nil {
+		return fmt.Errorf("clear pins left by an unclean Kitty exit: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(marker), 0o700); err != nil {
+		return fmt.Errorf("create Kesh state directory: %w", err)
+	}
+	if err := os.WriteFile(marker, []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
+		return fmt.Errorf("save Kitty run marker: %w", err)
+	}
+	return nil
+}
+
+func kittyProcessRunning(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
+}
+
+func endKittyRun(kitty string) error {
+	if err := clearAllPins(kitty, false); err != nil {
+		return err
+	}
+	if err := os.Remove(kittyRunPath()); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("clear Kitty run marker: %w", err)
+	}
+	return nil
 }
 
 func pinTargetForEntry(e entry) (pinTarget, error) {
@@ -1947,6 +2035,15 @@ func (m *model) rebuildRows() {
 		})
 		entryIndexes = ranked
 	}
+	// Pins are shortcuts first, so give them a stable, visible home at the
+	// top of every picker view. Non-pinned entries retain their normal order.
+	sort.SliceStable(entryIndexes, func(i, j int) bool {
+		left, right := m.entries[entryIndexes[i]], m.entries[entryIndexes[j]]
+		if left.pin == "" || right.pin == "" {
+			return left.pin != ""
+		}
+		return left.pin < right.pin
+	})
 
 	var rows []row
 	for _, entryIndex := range entryIndexes {

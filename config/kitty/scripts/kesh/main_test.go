@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,25 +16,50 @@ import (
 
 func TestParseArgs(t *testing.T) {
 	tests := []struct {
-		args       []string
-		wantFilter int
-		wantSlot   string
-		wantError  bool
+		args            []string
+		wantFilter      int
+		wantSlot        string
+		wantPinCommand  string
+		wantError       bool
 	}{
 		{wantFilter: filterAll},
 		{args: []string{"agents"}, wantFilter: filterAgents},
+		{args: []string{"begin-run"}, wantFilter: filterAll, wantPinCommand: "begin-run"},
+		{args: []string{"clear-pins"}, wantFilter: filterAll, wantPinCommand: "clear-pins"},
+		{args: []string{"clear-pins", "--on-quit"}, wantFilter: filterAll, wantPinCommand: "end-run"},
 		{args: []string{"switch", "4"}, wantFilter: filterAll, wantSlot: "4"},
 		{args: []string{"switch", "10"}, wantError: true},
 		{args: []string{"unknown"}, wantError: true},
 	}
 	for _, test := range tests {
-		filter, slot, err := parseArgs(test.args)
+		filter, slot, pinCommand, err := parseArgs(test.args)
 		if (err != nil) != test.wantError {
 			t.Fatalf("parseArgs(%q) error = %v, wantError %v", test.args, err, test.wantError)
 		}
-		if err == nil && (filter != test.wantFilter || slot != test.wantSlot) {
-			t.Errorf("parseArgs(%q) = (%d, %q), want (%d, %q)", test.args, filter, slot, test.wantFilter, test.wantSlot)
+		if err == nil && (filter != test.wantFilter || slot != test.wantSlot || pinCommand != test.wantPinCommand) {
+			t.Errorf("parseArgs(%q) = (%d, %q, %q), want (%d, %q, %q)", test.args, filter, slot, pinCommand, test.wantFilter, test.wantSlot, test.wantPinCommand)
 		}
+	}
+}
+
+func TestRebuildRowsPrioritizesPinnedEntriesBySlot(t *testing.T) {
+	m := model{entries: []entry{
+		{name: "unpinned-first"},
+		{name: "slot-three", pin: "3"},
+		{name: "slot-zero", pin: "0"},
+		{name: "unpinned-last"},
+		{name: "slot-one", pin: "1"},
+	}}
+	m.rebuildRows()
+	var got []string
+	for _, row := range m.rows {
+		if row.tabIndex < 0 && row.section == "" {
+			got = append(got, m.entries[row.entryIndex].name)
+		}
+	}
+	want := []string{"slot-zero", "slot-one", "slot-three", "unpinned-first", "unpinned-last"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("row order = %#v, want %#v", got, want)
 	}
 }
 
@@ -1070,6 +1096,89 @@ func TestPinsRoundTrip(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("pin state permissions are %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestClearAllPinsResetsStateAndKittyMappings(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	kittyLog := filepath.Join(stateHome, "kitty.log")
+	kitty := filepath.Join(stateHome, "kitty")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s' \"$*\" > "+kittyLog+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := savePins(pinStore{"2": {Key: "/projects/old", Name: "old"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := clearAllPins(kitty, true); err != nil {
+		t.Fatal(err)
+	}
+	pins, err := loadPins()
+	if err != nil || len(pins) != 0 {
+		t.Fatalf("pins after clear = %#v, err = %v", pins, err)
+	}
+	shortcuts, err := os.ReadFile(pinShortcutsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(shortcuts), "goto_session") || !strings.Contains(string(shortcuts), "map cmd+2\n") {
+		t.Fatalf("shortcuts after clear:\n%s", shortcuts)
+	}
+	command, err := os.ReadFile(kittyLog)
+	if err != nil || string(command) != "@ load-config" {
+		t.Fatalf("Kitty reload = %q, err = %v", command, err)
+	}
+}
+
+func TestKittyRunLifecycleClearsPinsAfterUncleanExit(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	kittyLog := filepath.Join(stateHome, "kitty.log")
+	kitty := filepath.Join(stateHome, "kitty")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s' \"$*\" >> "+kittyLog+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := savePins(pinStore{"2": {Key: "/projects/stale", Name: "stale"}}); err != nil {
+		t.Fatal(err)
+	}
+	marker := kittyRunPath()
+	if err := os.WriteFile(marker, []byte("999999\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := beginKittyRun(kitty, os.Getpid()); err != nil {
+		t.Fatal(err)
+	}
+	pins, err := loadPins()
+	if err != nil || len(pins) != 0 {
+		t.Fatalf("pins after unclean exit recovery = %#v, err = %v", pins, err)
+	}
+	markerContent, err := os.ReadFile(marker)
+	if err != nil || strings.TrimSpace(string(markerContent)) != strconv.Itoa(os.Getpid()) {
+		t.Fatalf("run marker = %q, err = %v", markerContent, err)
+	}
+	if err := savePins(pinStore{"3": {Key: "/projects/current", Name: "current"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := beginKittyRun(kitty, os.Getpid()); err != nil {
+		t.Fatal(err)
+	}
+	pins, err = loadPins()
+	if err != nil || len(pins) != 1 || pins["3"].Key != "/projects/current" {
+		t.Fatalf("pins from active run = %#v, err = %v", pins, err)
+	}
+	if err := endKittyRun(kitty); err != nil {
+		t.Fatal(err)
+	}
+	pins, err = loadPins()
+	if err != nil || len(pins) != 0 {
+		t.Fatalf("pins after normal exit = %#v, err = %v", pins, err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("run marker still exists: %v", err)
+	}
+	command, err := os.ReadFile(kittyLog)
+	if err != nil || string(command) != "@ load-config" {
+		t.Fatalf("Kitty recovery reload = %q, err = %v", command, err)
 	}
 }
 

@@ -23,7 +23,7 @@ The picker starts in normal mode:
 - `enter`: open a session, focus a tab, or focus a window
 - `s`: safely save the selected open project or workspace's tabs, splits, and working directories
 - `S`: additionally save foreground commands so restoring the project or workspace reruns them
-- `p`, then `0`–`9`: pin the selected session to a shortcut slot
+- `p`, then `0`–`9`: pin the selected session to a shortcut slot; repeat an occupied slot to confirm its replacement
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
 - `e`: show or hide Git worktrees for a window, or for a closed project or saved session
@@ -48,7 +48,7 @@ The `Agents` filter is a flat, most-recently-focused list of Kitty windows runni
 
 Run `kesh agents` to start directly in this view. Kitty invokes it in a tab for `Cmd+Shift+P`; `Cmd+Shift+O` opens the complete hierarchy in an overlay.
 
-Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kesh also generates `kitty-pins.conf` beside that file and reloads Kitty whenever pins change. `Cmd+0` through `Cmd+9` therefore invoke Kitty's native `goto_session` action directly, without starting Kesh on every switch.
+Pinned sessions are stored in `${XDG_STATE_HOME:-~/.local/state}/kesh/pins.json`. Kesh also generates `kitty-pins.conf` beside that file and reloads Kitty whenever pins change. `Cmd+0` through `Cmd+9` therefore invoke Kitty's native `goto_session` action directly, without starting Kesh on every switch. Pins apply only to the current Kitty run: Kitty notifies Kesh on a confirmed normal quit, and Kesh clears its state and mappings. Kesh records the active Kitty process; if Kitty is force-terminated, its next start detects the dead process, clears the leftover pins, and reloads the mappings.
 
 Saved states are catalogued in `${XDG_STATE_HOME:-~/.local/state}/kesh/saved-sessions.json`, with Kitty snapshots under the adjacent `sessions/` directory. Press `s` on an open named project or workspace and confirm with `y` to save it safely without capturing shell foreground commands. Use `S` for an explicit command-aware snapshot: Kesh lists the detected foreground commands before confirmation, and Kitty reruns them when restoring. Saved entries remain in Kesh after they are closed; pressing `enter` restores a closed entry or focuses it when already open. Use `x`, then `y` on a closed saved entry to delete its snapshot.
 
