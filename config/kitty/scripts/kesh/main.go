@@ -212,7 +212,6 @@ type model struct {
 	worktreeMode           bool
 	worktreeBranch         string
 	worktreePaths          []string
-	worktreeValidated      bool
 	worktreeBusy           bool
 	worktreeRoot           string
 }
@@ -228,6 +227,7 @@ const (
 var (
 	accentStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
 	dimStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	mutedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	openStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	selectedStyle     = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("230")).Bold(true)
 	selectedTextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
@@ -982,16 +982,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				return m, tea.Quit
-			} else {
-				// Validation completed
-				if msg.err != nil {
-					m.err = msg.err
-					m.worktreeValidated = false
-					return m, nil
-				}
-				m.worktreeValidated = true
+			}
+			// Validation runs only on Enter. On success, proceed to create;
+			// otherwise surface the error without leaving the form.
+			if msg.err != nil {
+				m.err = msg.err
 				return m, nil
 			}
+			m.worktreeBusy = true
+			return m, m.createWorktree()
 	case saveSessionMsg:
 		m.saving = false
 		m.saveConfirming = false
@@ -1193,38 +1192,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.worktreeMode = false
 				m.worktreeBranch = ""
 				m.worktreePaths = nil
-				m.worktreeValidated = false
 				m.err = nil
 			case "enter":
 				if m.worktreeBranch == "" {
 					m.err = fmt.Errorf("branch name is required")
 					return m, nil
 				}
-				if !m.worktreeValidated {
-					m.err = fmt.Errorf("branch must be validated first")
-					return m, nil
-				}
-				m.worktreeBusy = true
-				return m, m.createWorktree()
+				m.err = nil
+				return m, m.validateWorktreeBranch()
 			case "backspace":
 				runes := []rune(m.worktreeBranch)
 				if len(runes) > 0 {
 					m.worktreeBranch = string(runes[:len(runes)-1])
 					m.worktreePaths = m.calculateWorktreePaths()
-					m.worktreeValidated = false
+					m.err = nil
 				}
 			case "ctrl+u":
 				m.worktreeBranch = ""
-				m.worktreePaths = nil
-				m.worktreeValidated = false
+				m.worktreePaths = m.calculateWorktreePaths()
+				m.err = nil
 			default:
 				if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
 					m.worktreeBranch += string(msg.Runes)
 					m.worktreePaths = m.calculateWorktreePaths()
-					m.worktreeValidated = false
+					m.err = nil
 				}
 			}
-			return m, m.validateWorktreeBranch()
+			return m, nil
 		}
 		if m.searching {
 			switch key {
@@ -1334,14 +1328,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "x":
 			m.beginClose()
 		case "w":
-			if len(m.selected) == 0 {
-				m.err = fmt.Errorf("select at least one project first")
+			if len(m.worktreeEntries()) == 0 {
+				m.err = fmt.Errorf("place the cursor on a project, or select multiple")
 				return m, nil
 			}
 			m.worktreeMode = true
 			m.worktreeBranch = ""
-			m.worktreePaths = nil
-			m.worktreeValidated = false
+			m.worktreePaths = m.calculateWorktreePaths()
 			m.err = nil
 			return m, nil
 		case "p":
@@ -1394,6 +1387,23 @@ func (m model) selectedEntries() []entry {
 		}
 	}
 	return entries
+}
+
+// worktreeEntries resolves the projects a worktree action targets. Selection
+// drives multi-project worktrees; with nothing selected, the project under the
+// cursor is used so a single worktree needs no explicit selection.
+func (m *model) worktreeEntries() []entry {
+	if len(m.selected) > 0 {
+		return m.selectedEntries()
+	}
+	if len(m.rows) == 0 {
+		return nil
+	}
+	e := m.entries[m.rows[m.cursor].entryIndex]
+	if e.kind != "project" {
+		return nil
+	}
+	return []entry{e}
 }
 
 func (m *model) beginClose() {
@@ -1889,7 +1899,7 @@ func (m model) popupView(width int) string {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
-	if m.cloning || m.saveForeground {
+	if m.cloning || m.saveForeground || m.worktreeMode {
 		popupWidth = min(72, max(36, width-6))
 	}
 	var title, field, help string
@@ -1966,27 +1976,31 @@ func (m model) popupView(width int) string {
 			if m.worktreeBranch != "" && !m.worktreeBusy {
 				cursor = ""
 			}
-			branchField := dimStyle.Render("Branch: ") + selectedStyle.Render(m.worktreeBranch+cursor)
+			branchField := dimStyle.Render("Branch: ") + focusStyle.Render(m.worktreeBranch+cursor)
 			fieldWidth := popupWidth - 6
 			
 			var pathsField string
 			if len(m.worktreePaths) > 0 {
-				pathsField = "\n\n" + dimStyle.Render("Worktrees:") + "\n"
+				label := "Preview"
+				if len(m.worktreePaths) > 1 {
+					label = fmt.Sprintf("Preview (%d)", len(m.worktreePaths))
+				}
+				pathsField = "\n\n" + dimStyle.Render(label+":") + "\n"
+				prefix := "  󰉋 "
+				hanging := strings.Repeat(" ", lipgloss.Width(prefix))
+				wrapWidth := fieldWidth - lipgloss.Width(prefix)
 				for i, path := range m.worktreePaths {
 					if i >= 3 {
-						pathsField += fmt.Sprintf("\n  • …and %d more", len(m.worktreePaths)-i)
+						pathsField += "\n  " + dimStyle.Render(fmt.Sprintf("…and %d more", len(m.worktreePaths)-i))
 						break
 					}
-					pathsField += "\n  " + path
+					wrapped := lipgloss.NewStyle().Width(wrapWidth).Render(path)
+					wrapped = strings.ReplaceAll(wrapped, "\n", "\n"+hanging)
+					pathsField += "\n" + mutedStyle.Render(prefix + wrapped)
 				}
 			}
-			
-			validationStatus := ""
-			if m.worktreeValidated {
-				validationStatus = " " + openStyle.Render("✓")
-			}
-			
-			field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + validationStatus + pathsField)
+
+			field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
 			if m.worktreeBusy {
 				help = "Creating…"
 			} else {
@@ -3089,16 +3103,16 @@ func displayPath(path, home string) string {
 }
 
 func (m *model) calculateWorktreePaths() []string {
-	if m.worktreeBranch == "" {
-		return nil
-	}
-	entries := m.selectedEntries()
+	entries := m.worktreeEntries()
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.kind != "project" {
 			continue
 		}
 		owner, repo := m.getRepoOwner(entry.path)
+		// filepath.Join drops a trailing empty segment, so with no branch typed
+		// yet the preview resolves to the repo directory and fills in as the
+		// branch is entered — keeping the popup layout stable from the start.
 		worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
 		paths = append(paths, displayPath(worktreePath, os.Getenv("HOME")))
 	}
@@ -3106,10 +3120,10 @@ func (m *model) calculateWorktreePaths() []string {
 }
 
 func (m *model) validateWorktreeBranch() tea.Cmd {
-	if m.worktreeBranch == "" || len(m.selected) == 0 {
+	if m.worktreeBranch == "" {
 		return nil
 	}
-	entries := m.selectedEntries()
+	entries := m.worktreeEntries()
 	if len(entries) == 0 {
 		return nil
 	}
@@ -3142,7 +3156,7 @@ func (m *model) validateWorktreeBranch() tea.Cmd {
 
 }
 func (m *model) createWorktree() tea.Cmd {
-	entries := m.selectedEntries()
+	entries := m.worktreeEntries()
 	return func() tea.Msg {
 		for _, entry := range entries {
 			if entry.kind != "project" {

@@ -2,4 +2,4 @@
 root = "~/workspace"
 
 [worktree]
-root = "~/worktree"
+root = "~/workspace/worktree"
