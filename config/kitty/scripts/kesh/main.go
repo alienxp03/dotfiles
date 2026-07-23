@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
+	"gopkg.in/yaml.v3"
 )
 
 type kittyState []struct {
@@ -280,6 +281,24 @@ type prStatusCacheStore struct {
 	Repositories map[string]prStatusRepositoryCache `json:"repositories"`
 }
 
+type wktreeRecipe struct {
+	WorkspaceMode string `yaml:"workspace_mode"`
+	Terminal      struct {
+		SessionName string `yaml:"session_name"`
+	} `yaml:"terminal"`
+	Workspaces []struct {
+		Name  string `yaml:"name"`
+		Repo  string `yaml:"repo"`
+		Panes []struct {
+			Command    string   `yaml:"command"`
+			Commands   []string `yaml:"commands"`
+			Split      string   `yaml:"split"`
+			Focus      bool     `yaml:"focus"`
+			Percentage int      `yaml:"percentage"`
+		} `yaml:"panes"`
+	} `yaml:"workspaces"`
+}
+
 type keshConfig struct {
 	Clone struct {
 		Root string `toml:"root"`
@@ -343,6 +362,9 @@ type model struct {
 	worktreePaths          []string
 	worktreeBusy           bool
 	worktreeRoot           string
+	worktreeRecipe         *wktreeRecipe
+	worktreeRecipePath     string
+	worktreeRecipeMode     string
 	worktreeForcePrompt    bool
 	mergedWorktrees        []worktreeItem
 	mergedWorktreeBusy     bool
@@ -625,6 +647,39 @@ func loadCheckoutRoot() (string, error) {
 		return "", fmt.Errorf("checkout root must be an absolute or home-relative path")
 	}
 	return filepath.Clean(root), nil
+}
+
+// loadWktreeRecipe discovers the nearest recipe between path and its Git root.
+func loadWktreeRecipe(path string) (*wktreeRecipe, string, error) {
+	rootOutput, err := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return nil, "", nil // Not a Git project: retain Kesh's native flow.
+	}
+	root := strings.TrimSpace(string(rootOutput))
+	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
+		candidate := filepath.Join(dir, ".wktree.yaml")
+		content, readErr := os.ReadFile(candidate)
+		if readErr == nil {
+			var recipe wktreeRecipe
+			if err := yaml.Unmarshal(content, &recipe); err != nil {
+				return nil, candidate, fmt.Errorf("invalid .wktree.yaml: %w", err)
+			}
+			if recipe.WorkspaceMode == "" {
+				recipe.WorkspaceMode = "single"
+			}
+			if recipe.WorkspaceMode != "single" && recipe.WorkspaceMode != "all" {
+				return nil, candidate, fmt.Errorf("invalid .wktree.yaml workspace_mode %q", recipe.WorkspaceMode)
+			}
+			return &recipe, candidate, nil
+		}
+		if !os.IsNotExist(readErr) {
+			return nil, candidate, readErr
+		}
+		if dir == root || dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	return nil, "", nil
 }
 
 func expandHomePath(path string) (string, error) {
@@ -1659,12 +1714,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.worktreeBranch = ""
 				m.worktreePaths = nil
 				m.err = nil
+			case "tab":
+				if m.worktreeRecipe != nil && len(m.worktreeRecipe.Workspaces) > 1 {
+					if m.worktreeRecipeMode == "all" {
+						m.worktreeRecipeMode = "single"
+					} else {
+						m.worktreeRecipeMode = "all"
+					}
+				}
 			case "enter":
 				if m.worktreeBranch == "" {
 					m.err = fmt.Errorf("branch name is required")
 					return m, nil
 				}
 				m.err = nil
+				if m.worktreeRecipe != nil {
+					m.worktreeBusy = true
+					return m, runWktreeNew(m.worktreeRecipePath, m.worktreeRecipeMode, m.worktreeBranch)
+				}
 				return m, m.validateWorktreeBranch()
 			case "backspace":
 				runes := []rune(m.worktreeBranch)
@@ -1882,6 +1949,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreeMode = true
 			m.worktreeBranch = ""
 			m.worktreePaths = m.calculateWorktreePaths()
+			m.worktreeRecipe = nil
+			m.worktreeRecipePath = ""
+			m.worktreeRecipeMode = ""
+			entries := m.worktreeEntries()
+			if len(entries) == 1 && entries[0].path != "" {
+				recipe, recipePath, err := loadWktreeRecipe(entries[0].path)
+				if err != nil {
+					m.worktreeMode = false
+					m.err = err
+					return m, nil
+				}
+				m.worktreeRecipe, m.worktreeRecipePath = recipe, recipePath
+				if recipe != nil {
+					m.worktreeRecipeMode = recipe.WorkspaceMode
+				}
+			}
 			m.err = nil
 			return m, nil
 		case "e":
@@ -2901,6 +2984,171 @@ func prCheckoutPreview(value, branch, selectedRepoPath, checkoutRoot, cloneRoot,
 	return renderPreviewLines(lines, fieldWidth)
 }
 
+func wktreeSessionPreview(recipe *wktreeRecipe, repoPath, branch string) string {
+	template := recipe.Terminal.SessionName
+	if template == "" {
+		template = "${repo}/${branch}"
+	}
+	repo := filepath.Base(repoPath)
+	branch = strings.NewReplacer("/", "-", " ", "-").Replace(branch)
+	return strings.ReplaceAll(strings.ReplaceAll(template, "${repo}", repo), "${branch}", branch)
+}
+
+func wktreePaneLabel(pane struct {
+	Command    string   `yaml:"command"`
+	Commands   []string `yaml:"commands"`
+	Split      string   `yaml:"split"`
+	Focus      bool     `yaml:"focus"`
+	Percentage int      `yaml:"percentage"`
+}) string {
+	label := pane.Command
+	if label == "" && len(pane.Commands) > 0 {
+		label = strings.Join(pane.Commands, " && ")
+	}
+	if label == "" {
+		label = "shell"
+	}
+	if pane.Focus {
+		label += " *"
+	}
+	return truncate(label, 26)
+}
+
+type wktreePaneNode struct {
+	label         string
+	vertical      bool
+	percentage    int
+	first, second *wktreePaneNode
+}
+
+// wktreePaneDiagram simulates wktree's successive Kitty splits in a small
+// terminal-cell canvas. It is intentionally a preview: Kitty makes final pixel
+// sizing decisions, but the pane relationships and configured bias are exact.
+func wktreePaneDiagram(panes []struct {
+	Command    string   `yaml:"command"`
+	Commands   []string `yaml:"commands"`
+	Split      string   `yaml:"split"`
+	Focus      bool     `yaml:"focus"`
+	Percentage int      `yaml:"percentage"`
+}, width int) []string {
+	if len(panes) == 0 {
+		panes = append(panes, struct {
+			Command    string   `yaml:"command"`
+			Commands   []string `yaml:"commands"`
+			Split      string   `yaml:"split"`
+			Focus      bool     `yaml:"focus"`
+			Percentage int      `yaml:"percentage"`
+		}{Command: "shell"})
+	}
+	root := &wktreePaneNode{label: wktreePaneLabel(panes[0])}
+	active := root
+	for _, pane := range panes[1:] {
+		old := *active
+		next := &wktreePaneNode{label: wktreePaneLabel(pane)}
+		*active = wktreePaneNode{vertical: pane.Split == "vertical", percentage: pane.Percentage, first: &old, second: next}
+		active = next
+	}
+	canvasWidth := min(54, max(20, width-4))
+	canvasHeight := 7
+	canvas := make([][]rune, canvasHeight)
+	for y := range canvas {
+		canvas[y] = []rune(strings.Repeat(" ", canvasWidth))
+	}
+	put := func(x, y int, value string) {
+		if y >= 0 && y < canvasHeight {
+			for i, r := range []rune(value) {
+				if x+i >= 0 && x+i < canvasWidth {
+					canvas[y][x+i] = r
+				}
+			}
+		}
+	}
+	var draw func(*wktreePaneNode, int, int, int, int)
+	draw = func(node *wktreePaneNode, x, y, w, h int) {
+		if w < 4 || h < 3 {
+			return
+		}
+		put(x, y, "┌"+strings.Repeat("─", w-2)+"┐")
+		put(x, y+h-1, "└"+strings.Repeat("─", w-2)+"┘")
+		for row := y + 1; row < y+h-1; row++ {
+			put(x, row, "│")
+			put(x+w-1, row, "│")
+		}
+		if node.first == nil {
+			put(x+1, y+1, truncate(node.label, w-3))
+			return
+		}
+		percent := node.percentage
+		if percent <= 0 {
+			percent = 50
+		}
+		if percent < 25 {
+			percent = 25
+		}
+		if percent > 75 {
+			percent = 75
+		}
+		if node.vertical {
+			split := max(3, h*percent/100)
+			draw(node.first, x, y, w, split)
+			draw(node.second, x, y+split-1, w, h-split+1)
+		} else {
+			split := max(4, w*percent/100)
+			draw(node.first, x, y, split, h)
+			draw(node.second, x+split-1, y, w-split+1, h)
+		}
+	}
+	draw(root, 0, 0, canvasWidth, canvasHeight)
+	lines := make([]string, canvasHeight)
+	for i := range canvas {
+		lines[i] = strings.TrimRight(string(canvas[i]), " ")
+	}
+	return lines
+}
+
+func wktreeWorkspaceRepoPath(workspace struct {
+	Name  string `yaml:"name"`
+	Repo  string `yaml:"repo"`
+	Panes []struct {
+		Command    string   `yaml:"command"`
+		Commands   []string `yaml:"commands"`
+		Split      string   `yaml:"split"`
+		Focus      bool     `yaml:"focus"`
+		Percentage int      `yaml:"percentage"`
+	} `yaml:"panes"`
+}, recipePath string) string {
+	repo := workspace.Repo
+	if repo == "" {
+		repo = "."
+	}
+	if expanded, err := expandHomePath(repo); err == nil {
+		repo = expanded
+	}
+	if !filepath.IsAbs(repo) {
+		repo = filepath.Join(filepath.Dir(recipePath), repo)
+	}
+	return displayPath(filepath.Clean(repo), os.Getenv("HOME"))
+}
+
+func wktreeLayoutPreview(recipe *wktreeRecipe, recipePath, mode string, width int) []string {
+	workspaces := recipe.Workspaces
+	if mode == "single" && len(workspaces) > 1 {
+		workspaces = workspaces[:1]
+	}
+	var lines []string
+	for i, workspace := range workspaces {
+		connector := "├─"
+		if i == len(workspaces)-1 {
+			connector = "└─"
+		}
+		lines = append(lines, connector+" "+workspace.Name+"  "+wktreeWorkspaceRepoPath(workspace, recipePath))
+		for _, line := range wktreePaneDiagram(workspace.Panes, width) {
+			lines = append(lines, "   "+line)
+		}
+	}
+	return lines
+}
+
 func renderPreviewLines(lines []string, fieldWidth int) string {
 	wrapped := lipgloss.NewStyle().Width(fieldWidth).Render(strings.Join(lines, "\n"))
 	return "\n\n" + dimStyle.Render(wrapped)
@@ -3005,7 +3253,18 @@ func (m model) popupView(width int) string {
 		fieldWidth := popupWidth - 6
 
 		var pathsField string
-		if len(m.worktreePaths) > 0 {
+		if m.worktreeRecipe != nil {
+			repoPath := ""
+			if entries := m.worktreeEntries(); len(entries) == 1 {
+				repoPath = entries[0].path
+			}
+			layout := wktreeLayoutPreview(m.worktreeRecipe, m.worktreeRecipePath, m.worktreeRecipeMode, fieldWidth)
+			pathsField = "\n\n" + dimStyle.Render("Recipe: "+displayPath(m.worktreeRecipePath, os.Getenv("HOME"))) + "\n" +
+				// wktree uses this generated-layout identity in WKTREE_KITTY_SESSION;
+				// it is not Kitty's native session name.
+				dimStyle.Render("wktree layout: "+wktreeSessionPreview(m.worktreeRecipe, repoPath, m.worktreeBranch)) + "\n" +
+				dimStyle.Render(strings.Join(layout, "\n"))
+		} else if len(m.worktreePaths) > 0 {
 			label := "Preview"
 			if len(m.worktreePaths) > 1 {
 				label = fmt.Sprintf("Preview (%d)", len(m.worktreePaths))
@@ -3028,6 +3287,8 @@ func (m model) popupView(width int) string {
 		field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
 		if m.worktreeBusy {
 			help = "Creating…"
+		} else if m.worktreeRecipe != nil && len(m.worktreeRecipe.Workspaces) > 1 {
+			help = "Enter create  •  Tab single/all  •  Esc cancel"
 		} else {
 			help = "Enter create  •  Esc cancel"
 		}
@@ -4424,6 +4685,28 @@ func worktreeDirectoryName(branch string) string {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+// runWktreeNew delegates recipe-driven creation and Kitty layout setup to
+// wktree; Kesh only owns the interactive branch prompt and refresh afterward.
+func runWktreeNew(recipePath, mode, branch string) tea.Cmd {
+	return func() tea.Msg {
+		wktree := findCommand("wktree", filepath.Join(os.Getenv("HOME"), ".local", "bin", "wktree"), "/opt/homebrew/bin/wktree")
+		if wktree == "" {
+			return worktreeMsg{err: fmt.Errorf("wktree was not found")}
+		}
+		args := []string{"new"}
+		if mode == "all" {
+			args = append(args, "--workspaces")
+		}
+		args = append(args, branch)
+		command := exec.Command(wktree, args...)
+		command.Dir = filepath.Dir(recipePath)
+		if output, err := command.CombinedOutput(); err != nil {
+			return worktreeMsg{err: commandError("wktree new", output, err)}
+		}
+		return worktreeMsg{}
+	}
 }
 
 func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {

@@ -1226,6 +1226,21 @@ func TestViewHeightStaysStableForWorktreeRows(t *testing.T) {
 	}
 }
 
+func TestLoadWktreeRecipe(t *testing.T) {
+	repo := t.TempDir()
+	if err := run("git", "-C", repo, "init"); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(repo, ".wktree.yaml")
+	if err := os.WriteFile(configPath, []byte("workspace_mode: all\nworkspaces:\n  - name: api\n  - name: web\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recipe, gotPath, err := loadWktreeRecipe(repo)
+	if err != nil || recipe == nil || recipe.WorkspaceMode != "all" || len(recipe.Workspaces) != 2 || gotPath != configPath {
+		t.Fatalf("loadWktreeRecipe() = (%#v, %q, %v)", recipe, gotPath, err)
+	}
+}
+
 func TestWorktreeDirectoryName(t *testing.T) {
 	if got := worktreeDirectoryName("fix/verify-asset-sync-on-build"); got != "fix-verify-asset-sync-on-build" {
 		t.Fatalf("worktreeDirectoryName() = %q", got)
