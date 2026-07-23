@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -33,6 +34,390 @@ func TestParseArgs(t *testing.T) {
 		if err == nil && (filter != test.wantFilter || slot != test.wantSlot) {
 			t.Errorf("parseArgs(%q) = (%d, %q), want (%d, %q)", test.args, filter, slot, test.wantFilter, test.wantSlot)
 		}
+	}
+}
+
+func TestMergedWorktreeItemsOnlyReturnsMergedNonCurrent(t *testing.T) {
+	worktrees := []worktreeItem{
+		{path: "/repos/main", branch: "main"},
+		{path: "/worktrees/merged-one", branch: "merged-one"},
+		{path: "/worktrees/merged-two", branch: "merged-two"},
+		{path: "/worktrees/open", branch: "still-open"},
+		{path: "/worktrees/detached", branch: "(detached)"},
+		{path: "/worktrees/pr-merged", branch: "pr-merged", head: "merged-head"},
+		{path: "/worktrees/pr-reused", branch: "pr-reused", head: "new-unmerged-head"},
+	}
+	pullRequestHeads := map[string]map[string]bool{
+		"pr-merged": {"merged-head": true},
+		"pr-reused": {"old-merged-head": true},
+	}
+
+	got := mergedWorktreeItems(worktrees, "main\nmerged-one\nmerged-two\n", "main", pullRequestHeads)
+	want := []worktreeItem{worktrees[1], worktrees[2], worktrees[5]}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("merged worktrees = %#v, want %#v", got, want)
+	}
+
+	// Running from a linked worktree must still protect both that current
+	// worktree and the repository's primary working tree.
+	got = mergedWorktreeItems(worktrees, "main\nmerged-one\nmerged-two\n", "merged-one", pullRequestHeads)
+	want = []worktreeItem{worktrees[2], worktrees[5]}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("merged worktrees from linked worktree = %#v, want %#v", got, want)
+	}
+}
+
+func TestOverlayPopupPreservesBackgroundOutsidePopup(t *testing.T) {
+	lines := []string{
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+		"abcdefghijklmnopqrst",
+	}
+	got := overlayPopup(lines, "POP", 20)
+	if got[3] != "abcdefghPOPlmnopqrst" {
+		t.Fatalf("overlay line = %q", got[3])
+	}
+	if got[2] != "abcdefghijklmnopqrst" || got[4] != "abcdefghijklmnopqrst" {
+		t.Fatalf("overlay changed lines outside popup: %#v", got)
+	}
+}
+
+func TestFindMergedWorktreesShowsLoadingState(t *testing.T) {
+	m := model{
+		entries: []entry{{name: "repo", kind: "project", path: "/repos/repo"}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	if cmd := m.findMergedWorktrees(); cmd == nil {
+		t.Fatal("merged worktree query was not started")
+	}
+	if !m.mergedWorktreeBusy {
+		t.Fatal("merged worktree loading state was not enabled")
+	}
+	if popup := ansi.Strip(m.popupView(100)); !strings.Contains(popup, "Checking merged worktrees") {
+		t.Fatalf("loading popup = %q", popup)
+	}
+
+	updatedModel, _ := m.Update(mergedWorktreeListMsg{err: fmt.Errorf("query failed")})
+	if updatedModel.(model).mergedWorktreeBusy {
+		t.Fatal("merged worktree loading state was not cleared")
+	}
+}
+
+func TestFindClosedWorktreesShowsLoadingState(t *testing.T) {
+	m := model{
+		entries: []entry{{name: "repo", kind: "project", path: "/repos/repo"}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	if cmd := m.findClosedWorktrees(); cmd == nil {
+		t.Fatal("closed PR worktree query was not started")
+	}
+	if !m.closedWorktreeBusy {
+		t.Fatal("closed PR loading state was not enabled")
+	}
+	if popup := ansi.Strip(m.popupView(100)); !strings.Contains(popup, "Checking closed PRs") {
+		t.Fatalf("loading popup = %q", popup)
+	}
+
+	updatedModel, _ := m.Update(closedWorktreeListMsg{err: fmt.Errorf("query failed")})
+	if updatedModel.(model).closedWorktreeBusy {
+		t.Fatal("closed PR loading state was not cleared")
+	}
+}
+
+func TestClosedPRWorktreeItemsRequireExactHeadAndProtectCurrentTrees(t *testing.T) {
+	worktrees := []worktreeItem{
+		{path: "/repos/main", branch: "main", head: "main-head"},
+		{path: "/worktrees/closed", branch: "fix/closed", head: "closed-head"},
+		{path: "/worktrees/reused", branch: "fix/reused", head: "new-head"},
+		{path: "/worktrees/open", branch: "feat/open", head: "open-head"},
+		{path: "/worktrees/current", branch: "fix/current", head: "current-head"},
+	}
+	pullRequests := map[string]prInfo{
+		prStatusKey("fix/closed", "closed-head"):   {Status: "closed"},
+		prStatusKey("fix/reused", "old-head"):      {Status: "closed"},
+		prStatusKey("feat/open", "open-head"):      {Status: "open"},
+		prStatusKey("fix/current", "current-head"): {Status: "closed"},
+	}
+	got := closedPRWorktreeItems(worktrees, "fix/current", pullRequests)
+	want := []worktreeItem{worktrees[1]}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("closed PR worktrees = %#v, want %#v", got, want)
+	}
+}
+
+func TestDeleteClosedWorktreesDeletesBranchOnlyAfterWorktreeRemoval(t *testing.T) {
+	directory := t.TempDir()
+	capture := filepath.Join(directory, "commands")
+	t.Setenv("COMMAND_CAPTURE", capture)
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	git := `#!/bin/sh
+printf '%s\n' "$*" >> "$COMMAND_CAPTURE"
+case "$*" in
+  *"worktree remove /worktrees/dirty"*) printf '%s\n' 'dirty worktree' >&2; exit 1 ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(directory, "git"), []byte(git), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m := model{
+		entries:  []entry{{path: "/repos/repo"}},
+		closeRow: row{entryIndex: 0, tabIndex: -1, windowIndex: -1},
+		closedWorktrees: []worktreeItem{
+			{path: "/worktrees/safe", branch: "fix/safe"},
+			{path: "/worktrees/dirty", branch: "fix/dirty"},
+		},
+	}
+	message := m.runDeleteClosedWorktrees()().(closedWorktreeRemoveMsg)
+	if message.err == nil {
+		t.Fatal("dirty worktree removal unexpectedly succeeded")
+	}
+	content, err := os.ReadFile(capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commands := string(content)
+	if !strings.Contains(commands, "worktree remove /worktrees/safe") || !strings.Contains(commands, "branch -D -- fix/safe") {
+		t.Fatalf("safe branch was not deleted after its worktree:\n%s", commands)
+	}
+	if strings.Contains(commands, "branch -D -- fix/dirty") || strings.Contains(commands, "--force") {
+		t.Fatalf("dirty branch was deleted or force was used:\n%s", commands)
+	}
+}
+
+func TestSortWorktreesPrioritizesDefaultAndPRStatus(t *testing.T) {
+	worktrees := []worktreeItem{
+		{branch: "z-no-pr"},
+		{branch: "closed", prStatus: "closed"},
+		{branch: "main", prStatus: "merged", isDefault: true},
+		{branch: "open", prStatus: "open"},
+		{branch: "merged", prStatus: "merged"},
+		{branch: "a-no-pr"},
+	}
+	sortWorktreeItems(worktrees)
+	got := make([]string, len(worktrees))
+	for index, worktree := range worktrees {
+		got[index] = worktree.branch
+	}
+	want := []string{"main", "open", "merged", "closed", "a-no-pr", "z-no-pr"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("worktree order = %#v, want %#v", got, want)
+	}
+}
+
+func TestPRStatusReorderPreservesFocusedWorktree(t *testing.T) {
+	const repoKey = "git@github.com:example/repo.git"
+	m := model{entries: []entry{{
+		worktrees:       []worktreeItem{{path: "/selected", branch: "z-selected", head: "aaa", prRepoKey: repoKey}, {path: "/open", branch: "a-open", head: "bbb", prRepoKey: repoKey}},
+		worktreesOpen:   true,
+		worktreesLoaded: true,
+	}}}
+	m.rebuildRows()
+	m.cursor = 2 // The first worktree item after the entry and section header.
+	focused := m.focusedWorktreePath()
+	m.applyPRStatuses(repoKey, map[string]prInfo{prStatusKey("a-open", "bbb"): {Status: "open"}})
+	m.rebuildRows()
+	m.restoreFocusedWorktree(focused)
+	if got := m.focusedWorktreePath(); got != "/selected" {
+		t.Fatalf("focused worktree after reorder = %q", got)
+	}
+}
+
+func TestPRStatusCacheRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	repoKey := "git@github.com:loveholidays/aurora.git"
+	statuses := map[string]prInfo{
+		prStatusKey("feat/open", "aaa"):    {Status: "open", URL: "https://github.com/loveholidays/aurora/pull/1", Number: 1},
+		prStatusKey("fix/merged", "bbb"):   {Status: "merged", URL: "https://github.com/loveholidays/aurora/pull/2", Number: 2},
+		prStatusKey("fix/rejected", "ccc"): {Status: "closed", URL: "https://github.com/loveholidays/aurora/pull/3", Number: 3},
+	}
+	if err := savePRStatusCache(repoKey, statuses); err != nil {
+		t.Fatal(err)
+	}
+	got, fetchedAt := loadPRStatusCache(repoKey)
+	if !reflect.DeepEqual(got, statuses) {
+		t.Fatalf("cached statuses = %#v, want %#v", got, statuses)
+	}
+	if fetchedAt.IsZero() || time.Since(fetchedAt) > time.Minute {
+		t.Fatalf("unexpected cache timestamp: %v", fetchedAt)
+	}
+}
+
+func TestApplyPRStatusesMatchesRepositoryBranchAndHead(t *testing.T) {
+	const repoKey = "git@github.com:loveholidays/aurora.git"
+	m := model{entries: []entry{{
+		worktrees: []worktreeItem{
+			{branch: "feat/open", head: "aaa", prRepoKey: repoKey},
+			{branch: "feat/open", head: "newer", prRepoKey: repoKey, prStatus: "closed"},
+		},
+		tabs: []tabItem{{windows: []windowItem{{worktrees: []worktreeItem{
+			{branch: "fix/merged", head: "bbb", prRepoKey: repoKey},
+		}}}}},
+	}}}
+	m.applyPRStatuses(repoKey, map[string]prInfo{
+		prStatusKey("feat/open", "aaa"):  {Status: "open", URL: "https://github.com/loveholidays/aurora/pull/1", Number: 1},
+		prStatusKey("fix/merged", "bbb"): {Status: "merged", URL: "https://github.com/loveholidays/aurora/pull/2", Number: 2},
+	})
+	if got := m.entries[0].worktrees[0].prStatus; got != "open" {
+		t.Fatalf("open status = %q", got)
+	}
+	if got := m.entries[0].worktrees[0].prURL; got != "https://github.com/loveholidays/aurora/pull/1" {
+		t.Fatalf("open PR URL = %q", got)
+	}
+	if got := m.entries[0].worktrees[1].prStatus; got != "" {
+		t.Fatalf("newer branch HEAD retained stale status %q", got)
+	}
+	if got := m.entries[0].tabs[0].windows[0].worktrees[0].prStatus; got != "merged" {
+		t.Fatalf("merged status = %q", got)
+	}
+}
+
+func TestOpenWorktreePROpensExactCachedURL(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("OPEN_CAPTURE", filepath.Join(directory, "opened"))
+	if err := os.WriteFile(filepath.Join(directory, "open"), []byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$OPEN_CAPTURE\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const pullRequestURL = "https://github.com/loveholidays/aurora/pull/9801"
+	m := model{
+		entries: []entry{{worktrees: []worktreeItem{{branch: "fix/vite-websocket-port", prURL: pullRequestURL}}}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: 0}},
+	}
+	command := m.openWorktreePR()
+	if command == nil {
+		t.Fatalf("open PR command was not created: %v", m.err)
+	}
+	message := command().(openPRMsg)
+	if message.err != nil {
+		t.Fatal(message.err)
+	}
+	updatedModel, nextCommand := m.Update(message)
+	if nextCommand != nil {
+		t.Fatal("opening a PR should keep Kesh open")
+	}
+	if updatedModel.(model).err != nil {
+		t.Fatalf("opening a PR returned an error: %v", updatedModel.(model).err)
+	}
+	content, err := os.ReadFile(os.Getenv("OPEN_CAPTURE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(content); got != pullRequestURL {
+		t.Fatalf("opened URL = %q", got)
+	}
+}
+
+func TestToggleWorktreesRefreshesPRStatusesInBackground(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(directory, "cache"))
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	git := `#!/bin/sh
+case "$*" in
+  *"worktree list --porcelain"*)
+    printf 'worktree %s/repo\nHEAD aaa\nbranch refs/heads/main\n\nworktree %s/tree\nHEAD bbb\nbranch refs/heads/feat/open\n' "$TMPDIR" "$TMPDIR"
+    ;;
+  *"remote get-url origin"*) printf '%s\n' 'git@github.com:example/repo.git' ;;
+  *) exit 1 ;;
+esac
+`
+	gh := `#!/bin/sh
+printf '%s\n' '[{"headRefName":"feat/open","headRefOid":"bbb","state":"OPEN","mergedAt":null}]'
+`
+	if err := os.WriteFile(filepath.Join(directory, "git"), []byte(git), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(gh), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", directory)
+	if err := os.Mkdir(filepath.Join(directory, "repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	m := model{
+		entries: []entry{{name: "repo", kind: "project", path: filepath.Join(directory, "repo")}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	listCommand := m.toggleWorktrees()
+	if listCommand == nil {
+		t.Fatal("worktree query was not started")
+	}
+	listedModel, refreshCommand := m.Update(listCommand())
+	listed := listedModel.(model)
+	if refreshCommand == nil {
+		t.Fatal("background PR refresh was not started")
+	}
+	refreshedModel, _ := listed.Update(refreshCommand())
+	refreshed := refreshedModel.(model)
+	if got := refreshed.entries[0].worktrees[1].prStatus; got != "open" {
+		t.Fatalf("PR status = %q, want open", got)
+	}
+	if _, err := os.Stat(prStatusCachePath()); err != nil {
+		t.Fatalf("PR status cache was not written: %v", err)
+	}
+}
+
+func TestToggleWorktreesForClosedEntries(t *testing.T) {
+	for _, kind := range []string{"project", "workspace"} {
+		t.Run(kind, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), kind)
+			m := model{
+				entries: []entry{{name: kind, kind: kind, path: path}},
+				rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+			}
+
+			if cmd := m.toggleWorktrees(); cmd == nil {
+				t.Fatal("closed entry did not start a worktree query")
+			}
+			if !m.entries[0].worktreesPending {
+				t.Fatal("closed entry was not marked pending")
+			}
+
+			updatedModel, _ := m.Update(worktreeListMsg{
+				entryIndex: 0, tabIndex: -1, windowIndex: -1, dir: path,
+				worktrees: []worktreeItem{{path: path, branch: "main", current: true}},
+			})
+			updated := updatedModel.(model)
+			if !updated.entries[0].worktreesOpen || !updated.entries[0].worktreesLoaded {
+				t.Fatalf("closed entry worktree state = %#v", updated.entries[0])
+			}
+			if len(updated.rows) != 3 || updated.rows[1].section != "wt-head" || updated.rows[2].section != "wt-item" {
+				t.Fatalf("rows = %#v, want entry with worktree section", updated.rows)
+			}
+			header := ansi.Strip(updated.renderRow(updated.rows[1], 100, false))
+			item := ansi.Strip(updated.renderRow(updated.rows[2], 100, false))
+			if !strings.HasPrefix(header, "        └─ worktrees") || !strings.HasPrefix(item, "            └─ ") {
+				t.Fatalf("closed worktree hierarchy is misaligned:\n%q\n%q", header, item)
+			}
+
+			updated.cursor = 2
+			updated.beginClose()
+			if !updated.closing || updated.closeRow.section != "wt-item" {
+				t.Fatalf("closed entry worktree could not be selected for removal: err=%v", updated.err)
+			}
+			updated.closing = false
+			if cmd := updated.toggleWorktrees(); cmd != nil {
+				t.Fatal("collapsing loaded worktrees unexpectedly started a query")
+			}
+			if updated.entries[0].worktreesOpen || len(updated.rows) != 1 {
+				t.Fatalf("worktrees did not collapse: entry=%#v rows=%#v", updated.entries[0], updated.rows)
+			}
+		})
+	}
+}
+
+func TestToggleWorktreesRequiresWindowForOpenEntry(t *testing.T) {
+	m := model{
+		entries: []entry{{name: "project", kind: "project", path: "/projects/project", open: true}},
+		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	if cmd := m.toggleWorktrees(); cmd != nil {
+		t.Fatal("open entry row should remain window-scoped")
+	}
+	if m.entries[0].worktreesPending {
+		t.Fatal("open entry row was marked pending")
 	}
 }
 

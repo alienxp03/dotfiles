@@ -68,10 +68,14 @@ type tabItem struct {
 }
 
 type worktreeItem struct {
-	path    string
-	branch  string
-	head    string
-	current bool
+	path      string
+	branch    string
+	head      string
+	current   bool
+	isDefault bool
+	prStatus  string
+	prURL     string
+	prRepoKey string
 }
 
 type entry struct {
@@ -92,6 +96,10 @@ type entry struct {
 	tabs         []tabItem
 	order        int
 	pin          string
+	worktrees        []worktreeItem
+	worktreesLoaded  bool
+	worktreesOpen    bool
+	worktreesPending bool
 }
 
 type row struct {
@@ -99,10 +107,11 @@ type row struct {
 	tabIndex    int
 	windowIndex int
 	section     string // "", "wt-head", "wt-item", "wt-foot"
-	wt          int    // index into entry.worktrees for "wt-item" rows
+	wt          int    // index into the entry or window worktree list for "wt-item" rows
 }
 
 type actionMsg struct{ err error }
+type openPRMsg struct{ err error }
 
 type closeMsg struct {
 	entries         []entry
@@ -190,6 +199,62 @@ type worktreeRemoveMsg struct {
 	err         error
 }
 
+type mergedWorktreeListMsg struct {
+	selected  row
+	dir       string
+	worktrees []worktreeItem
+	err       error
+}
+
+type mergedWorktreeRemoveMsg struct {
+	selected row
+	dir      string
+	err      error
+}
+
+type closedWorktreeListMsg struct {
+	selected  row
+	dir       string
+	worktrees []worktreeItem
+	err       error
+}
+
+type closedWorktreeRemoveMsg struct {
+	selected row
+	dir      string
+	err      error
+}
+
+type prInfo struct {
+	Status string
+	URL    string
+	Number int
+}
+
+type prStatusMsg struct {
+	repoKey      string
+	pullRequests map[string]prInfo
+	err          error
+}
+
+type prStatusCacheEntry struct {
+	Branch string `json:"branch"`
+	Head   string `json:"head"`
+	Status string `json:"status"`
+	URL    string `json:"url,omitempty"`
+	Number int    `json:"number,omitempty"`
+}
+
+type prStatusRepositoryCache struct {
+	FetchedAt string               `json:"fetched_at"`
+	Entries   []prStatusCacheEntry `json:"entries"`
+}
+
+type prStatusCacheStore struct {
+	Version      int                                `json:"version"`
+	Repositories map[string]prStatusRepositoryCache `json:"repositories"`
+}
+
 type keshConfig struct {
 	Clone struct {
 		Root string `toml:"root"`
@@ -246,6 +311,12 @@ type model struct {
 	worktreeBusy           bool
 	worktreeRoot           string
 	worktreeForcePrompt    bool
+	mergedWorktrees        []worktreeItem
+	mergedWorktreeBusy     bool
+	closedWorktrees        []worktreeItem
+	closedWorktreeBusy     bool
+	prStatusPending        map[string]bool
+	prStatusLastFetch      map[string]time.Time
 }
 
 const (
@@ -254,6 +325,11 @@ const (
 	filterOpen
 	filterProjects
 	filterSSH
+)
+
+const (
+	prStatusCacheVersion = 2
+	prStatusThrottle     = time.Minute
 )
 
 var (
@@ -265,7 +341,9 @@ var (
 	selectedTextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
 	focusStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
 	projectStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
-	branchStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true)
+	prOpenStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	prMergedStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true)
+	prClosedStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
 	sshStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	piStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
 	codexStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
@@ -928,6 +1006,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case openPRMsg:
+		m.err = msg.err
+		return m, nil
 	case closeMsg:
 		m.closeBusy = false
 		if msg.err != nil {
@@ -1025,6 +1106,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreeBusy = true
 			return m, m.createWorktree()
 		case worktreeListMsg:
+			updated := false
 			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil && w.cwd == msg.dir {
 				w.worktreesPending = false
 				if msg.err != nil {
@@ -1035,10 +1117,104 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				w.worktrees = msg.worktrees
 				w.worktreesLoaded = true
 				w.worktreesOpen = true
+				updated = true
+			} else if e := m.closedEntryAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); e != nil && e.path == msg.dir {
+				e.worktreesPending = false
+				if msg.err != nil {
+					e.worktreesLoaded = false
+					m.err = msg.err
+					return m, nil
+				}
+				e.worktrees = msg.worktrees
+				e.worktreesLoaded = true
+				e.worktreesOpen = true
+				updated = true
+			}
+			if updated {
 				m.err = nil
 				m.rebuildRows()
+				return m, m.refreshPRStatuses(msg.dir, false)
 			}
 			return m, nil
+		case prStatusMsg:
+			if m.prStatusPending != nil {
+				m.prStatusPending[msg.repoKey] = false
+			}
+			if msg.err != nil {
+				if strings.Contains(msg.repoKey, "github.com") {
+					m.err = fmt.Errorf("refresh PR status: %w", msg.err)
+				}
+				return m, nil
+			}
+			if m.prStatusLastFetch == nil {
+				m.prStatusLastFetch = map[string]time.Time{}
+			}
+			m.prStatusLastFetch[msg.repoKey] = time.Now()
+			focusedWorktree := m.focusedWorktreePath()
+			m.applyPRStatuses(msg.repoKey, msg.pullRequests)
+			m.rebuildRows()
+			m.restoreFocusedWorktree(focusedWorktree)
+			return m, nil
+		case mergedWorktreeListMsg:
+			m.mergedWorktreeBusy = false
+			if msg.err != nil {
+				m.err = msg.err
+				return m, nil
+			}
+			if len(msg.worktrees) == 0 {
+				m.err = fmt.Errorf("no merged worktrees to remove")
+				return m, nil
+			}
+			m.closeRow = msg.selected
+			m.mergedWorktrees = msg.worktrees
+			m.closing = true
+			m.closeBusy = false
+			m.worktreeForcePrompt = false
+			m.err = nil
+			return m, nil
+		case mergedWorktreeRemoveMsg:
+			m.closeBusy = false
+			m.closing = false
+			m.mergedWorktrees = nil
+			m.worktreeForcePrompt = false
+			if msg.err != nil {
+				m.invalidateWorktrees(msg.selected)
+				m.err = msg.err
+				m.rebuildRows()
+				return m, nil
+			}
+			m.err = nil
+			return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
+		case closedWorktreeListMsg:
+			m.closedWorktreeBusy = false
+			if msg.err != nil {
+				m.err = msg.err
+				return m, nil
+			}
+			if len(msg.worktrees) == 0 {
+				m.err = fmt.Errorf("no closed-PR worktrees to delete")
+				return m, nil
+			}
+			m.closeRow = msg.selected
+			m.closedWorktrees = msg.worktrees
+			m.closing = true
+			m.closeBusy = false
+			m.worktreeForcePrompt = false
+			m.err = nil
+			return m, nil
+		case closedWorktreeRemoveMsg:
+			m.closeBusy = false
+			m.closing = false
+			m.closedWorktrees = nil
+			m.worktreeForcePrompt = false
+			if msg.err != nil {
+				m.invalidateWorktrees(msg.selected)
+				m.err = msg.err
+				m.rebuildRows()
+				return m, nil
+			}
+			m.err = nil
+			return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
 		case worktreeRemoveMsg:
 			m.closeBusy = false
 			if msg.err != nil {
@@ -1061,6 +1237,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil {
 				return m, fetchWorktrees(w.cwd, msg.entryIndex, msg.tabIndex, msg.windowIndex)
 			}
+		if e := m.closedEntryAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); e != nil {
+			return m, fetchWorktrees(e.path, msg.entryIndex, -1, -1)
+		}
 			return m, nil
 	case saveSessionMsg:
 		m.saving = false
@@ -1098,7 +1277,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if m.saving {
+		if m.saving || m.mergedWorktreeBusy || m.closedWorktreeBusy {
 			return m, nil
 		}
 		if m.saveConfirming {
@@ -1142,8 +1321,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.closing = false
 				m.worktreeForcePrompt = false
+				m.mergedWorktrees = nil
+				m.closedWorktrees = nil
 				m.err = nil
 			case "y":
+				if len(m.closedWorktrees) > 0 {
+					m.closeBusy = true
+					m.err = nil
+					return m, m.runDeleteClosedWorktrees()
+				}
+				if len(m.mergedWorktrees) > 0 {
+					m.closeBusy = true
+					m.err = nil
+					return m, m.runRemoveMergedWorktrees()
+				}
 				if isWorktreeRow {
 					if m.worktreeForcePrompt {
 						m.err = fmt.Errorf("press f to force, or esc to cancel")
@@ -1414,8 +1605,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.saveEntry = selected.entryIndex
 			m.err = nil
 			return m, nil
+		case "o":
+			return m, m.openWorktreePR()
 		case "x":
 			m.beginClose()
+		case "X":
+			return m, m.findMergedWorktrees()
+		case "D":
+			return m, m.findClosedWorktrees()
 		case "w":
 			if len(m.worktreeEntries()) == 0 {
 				m.err = fmt.Errorf("place the cursor on a project, or select multiple")
@@ -1507,7 +1704,7 @@ func (m *model) beginClose() {
 		m.err = fmt.Errorf("select a worktree to delete")
 		return
 	}
-	if selected.tabIndex < 0 && len(entry.tabs) == 0 && !(entry.saved && !entry.open) {
+	if selected.section != "wt-item" && selected.tabIndex < 0 && len(entry.tabs) == 0 && !(entry.saved && !entry.open) {
 		m.err = fmt.Errorf("%s is not open", entry.name)
 		return
 	}
@@ -1515,6 +1712,8 @@ func (m *model) beginClose() {
 	m.closing = true
 	m.closeBusy = false
 	m.worktreeForcePrompt = false
+	m.mergedWorktrees = nil
+	m.closedWorktrees = nil
 	m.err = nil
 }
 
@@ -1753,6 +1952,12 @@ func (m *model) rebuildRows() {
 	for _, entryIndex := range entryIndexes {
 		e := &m.entries[entryIndex]
 		rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1})
+		if e.worktreesOpen && e.worktreesLoaded && m.query == "" {
+			rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-head"})
+			for wt := range e.worktrees {
+				rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: wt})
+			}
+		}
 		if e.expanded && m.query == "" {
 			for tabIndex := range e.tabs {
 				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: -1})
@@ -1957,7 +2162,7 @@ func (m model) View() string {
 	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
@@ -1998,15 +2203,23 @@ func (m model) previewView(width, height int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.mergedWorktreeBusy && !m.closedWorktreeBusy {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
-	if m.cloning || m.saveForeground || m.worktreeMode {
+	if m.cloning || m.saveForeground || m.worktreeMode || (m.closing && (m.closeRow.section == "wt-item" || len(m.closedWorktrees) > 0)) {
 		popupWidth = min(72, max(36, width-6))
 	}
 	var title, field, help string
-	if m.saveConfirming {
+	if m.mergedWorktreeBusy {
+		title = "Checking merged worktrees"
+		field = "Querying GitHub for current PR status…"
+		help = "This always uses live data before removal"
+	} else if m.closedWorktreeBusy {
+		title = "Checking closed PRs"
+		field = "Querying GitHub for current PR status…"
+		help = "This always uses live data before deletion"
+	} else if m.saveConfirming {
 		entry := m.entries[m.saveEntry]
 		if m.saveForeground {
 			title = "Save with running commands"
@@ -2123,6 +2336,11 @@ func (m model) popupView(width int) string {
 		}
 	} else {
 		title = "Close"
+		if len(m.mergedWorktrees) > 0 {
+			title = "Remove merged worktrees"
+		} else if len(m.closedWorktrees) > 0 {
+			title = "Delete closed-PR worktrees"
+		}
 		field = lipgloss.NewStyle().Width(popupWidth - 6).Render(m.closePrompt())
 		switch {
 		case m.closeBusy:
@@ -2148,14 +2366,45 @@ func (m model) popupView(width int) string {
 func (m model) closePrompt() string {
 	selected := m.closeRow
 	entry := m.entries[selected.entryIndex]
+	if len(m.closedWorktrees) > 0 {
+		lines := []string{
+			fmt.Sprintf("Delete %d closed-PR worktree%s and local branch reference%s?", len(m.closedWorktrees), plural(len(m.closedWorktrees)), plural(len(m.closedWorktrees))),
+			"",
+			"This permanently removes the worktree directories and local branch references.",
+			"Remote branches are unchanged.",
+			"",
+		}
+		for i, worktree := range m.closedWorktrees {
+			if i == 4 {
+				lines = append(lines, fmt.Sprintf("  …and %d more", len(m.closedWorktrees)-i))
+				break
+			}
+			lines = append(lines, "  "+worktree.branch)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if len(m.mergedWorktrees) > 0 {
+		lines := []string{fmt.Sprintf("Delete %d merged worktree%s?", len(m.mergedWorktrees), plural(len(m.mergedWorktrees)))}
+		for i, worktree := range m.mergedWorktrees {
+			if i == 4 {
+				lines = append(lines, fmt.Sprintf("  …and %d more", len(m.mergedWorktrees)-i))
+				break
+			}
+			lines = append(lines, "  "+worktree.branch)
+		}
+		return strings.Join(lines, "\n")
+	}
 	if selected.section == "wt-item" {
-		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
-		wt := window.worktrees[selected.wt]
+		worktrees := m.worktreesForRow(selected)
+		if selected.wt < 0 || selected.wt >= len(worktrees) {
+			return "Worktree is no longer available"
+		}
+		wt := worktrees[selected.wt]
 		prefix := "Delete"
 		if m.worktreeForcePrompt {
 			prefix = "Force-delete"
 		}
-		return fmt.Sprintf("%s worktree %q?\n  %s", prefix, wt.branch, displayPath(wt.path, os.Getenv("HOME")))
+		return fmt.Sprintf("%s worktree?\n\nBranch: %s\nPath:   %s", prefix, wt.branch, displayPath(wt.path, os.Getenv("HOME")))
 	}
 	if entry.saved && !entry.open {
 		return fmt.Sprintf("Delete saved workspace %q?", entry.name)
@@ -2182,7 +2431,14 @@ func overlayPopup(lines []string, popup string, width int) []string {
 		if lineIndex >= len(lines) {
 			break
 		}
-		lines[lineIndex] = lipgloss.PlaceHorizontal(width, lipgloss.Center, popupLine)
+		popupWidth := min(width, lipgloss.Width(popupLine))
+		left := max(0, (width-popupWidth)/2)
+		right := left + popupWidth
+		background := ansi.Truncate(lines[lineIndex], width, "")
+		if padding := width - lipgloss.Width(background); padding > 0 {
+			background += strings.Repeat(" ", padding)
+		}
+		lines[lineIndex] = ansi.Cut(background, 0, left) + ansi.Truncate(popupLine, popupWidth, "") + ansi.Cut(background, right, width)
 	}
 	return lines
 }
@@ -2191,10 +2447,13 @@ func (m model) renderRow(r row, width int, focused bool) string {
 	e := m.entries[r.entryIndex]
 	switch r.section {
 	case "wt-head":
-		window := e.tabs[r.tabIndex].windows[r.windowIndex]
+		worktrees := m.worktreesForRow(r)
 		label := "worktrees"
-		if len(window.worktrees) != 1 {
-			label = fmt.Sprintf("worktrees (%d)", len(window.worktrees))
+		if len(worktrees) != 1 {
+			label = fmt.Sprintf("worktrees (%d)", len(worktrees))
+		}
+		if r.windowIndex < 0 {
+			return "        " + dimStyle.Render("└─ "+label)
 		}
 		fill := width - lipgloss.Width(label) - 13
 		if fill < 0 {
@@ -2202,13 +2461,24 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		}
 		return "          " + dimStyle.Render("┄ "+label+" "+strings.Repeat("┄", fill))
 	case "wt-item":
-		window := e.tabs[r.tabIndex].windows[r.windowIndex]
-		wt := window.worktrees[r.wt]
+		worktrees := m.worktreesForRow(r)
+		if r.wt < 0 || r.wt >= len(worktrees) {
+			return ""
+		}
+		wt := worktrees[r.wt]
+		indent := "            "
+		if r.windowIndex >= 0 {
+			indent = "          "
+		}
 		connector := "├─"
-		if r.wt == len(window.worktrees)-1 {
+		if r.wt == len(worktrees)-1 {
 			connector = "└─"
 		}
-		left := "          " + connector + " " + branchStyle.Render("󰘬") + " " + truncate(wt.branch, max(6, width*4/10))
+		indicator := prStatusIcon(wt.prStatus)
+		if indicator != "" {
+			indicator += " "
+		}
+		left := indent + connector + " " + indicator + truncate(wt.branch, max(6, width*4/10))
 		right := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
 		if wt.current {
 			right = dimStyle.Render("← here")
@@ -2296,6 +2566,19 @@ func (m model) renderRow(r row, width int, focused bool) string {
 	}
 	left := fmt.Sprintf("%s   %s %s %s %s %s", selection, pin, arrow, icon, agent, name)
 	return padColumns(left, detail, width)
+}
+
+func prStatusIcon(status string) string {
+	switch status {
+	case "open":
+		return prOpenStyle.Render("")
+	case "merged":
+		return prMergedStyle.Render("")
+	case "closed":
+		return prClosedStyle.Render("×")
+	default:
+		return ""
+	}
 }
 
 func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int) string {
@@ -3155,11 +3438,16 @@ func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
 
 func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 	return func() tea.Msg {
-		if selected.section == "wt-item" && selected.tabIndex >= 0 && selected.windowIndex >= 0 &&
-			selected.tabIndex < len(e.tabs) && selected.wt >= 0 &&
+		if selected.section == "wt-item" && selected.wt >= 0 {
+			if selected.tabIndex < 0 && selected.wt < len(e.worktrees) {
+				return actionMsg{err: openProjectSession(kitty, zoxide, e.worktrees[selected.wt].path, false)}
+			}
+			if selected.tabIndex >= 0 && selected.tabIndex < len(e.tabs) && selected.windowIndex >= 0 &&
+				selected.windowIndex < len(e.tabs[selected.tabIndex].windows) &&
 			selected.wt < len(e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees) {
 			wt := e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees[selected.wt]
 			return actionMsg{err: openProjectSession(kitty, zoxide, wt.path, false)}
+		}
 		}
 		if selected.windowIndex >= 0 {
 			window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
@@ -3373,20 +3661,42 @@ func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
 	return "user", filepath.Base(repoPath)
 }
 
-// toggleWorktrees reveals or hides the git worktrees of the repo in the focused
-// window's folder. It is a no-op unless the cursor is on a window row: a session
-// can span many tabs and windows, each potentially in a different repo, so there
-// is no single folder to inspect at the session level.
+func (m *model) openWorktreePR() tea.Cmd {
+	if len(m.rows) == 0 {
+		return nil
+	}
+	selected := m.rows[m.cursor]
+	if selected.section != "wt-item" {
+		m.err = fmt.Errorf("select a worktree with a pull request")
+		return nil
+	}
+	worktrees := m.worktreesForRow(selected)
+	if selected.wt < 0 || selected.wt >= len(worktrees) {
+		m.err = fmt.Errorf("worktree is no longer available")
+		return nil
+	}
+	pullRequestURL := worktrees[selected.wt].prURL
+	parsed, err := url.Parse(pullRequestURL)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+		m.err = fmt.Errorf("no matching pull request for %s", worktrees[selected.wt].branch)
+		return nil
+	}
+	m.err = nil
+	return func() tea.Msg {
+		return openPRMsg{err: run("open", pullRequestURL)}
+	}
+}
+
+// toggleWorktrees reveals or hides the git worktrees of the repo under the
+// cursor. Open entries remain window-scoped because their tabs may span several
+// repositories. A closed project or saved session instead uses its stored path,
+// so its worktrees can be inspected without first opening a Kitty session.
 func (m *model) toggleWorktrees() tea.Cmd {
 	if len(m.rows) == 0 {
 		return nil
 	}
 	r := m.rows[m.cursor]
-	w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex)
-	if w == nil || w.cwd == "" {
-		return nil
-	}
-	dir := w.cwd
+	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil && w.cwd != "" {
 	if w.worktreesOpen {
 		w.worktreesOpen = false
 		m.rebuildRows()
@@ -3395,22 +3705,506 @@ func (m *model) toggleWorktrees() tea.Cmd {
 	if w.worktreesLoaded {
 		w.worktreesOpen = true
 		m.rebuildRows()
-		return nil
+		return m.refreshPRStatuses(w.cwd, false)
 	}
 	w.worktreesPending = true
-	return fetchWorktrees(dir, r.entryIndex, r.tabIndex, r.windowIndex)
+		return fetchWorktrees(w.cwd, r.entryIndex, r.tabIndex, r.windowIndex)
+	}
+
+	e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex)
+	if e == nil || e.path == "" {
+		return nil
+	}
+	if e.worktreesOpen {
+		e.worktreesOpen = false
+		m.rebuildRows()
+		return nil
+	}
+	if e.worktreesLoaded {
+		e.worktreesOpen = true
+		m.rebuildRows()
+		return m.refreshPRStatuses(e.path, false)
+	}
+	e.worktreesPending = true
+	return fetchWorktrees(e.path, r.entryIndex, -1, -1)
+}
+
+func prStatusCachePath() string {
+	cacheHome := os.Getenv("XDG_CACHE_HOME")
+	if cacheHome == "" {
+		cacheHome = filepath.Join(os.Getenv("HOME"), ".cache")
+	}
+	return filepath.Join(cacheHome, "kesh", "pr-status.json")
+}
+
+func prStatusKey(branch, head string) string {
+	return branch + "\x00" + head
+}
+
+func repositoryCacheKey(dir string) string {
+	output, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		remote := strings.TrimSpace(string(output))
+		if parsed, parseErr := url.Parse(remote); parseErr == nil && parsed.Scheme != "" {
+			parsed.User = nil
+			remote = parsed.String()
+		}
+		return remote
+	}
+	output, err = exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func loadPRStatusCache(repoKey string) (map[string]prInfo, time.Time) {
+	if repoKey == "" {
+		return nil, time.Time{}
+	}
+	content, err := os.ReadFile(prStatusCachePath())
+	if err != nil {
+		return nil, time.Time{}
+	}
+	var store prStatusCacheStore
+	if json.Unmarshal(content, &store) != nil || store.Version != prStatusCacheVersion {
+		return nil, time.Time{}
+	}
+	repository, ok := store.Repositories[repoKey]
+	if !ok {
+		return nil, time.Time{}
+	}
+	fetchedAt, _ := time.Parse(time.RFC3339, repository.FetchedAt)
+	pullRequests := map[string]prInfo{}
+	for _, entry := range repository.Entries {
+		pullRequests[prStatusKey(entry.Branch, entry.Head)] = prInfo{Status: entry.Status, URL: entry.URL, Number: entry.Number}
+	}
+	return pullRequests, fetchedAt
+}
+
+func savePRStatusCache(repoKey string, pullRequests map[string]prInfo) error {
+	path := prStatusCachePath()
+	store := prStatusCacheStore{Version: prStatusCacheVersion, Repositories: map[string]prStatusRepositoryCache{}}
+	if content, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(content, &store)
+		if store.Version != prStatusCacheVersion || store.Repositories == nil {
+			store = prStatusCacheStore{Version: prStatusCacheVersion, Repositories: map[string]prStatusRepositoryCache{}}
+		}
+	}
+	entries := make([]prStatusCacheEntry, 0, len(pullRequests))
+	for key, pullRequest := range pullRequests {
+		parts := strings.SplitN(key, "\x00", 2)
+		if len(parts) == 2 {
+			entries = append(entries, prStatusCacheEntry{
+				Branch: parts[0], Head: parts[1], Status: pullRequest.Status,
+				URL: pullRequest.URL, Number: pullRequest.Number,
+			})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Branch == entries[j].Branch {
+			return entries[i].Head < entries[j].Head
+		}
+		return entries[i].Branch < entries[j].Branch
+	})
+	store.Repositories[repoKey] = prStatusRepositoryCache{FetchedAt: time.Now().UTC().Format(time.RFC3339), Entries: entries}
+	content, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".pr-status-*.json")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryName, path)
+}
+
+func queryPRStatuses(dir string) (string, map[string]prInfo, error) {
+	repoKey := repositoryCacheKey(dir)
+	if repoKey == "" {
+		return "", nil, fmt.Errorf("repository has no cache key")
+	}
+	gh := findCommand("gh",
+		filepath.Join(os.Getenv("HOME"), ".local", "share", "mise", "shims", "gh"),
+		"/opt/homebrew/bin/gh",
+		"/usr/local/bin/gh",
+	)
+	if gh == "" {
+		return repoKey, nil, fmt.Errorf("gh was not found")
+	}
+	command := exec.Command(gh, "pr", "list", "--state", "all", "--limit", "1000", "--json", "headRefName,headRefOid,state,mergedAt,number,url")
+	command.Dir = dir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return repoKey, nil, commandError("gh pr list", output, err)
+	}
+	var pullRequests []struct {
+		HeadRefName string  `json:"headRefName"`
+		HeadRefOID  string  `json:"headRefOid"`
+		State       string  `json:"state"`
+		MergedAt    *string `json:"mergedAt"`
+		Number      int     `json:"number"`
+		URL         string  `json:"url"`
+	}
+	if err := json.Unmarshal(output, &pullRequests); err != nil {
+		return repoKey, nil, err
+	}
+	statuses := map[string]prInfo{}
+	priority := map[string]int{"closed": 1, "open": 2, "merged": 3}
+	for _, pullRequest := range pullRequests {
+		if pullRequest.HeadRefName == "" || pullRequest.HeadRefOID == "" {
+			continue
+		}
+		status := strings.ToLower(pullRequest.State)
+		if pullRequest.MergedAt != nil {
+			status = "merged"
+		}
+		key := prStatusKey(pullRequest.HeadRefName, pullRequest.HeadRefOID)
+		if priority[status] > priority[statuses[key].Status] {
+			statuses[key] = prInfo{Status: status, URL: pullRequest.URL, Number: pullRequest.Number}
+		}
+	}
+	_ = savePRStatusCache(repoKey, statuses)
+	return repoKey, statuses, nil
+}
+
+func (m *model) refreshPRStatuses(dir string, force bool) tea.Cmd {
+	repoKey := repositoryCacheKey(dir)
+	if repoKey == "" {
+		return nil
+	}
+	if m.prStatusPending == nil {
+		m.prStatusPending = map[string]bool{}
+	}
+	if m.prStatusPending[repoKey] {
+		return nil
+	}
+	if !force {
+		cachedStatuses, cachedAt := loadPRStatusCache(repoKey)
+		focusedWorktree := m.focusedWorktreePath()
+		m.applyPRStatuses(repoKey, cachedStatuses)
+		m.restoreFocusedWorktree(focusedWorktree)
+		lastFetch := cachedAt
+		if fetched := m.prStatusLastFetch[repoKey]; fetched.After(lastFetch) {
+			lastFetch = fetched
+		}
+		if !lastFetch.IsZero() && time.Since(lastFetch) < prStatusThrottle {
+			return nil
+		}
+	}
+	m.prStatusPending[repoKey] = true
+	return func() tea.Msg {
+		key, pullRequests, err := queryPRStatuses(dir)
+		if key == "" {
+			key = repoKey
+		}
+		return prStatusMsg{repoKey: key, pullRequests: pullRequests, err: err}
+	}
+}
+
+func worktreePriority(worktree worktreeItem) int {
+	if worktree.isDefault {
+		return 0
+	}
+	switch worktree.prStatus {
+	case "open":
+		return 1
+	case "merged":
+		return 2
+	case "closed":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func sortWorktreeItems(worktrees []worktreeItem) {
+	sort.SliceStable(worktrees, func(i, j int) bool {
+		left, right := worktreePriority(worktrees[i]), worktreePriority(worktrees[j])
+		if left != right {
+			return left < right
+		}
+		return strings.ToLower(worktrees[i].branch) < strings.ToLower(worktrees[j].branch)
+	})
+}
+
+func (m *model) applyPRStatuses(repoKey string, pullRequests map[string]prInfo) {
+	apply := func(worktrees []worktreeItem) {
+		for index := range worktrees {
+			if worktrees[index].prRepoKey == repoKey {
+				pullRequest := pullRequests[prStatusKey(worktrees[index].branch, worktrees[index].head)]
+				worktrees[index].prStatus = pullRequest.Status
+				worktrees[index].prURL = pullRequest.URL
+			}
+		}
+		sortWorktreeItems(worktrees)
+	}
+	for index := range m.entries {
+		apply(m.entries[index].worktrees)
+		for tabIndex := range m.entries[index].tabs {
+			for windowIndex := range m.entries[index].tabs[tabIndex].windows {
+				apply(m.entries[index].tabs[tabIndex].windows[windowIndex].worktrees)
+			}
+		}
+	}
+}
+
+// findClosedWorktrees finds linked worktrees whose exact branch HEAD belongs to
+// a live-confirmed closed, unmerged pull request. D removes both each clean
+// worktree and its local branch; remote branches are deliberately untouched.
+func (m *model) findClosedWorktrees() tea.Cmd {
+	if len(m.rows) == 0 {
+		return nil
+	}
+	selected := m.rows[m.cursor]
+	dir := m.worktreeDirectory(selected)
+	if dir == "" {
+		m.err = fmt.Errorf("place the cursor on a window or closed project")
+		return nil
+	}
+	m.closedWorktreeBusy = true
+	m.err = nil
+	return func() tea.Msg {
+		worktreeOutput, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
+		if err != nil {
+			return closedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git worktree list", worktreeOutput, err)}
+		}
+		currentOutput, err := exec.Command("git", "-C", dir, "branch", "--show-current").CombinedOutput()
+		if err != nil {
+			return closedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git branch --show-current", currentOutput, err)}
+		}
+		_, pullRequests, err := queryPRStatuses(dir)
+		if err != nil {
+			return closedWorktreeListMsg{selected: selected, dir: dir, err: fmt.Errorf("revalidate closed PRs: %w", err)}
+		}
+		return closedWorktreeListMsg{
+			selected: selected,
+			dir:      dir,
+			worktrees: closedPRWorktreeItems(
+				parseWorktreePorcelain(string(worktreeOutput)),
+				strings.TrimSpace(string(currentOutput)),
+				pullRequests,
+			),
+		}
+	}
+}
+
+func closedPRWorktreeItems(worktrees []worktreeItem, currentBranch string, pullRequests map[string]prInfo) []worktreeItem {
+	var result []worktreeItem
+	for index, worktree := range worktrees {
+		if index == 0 || worktree.branch == "" || worktree.branch == "(detached)" || worktree.branch == currentBranch {
+			continue
+		}
+		if pullRequests[prStatusKey(worktree.branch, worktree.head)].Status != "closed" {
+			continue
+		}
+		result = append(result, worktree)
+	}
+	return result
+}
+
+func (m *model) runDeleteClosedWorktrees() tea.Cmd {
+	selected := m.closeRow
+	dir := m.worktreeDirectory(selected)
+	targets := append([]worktreeItem(nil), m.closedWorktrees...)
+	return func() tea.Msg {
+		var failures []string
+		for _, target := range targets {
+			output, err := exec.Command("git", "-C", dir, "worktree", "remove", target.path).CombinedOutput()
+			if err != nil {
+				failures = append(failures, commandError(target.branch+" worktree", output, err).Error())
+				continue
+			}
+			output, err = exec.Command("git", "-C", dir, "branch", "-D", "--", target.branch).CombinedOutput()
+			if err != nil {
+				failures = append(failures, commandError(target.branch+" local branch", output, err).Error())
+			}
+		}
+		if len(failures) > 0 {
+			return closedWorktreeRemoveMsg{selected: selected, dir: dir, err: fmt.Errorf("some closed-PR worktrees were not deleted: %s", strings.Join(failures, "; "))}
+		}
+		return closedWorktreeRemoveMsg{selected: selected, dir: dir}
+	}
+}
+
+// findMergedWorktrees finds non-current worktrees whose branches are either
+// ancestors of the repository's current HEAD or are the exact head of a merged
+// GitHub pull request. Capital X confirms once; dirty worktrees are never forced.
+func (m *model) findMergedWorktrees() tea.Cmd {
+	if len(m.rows) == 0 {
+		return nil
+	}
+	selected := m.rows[m.cursor]
+	dir := m.worktreeDirectory(selected)
+	if dir == "" {
+		m.err = fmt.Errorf("place the cursor on a window or closed project")
+		return nil
+	}
+	m.mergedWorktreeBusy = true
+	m.err = nil
+	return func() tea.Msg {
+		worktreeOutput, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
+		if err != nil {
+			return mergedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git worktree list", worktreeOutput, err)}
+		}
+		mergedOutput, err := exec.Command("git", "-C", dir, "branch", "--merged", "HEAD", "--format=%(refname:short)").CombinedOutput()
+		if err != nil {
+			return mergedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git branch --merged", mergedOutput, err)}
+		}
+		currentOutput, err := exec.Command("git", "-C", dir, "branch", "--show-current").CombinedOutput()
+		if err != nil {
+			return mergedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git branch --show-current", currentOutput, err)}
+		}
+		return mergedWorktreeListMsg{
+			selected: selected,
+			dir:      dir,
+			worktrees: mergedWorktreeItems(
+				parseWorktreePorcelain(string(worktreeOutput)),
+				string(mergedOutput),
+				strings.TrimSpace(string(currentOutput)),
+				mergedPullRequestHeads(dir),
+			),
+		}
+	}
+}
+
+func mergedWorktreeItems(worktrees []worktreeItem, mergedOutput, currentBranch string, pullRequestHeads map[string]map[string]bool) []worktreeItem {
+	merged := map[string]bool{}
+	for _, branch := range strings.Fields(mergedOutput) {
+		merged[branch] = true
+	}
+	var result []worktreeItem
+	for index, worktree := range worktrees {
+		// The first record is the repository's primary working tree. Never bulk
+		// remove it, even when the command is run from another worktree.
+		if index == 0 || worktree.branch == "" || worktree.branch == "(detached)" || worktree.branch == currentBranch {
+			continue
+		}
+		mergedPullRequest := pullRequestHeads[worktree.branch][worktree.head]
+		if !merged[worktree.branch] && !mergedPullRequest {
+			continue
+		}
+		result = append(result, worktree)
+	}
+	return result
+}
+
+// mergedPullRequestHeads supplements Git's ancestry check for squash- and
+// rebase-merged pull requests. A branch is accepted only when its current
+// worktree HEAD exactly matches the head recorded by GitHub, preventing a reused
+// branch with newer unmerged commits from being removed. Git remains the
+// fallback when gh is unavailable, unauthenticated, or used outside GitHub.
+func mergedPullRequestHeads(dir string) map[string]map[string]bool {
+	_, statuses, err := queryPRStatuses(dir)
+	if err != nil {
+		return nil
+	}
+	heads := map[string]map[string]bool{}
+	for key, pullRequest := range statuses {
+		if pullRequest.Status != "merged" {
+			continue
+		}
+		parts := strings.SplitN(key, "\x00", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if heads[parts[0]] == nil {
+			heads[parts[0]] = map[string]bool{}
+		}
+		heads[parts[0]][parts[1]] = true
+	}
+	return heads
+}
+
+func commandError(action string, output []byte, err error) error {
+	message := strings.TrimSpace(string(output))
+	if message != "" {
+		err = fmt.Errorf("%s: %s", err, message)
+	}
+	return fmt.Errorf("%s: %w", action, err)
+}
+
+func (m *model) runRemoveMergedWorktrees() tea.Cmd {
+	selected := m.closeRow
+	dir := m.worktreeDirectory(selected)
+	targets := append([]worktreeItem(nil), m.mergedWorktrees...)
+	return func() tea.Msg {
+		var failures []string
+		for _, target := range targets {
+			output, err := exec.Command("git", "-C", dir, "worktree", "remove", target.path).CombinedOutput()
+			if err != nil {
+				failures = append(failures, commandError(target.branch, output, err).Error())
+			}
+		}
+		if len(failures) > 0 {
+			return mergedWorktreeRemoveMsg{selected: selected, dir: dir, err: fmt.Errorf("some merged worktrees were not removed: %s", strings.Join(failures, "; "))}
+		}
+		return mergedWorktreeRemoveMsg{selected: selected, dir: dir}
+	}
+}
+
+func (m *model) worktreeDirectory(r row) string {
+	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
+		return w.cwd
+	}
+	if e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex); e != nil {
+		return e.path
+	}
+	return ""
+}
+
+func (m *model) invalidateWorktrees(r row) {
+	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
+		w.worktreesLoaded = false
+		w.worktreesOpen = false
+		w.worktreesPending = false
+		return
+	}
+	if e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex); e != nil {
+		e.worktreesLoaded = false
+		e.worktreesOpen = false
+		e.worktreesPending = false
+	}
 }
 
 // runRemoveWorktree deletes the selected worktree via git. A normal attempt
 // runs first; the caller offers --force (worktreeForcePrompt) if it fails.
 func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 	r := m.closeRow
-	w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex)
-	if w == nil || r.wt < 0 || r.wt >= len(w.worktrees) {
-		return func() tea.Msg { return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")} }
+	worktrees := m.worktreesForRow(r)
+	if r.wt < 0 || r.wt >= len(worktrees) {
+		return func() tea.Msg {
+			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")}
 	}
-	dir := w.cwd
-	target := w.worktrees[r.wt].path
+	}
+	dir := ""
+	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
+		dir = w.cwd
+	} else if e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex); e != nil {
+		dir = e.path
+	}
+	if dir == "" {
+		return func() tea.Msg {
+			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree repository is no longer available")}
+		}
+	}
+	target := worktrees[r.wt].path
 	entryIndex, tabIndex, windowIndex := r.entryIndex, r.tabIndex, r.windowIndex
 	return func() tea.Msg {
 		args := []string{"-C", dir, "worktree", "remove"}
@@ -3447,6 +4241,68 @@ func (m *model) windowAt(entryIndex, tabIndex, windowIndex int) *windowItem {
 	return &windows[windowIndex]
 }
 
+// closedEntryAt returns an entry-level worktree target only for a closed entry.
+// Open entries must be inspected at window level to avoid guessing which repo a
+// multi-tab session represents.
+func (m *model) closedEntryAt(entryIndex, tabIndex, windowIndex int) *entry {
+	if tabIndex >= 0 || windowIndex >= 0 || entryIndex < 0 || entryIndex >= len(m.entries) {
+		return nil
+	}
+	e := &m.entries[entryIndex]
+	if e.open {
+		return nil
+	}
+	return e
+}
+
+func (m model) focusedWorktreePath() string {
+	if m.cursor < 0 || m.cursor >= len(m.rows) {
+		return ""
+	}
+	selected := m.rows[m.cursor]
+	if selected.section != "wt-item" {
+		return ""
+	}
+	worktrees := m.worktreesForRow(selected)
+	if selected.wt < 0 || selected.wt >= len(worktrees) {
+		return ""
+	}
+	return worktrees[selected.wt].path
+}
+
+func (m *model) restoreFocusedWorktree(path string) {
+	if path == "" {
+		return
+	}
+	for index, candidate := range m.rows {
+		if candidate.section != "wt-item" {
+			continue
+		}
+		worktrees := m.worktreesForRow(candidate)
+		if candidate.wt >= 0 && candidate.wt < len(worktrees) && worktrees[candidate.wt].path == path {
+			m.cursor = index
+			return
+		}
+	}
+}
+
+func (m model) worktreesForRow(r row) []worktreeItem {
+	if r.tabIndex < 0 {
+		if r.entryIndex >= 0 && r.entryIndex < len(m.entries) {
+			return m.entries[r.entryIndex].worktrees
+		}
+		return nil
+	}
+	if r.entryIndex < 0 || r.entryIndex >= len(m.entries) || r.tabIndex >= len(m.entries[r.entryIndex].tabs) || r.windowIndex < 0 {
+		return nil
+	}
+	windows := m.entries[r.entryIndex].tabs[r.tabIndex].windows
+	if r.windowIndex >= len(windows) {
+		return nil
+	}
+	return windows[r.windowIndex].worktrees
+}
+
 func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 	return func() tea.Msg {
 		output, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
@@ -3458,11 +4314,26 @@ func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 			return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, err: fmt.Errorf("git worktree list: %w", err)}
 		}
 		worktrees := parseWorktreePorcelain(string(output))
+		defaultBranch := ""
+		if defaultOutput, defaultErr := exec.Command("git", "-C", dir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD").Output(); defaultErr == nil {
+			defaultBranch = strings.TrimPrefix(strings.TrimSpace(string(defaultOutput)), "origin/")
+		}
+		if defaultBranch == "" && len(worktrees) > 0 {
+			defaultBranch = worktrees[0].branch
+		}
+		repoKey := repositoryCacheKey(dir)
+		cachedStatuses, _ := loadPRStatusCache(repoKey)
 		for i := range worktrees {
 			if worktrees[i].path == dir {
 				worktrees[i].current = true
 			}
+			worktrees[i].isDefault = worktrees[i].branch == defaultBranch
+			worktrees[i].prRepoKey = repoKey
+			pullRequest := cachedStatuses[prStatusKey(worktrees[i].branch, worktrees[i].head)]
+			worktrees[i].prStatus = pullRequest.Status
+			worktrees[i].prURL = pullRequest.URL
 		}
+		sortWorktreeItems(worktrees)
 		return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, worktrees: worktrees}
 	}
 }

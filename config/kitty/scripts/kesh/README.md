@@ -26,13 +26,19 @@ The picker starts in normal mode:
 - `p`, then `0`–`9`: pin the selected session to a shortcut slot
 - `p`, then `x`: unpin the selected session
 - `r`: rename the selected workspace, tab, or window; submitting an empty workspace name resets it
-- `x`, then `y`: close the selected workspace, tab, or window
+- `e`: show or hide Git worktrees for a window, or for a closed project or saved session
+- `o`: open the exact pull request associated with the selected worktree in the browser
+- `X`, then `y`: remove every non-current worktree merged by Git ancestry or by a GitHub pull request at the same branch HEAD
+- `D`, then `y`: after live PR revalidation, permanently remove clean worktrees for closed-unmerged PRs and delete their local branches; remote branches remain untouched
+- `x`, then `y`: close the selected workspace, tab, or window; on a revealed worktree, remove it
 - `/`: enter search mode and fuzzy-filter sessions as you type
 - `enter` / `esc`: return to command mode while retaining the filter
 - `tab` / `shift+tab`: change filter
 - `q`: close from command mode; `esc` is a no-op there
 
 Arrow keys remain available for moving through rows and the hierarchy.
+
+Worktree rows are ordered by default branch, open PR, merged PR, closed PR, then entries without a matching PR. They show GitHub pull-request lifecycle status when the branch and PR head SHA match: green for open, purple for merged, and red for closed without merging. Kesh displays cached status immediately from `${XDG_CACHE_HOME:-~/.cache}/kesh/pr-status.json`, refreshes it in the background when worktrees are opened, and throttles refreshes to once per minute per repository. Capital `X` always bypasses the cache and revalidates merged status before offering removal.
 
 The `Agents` filter is a flat, most-recently-focused list of Kitty windows running Codex or pi. It includes a live snapshot of the selected window's terminal:
 
