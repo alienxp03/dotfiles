@@ -47,6 +47,7 @@ type windowItem struct {
 	id          int
 	title       string
 	detail      string
+	cwd         string
 	command     string
 	fullCommand string
 	agent       string
@@ -60,6 +61,13 @@ type tabItem struct {
 	agent    string
 	expanded bool
 	windows  []windowItem
+}
+
+type worktreeItem struct {
+	path    string
+	branch  string
+	head    string
+	current bool
 }
 
 type entry struct {
@@ -80,12 +88,18 @@ type entry struct {
 	tabs         []tabItem
 	order        int
 	pin          string
+	worktrees        []worktreeItem
+	worktreesLoaded  bool
+	worktreesOpen    bool
+	worktreesPending bool
 }
 
 type row struct {
 	entryIndex  int
 	tabIndex    int
 	windowIndex int
+	section     string // "", "wt-head", "wt-item", "wt-foot"
+	wt          int    // index into entry.worktrees for "wt-item" rows
 }
 
 type actionMsg struct{ err error }
@@ -157,6 +171,13 @@ type saveSessionMsg struct {
 
 type worktreeMsg struct {
 	err error
+}
+
+type worktreeListMsg struct {
+	entryIndex int
+	key        string
+	worktrees  []worktreeItem
+	err        error
 }
 
 type keshConfig struct {
@@ -233,6 +254,7 @@ var (
 	selectedTextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Bold(true)
 	focusStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Bold(true)
 	projectStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	branchStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("141")).Bold(true)
 	sshStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	piStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
 	codexStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
@@ -991,6 +1013,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.worktreeBusy = true
 			return m, m.createWorktree()
+		case worktreeListMsg:
+			if msg.entryIndex < len(m.entries) && m.entries[msg.entryIndex].key == msg.key {
+				e := &m.entries[msg.entryIndex]
+				e.worktreesPending = false
+				if msg.err != nil {
+					e.worktreesLoaded = false
+					m.err = msg.err
+					return m, nil
+				}
+				e.worktrees = msg.worktrees
+				e.worktreesLoaded = true
+				e.worktreesOpen = true
+				m.err = nil
+				m.rebuildRows()
+			}
+			return m, nil
 	case saveSessionMsg:
 		m.saving = false
 		m.saveConfirming = false
@@ -1337,6 +1375,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.worktreePaths = m.calculateWorktreePaths()
 			m.err = nil
 			return m, nil
+		case "e":
+			return m, m.toggleWorktrees()
 		case "p":
 			if m.filter == filterAgents {
 				m.showPreview = !m.showPreview
@@ -1657,6 +1697,13 @@ func (m *model) rebuildRows() {
 	for _, entryIndex := range entryIndexes {
 		e := &m.entries[entryIndex]
 		rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1})
+		if e.worktreesOpen && e.worktreesLoaded && m.query == "" {
+			rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-head"})
+			for wt := range e.worktrees {
+				rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: wt})
+			}
+			rows = append(rows, row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-foot"})
+		}
 		if e.expanded && m.query == "" {
 			for tabIndex := range e.tabs {
 				rows = append(rows, row{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: -1})
@@ -1854,7 +1901,7 @@ func (m model) View() string {
 	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
 		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
 	}
-	footer := "j/k move  space select  n new  c clone  w worktree  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	}
@@ -2074,6 +2121,32 @@ func overlayPopup(lines []string, popup string, width int) []string {
 
 func (m model) renderRow(r row, width int, focused bool) string {
 	e := m.entries[r.entryIndex]
+	switch r.section {
+	case "wt-head":
+		label := "worktrees"
+		if len(e.worktrees) != 1 {
+			label = fmt.Sprintf("worktrees (%d)", len(e.worktrees))
+		}
+		fill := width - lipgloss.Width(label) - 5
+		if fill < 0 {
+			fill = 0
+		}
+		return "   " + dimStyle.Render("┄ "+label+" "+strings.Repeat("┄", fill))
+	case "wt-foot":
+		return "   " + dimStyle.Render(strings.Repeat("┄", max(0, width-3)))
+	case "wt-item":
+		wt := e.worktrees[r.wt]
+		left := "     " + branchStyle.Render("󰘬") + " " + truncate(wt.branch, max(6, width*4/10))
+		right := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
+		if wt.current {
+			right = dimStyle.Render("← here")
+		}
+		if focused {
+			left = focusStyle.Render(ansi.Strip(left))
+			right = focusStyle.Render(ansi.Strip(right))
+		}
+		return padColumns(left, right, width)
+	}
 	if r.windowIndex >= 0 {
 		window := e.tabs[r.tabIndex].windows[r.windowIndex]
 		if m.filter == filterAgents {
@@ -2545,7 +2618,7 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 	}
 	return windowItem{
 		id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command,
-		fullCommand: fullCommand, agent: agentFromWindow(window), lastFocused: window.LastFocusedAt,
+		fullCommand: fullCommand, agent: agentFromWindow(window), lastFocused: window.LastFocusedAt, cwd: detail,
 	}
 }
 
@@ -3010,6 +3083,9 @@ func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
 
 func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 	return func() tea.Msg {
+		if selected.section == "wt-item" && selected.wt >= 0 && selected.wt < len(e.worktrees) {
+			return actionMsg{err: openProjectSession(kitty, zoxide, e.worktrees[selected.wt].path, false)}
+		}
 		if selected.windowIndex >= 0 {
 			window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
 			return actionMsg{err: run(kitty, "@", "focus-window", "--match", "id:"+strconv.Itoa(window.id))}
@@ -3220,4 +3296,95 @@ func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
 	}
 	// Fallback
 	return "user", filepath.Base(repoPath)
+}
+
+// toggleWorktrees reveals or hides the git worktrees of the repo under the
+// cursor. The source directory is the focused window's cwd when the cursor is
+// on a window, otherwise the entry's own path. Results attach to the entry, so
+// the section renders in place as a labelled group rather than nested folders.
+func (m *model) toggleWorktrees() tea.Cmd {
+	if len(m.rows) == 0 {
+		return nil
+	}
+	r := m.rows[m.cursor]
+	e := &m.entries[r.entryIndex]
+	dir := ""
+	if r.windowIndex >= 0 && r.tabIndex >= 0 && r.tabIndex < len(e.tabs) && r.windowIndex < len(e.tabs[r.tabIndex].windows) {
+		dir = e.tabs[r.tabIndex].windows[r.windowIndex].cwd
+	}
+	if dir == "" {
+		dir = e.path
+	}
+	if dir == "" {
+		m.err = fmt.Errorf("no directory to inspect")
+		return nil
+	}
+	if e.worktreesOpen {
+		e.worktreesOpen = false
+		m.err = nil
+		m.rebuildRows()
+		return nil
+	}
+	if e.worktreesLoaded {
+		e.worktreesOpen = true
+		m.err = nil
+		m.rebuildRows()
+		return nil
+	}
+	e.worktreesPending = true
+	m.err = nil
+	return fetchWorktrees(dir, r.entryIndex, e.key)
+}
+
+func fetchWorktrees(dir string, entryIndex int, key string) tea.Cmd {
+	return func() tea.Msg {
+		output, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
+		if err != nil {
+			message := strings.TrimSpace(string(output))
+			if message != "" {
+				err = fmt.Errorf("%s: %s", err, message)
+			}
+			return worktreeListMsg{entryIndex: entryIndex, key: key, err: fmt.Errorf("git worktree list: %w", err)}
+		}
+		worktrees := parseWorktreePorcelain(string(output))
+		for i := range worktrees {
+			if worktrees[i].path == dir {
+				worktrees[i].current = true
+			}
+		}
+		return worktreeListMsg{entryIndex: entryIndex, key: key, worktrees: worktrees}
+	}
+}
+
+func parseWorktreePorcelain(output string) []worktreeItem {
+	var items []worktreeItem
+	var current *worktreeItem
+	flush := func() {
+		if current != nil {
+			items = append(items, *current)
+			current = nil
+		}
+	}
+	for _, raw := range strings.Split(output, "\n") {
+		line := strings.TrimSpace(raw)
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			flush()
+			current = &worktreeItem{path: strings.TrimSpace(strings.TrimPrefix(line, "worktree "))}
+		case current == nil:
+			continue
+		case strings.HasPrefix(line, "HEAD "):
+			current.head = strings.TrimPrefix(line, "HEAD ")
+		case strings.HasPrefix(line, "branch "):
+			current.branch = strings.TrimPrefix(strings.TrimPrefix(line, "branch "), "refs/heads/")
+		case line == "detached":
+			current.branch = "(detached)"
+		case line == "" || strings.HasPrefix(line, "command ") || strings.HasPrefix(line, "locked") || strings.HasPrefix(line, "prune"):
+			if line == "" {
+				flush()
+			}
+		}
+	}
+	flush()
+	return items
 }
