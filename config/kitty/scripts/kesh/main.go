@@ -1715,11 +1715,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.worktreePaths = nil
 				m.err = nil
 			case "tab":
-				if m.worktreeRecipe != nil && len(m.worktreeRecipe.Workspaces) > 1 {
-					if m.worktreeRecipeMode == "all" {
+				if m.worktreeRecipe != nil {
+					switch m.worktreeRecipeMode {
+					case "none":
 						m.worktreeRecipeMode = "single"
-					} else {
+					case "single":
 						m.worktreeRecipeMode = "all"
+					default:
+						m.worktreeRecipeMode = "none"
 					}
 				}
 			case "enter":
@@ -1728,7 +1731,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.err = nil
-				if m.worktreeRecipe != nil {
+				if m.worktreeRecipe != nil && m.worktreeRecipeMode != "none" {
 					m.worktreeBusy = true
 					return m, runWktreeNew(m.worktreeRecipePath, m.worktreeRecipeMode, m.worktreeBranch)
 				}
@@ -3253,18 +3256,22 @@ func (m model) popupView(width int) string {
 		fieldWidth := popupWidth - 6
 
 		var pathsField string
-		if m.worktreeRecipe != nil {
+		if m.worktreeRecipe != nil && m.worktreeRecipeMode != "none" {
 			repoPath := ""
 			if entries := m.worktreeEntries(); len(entries) == 1 {
 				repoPath = entries[0].path
 			}
 			layout := wktreeLayoutPreview(m.worktreeRecipe, m.worktreeRecipePath, m.worktreeRecipeMode, fieldWidth)
 			pathsField = "\n\n" + dimStyle.Render("Recipe: "+displayPath(m.worktreeRecipePath, os.Getenv("HOME"))) + "\n" +
+				dimStyle.Render("Mode: "+m.worktreeRecipeMode) + "\n" +
 				// wktree uses this generated-layout identity in WKTREE_KITTY_SESSION;
 				// it is not Kitty's native session name.
 				dimStyle.Render("wktree layout: "+wktreeSessionPreview(m.worktreeRecipe, repoPath, m.worktreeBranch)) + "\n" +
 				dimStyle.Render(strings.Join(layout, "\n"))
 		} else if len(m.worktreePaths) > 0 {
+			if m.worktreeRecipe != nil {
+				pathsField = "\n\n" + dimStyle.Render("Mode: none (native Kesh worktree)")
+			}
 			label := "Preview"
 			if len(m.worktreePaths) > 1 {
 				label = fmt.Sprintf("Preview (%d)", len(m.worktreePaths))
@@ -3287,8 +3294,8 @@ func (m model) popupView(width int) string {
 		field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
 		if m.worktreeBusy {
 			help = "Creating…"
-		} else if m.worktreeRecipe != nil && len(m.worktreeRecipe.Workspaces) > 1 {
-			help = "Enter create  •  Tab single/all  •  Esc cancel"
+		} else if m.worktreeRecipe != nil {
+			help = "Enter create  •  Tab mode  •  Esc cancel"
 		} else {
 			help = "Enter create  •  Esc cancel"
 		}
