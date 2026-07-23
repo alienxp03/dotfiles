@@ -45,18 +45,19 @@ type kittyWindow struct {
 }
 
 type windowItem struct {
-	id          int
-	title       string
-	detail      string
-	cwd         string
-	command     string
-	fullCommand string
-	agent       string
-	lastFocused float64
+	id               int
+	title            string
+	detail           string
+	cwd              string
+	command          string
+	fullCommand      string
+	agent            string
+	lastFocused      float64
 	worktrees        []worktreeItem
 	worktreesLoaded  bool
 	worktreesOpen    bool
 	worktreesPending bool
+	pathPR           pathPRInfo
 }
 
 type tabItem struct {
@@ -76,27 +77,30 @@ type worktreeItem struct {
 	isDefault bool
 	prStatus  string
 	prURL     string
+	prNumber  int
+	prExact   bool
 	prRepoKey string
 }
 
 type entry struct {
-	key          string
-	name         string
-	originalName string
-	detail       string
-	kind         string
-	path         string
-	session      string
-	sessionFile  string
-	saved        bool
-	open         bool
-	lastFocused  float64
-	nameTaken    bool
-	agent        string
-	expanded     bool
-	tabs         []tabItem
-	order        int
-	pin          string
+	key              string
+	name             string
+	originalName     string
+	detail           string
+	kind             string
+	path             string
+	session          string
+	sessionFile      string
+	saved            bool
+	open             bool
+	lastFocused      float64
+	nameTaken        bool
+	agent            string
+	expanded         bool
+	tabs             []tabItem
+	order            int
+	pin              string
+	pathPR           pathPRInfo
 	worktrees        []worktreeItem
 	worktreesLoaded  bool
 	worktreesOpen    bool
@@ -232,10 +236,23 @@ type prInfo struct {
 	Number int
 }
 
+type pathPRInfo struct {
+	Branch      string
+	Head        string
+	RepoKey     string
+	PullRequest prInfo
+	Exact       bool
+}
+
 type prStatusMsg struct {
 	repoKey      string
 	pullRequests map[string]prInfo
 	err          error
+}
+
+type pathPRMsg struct {
+	path string
+	info pathPRInfo
 }
 
 type prStatusCacheEntry struct {
@@ -318,6 +335,8 @@ type model struct {
 	closedWorktreeBusy     bool
 	prStatusPending        map[string]bool
 	prStatusLastFetch      map[string]time.Time
+	pathPRChecked          map[string]bool
+	startupCmd             tea.Cmd
 }
 
 const (
@@ -417,7 +436,7 @@ func main() {
 		worktreeRoot: worktreeRoot,
 	}
 	m.rebuildRows()
-	m.queuePreview()
+	m.startupCmd = m.queuePreview()
 	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -535,31 +554,31 @@ func loadCloneRoot() (string, error) {
 	return filepath.Clean(root), nil
 }
 
-	func loadWorktreeRoot() (string, error) {
-		home := os.Getenv("HOME")
-		root := filepath.Join(home, "worktree")
-		content, err := os.ReadFile(configPath())
-		if err != nil {
-			if os.IsNotExist(err) {
-				return root, nil
-			}
-			return "", fmt.Errorf("read Kesh config: %w", err)
+func loadWorktreeRoot() (string, error) {
+	home := os.Getenv("HOME")
+	root := filepath.Join(home, "worktree")
+	content, err := os.ReadFile(configPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return root, nil
 		}
-		var config keshConfig
-		if _, err := toml.Decode(string(content), &config); err != nil {
-			return "", fmt.Errorf("invalid Kesh config: %w", err)
-		}
-		if configured := strings.TrimSpace(config.Worktree.Root); configured != "" {
-			root, err = expandHomePath(configured)
-			if err != nil {
-				return "", fmt.Errorf("invalid worktree root: %w", err)
-			}
-		}
-		if !filepath.IsAbs(root) {
-			return "", fmt.Errorf("worktree root must be an absolute or home-relative path")
-		}
-		return filepath.Clean(root), nil
+		return "", fmt.Errorf("read Kesh config: %w", err)
 	}
+	var config keshConfig
+	if _, err := toml.Decode(string(content), &config); err != nil {
+		return "", fmt.Errorf("invalid Kesh config: %w", err)
+	}
+	if configured := strings.TrimSpace(config.Worktree.Root); configured != "" {
+		root, err = expandHomePath(configured)
+		if err != nil {
+			return "", fmt.Errorf("invalid worktree root: %w", err)
+		}
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("worktree root must be an absolute or home-relative path")
+	}
+	return filepath.Clean(root), nil
+}
 
 func expandHomePath(path string) (string, error) {
 	path = strings.TrimSpace(path)
@@ -1078,10 +1097,7 @@ func switchPin(kitty, zoxide, slot string) error {
 }
 
 func (m model) Init() tea.Cmd {
-	if m.previewBusy && m.previewID != 0 {
-		return fetchPreview(m.kitty, m.previewID)
-	}
-	return nil
+	return m.startupCmd
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1174,161 +1190,183 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
-		case worktreeMsg:
-			if m.worktreeBusy {
-				// Creation completed
-				m.worktreeBusy = false
-				m.worktreeMode = false
-				if msg.err != nil {
-					m.err = msg.err
-					return m, nil
-				}
-				return m, tea.Quit
-			}
-			// Validation runs only on Enter. On success, proceed to create;
-			// otherwise surface the error without leaving the form.
+	case worktreeMsg:
+		if m.worktreeBusy {
+			// Creation completed
+			m.worktreeBusy = false
+			m.worktreeMode = false
 			if msg.err != nil {
 				m.err = msg.err
 				return m, nil
 			}
-			m.worktreeBusy = true
-			return m, m.createWorktree()
-		case worktreeListMsg:
-			updated := false
-			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil && w.cwd == msg.dir {
-				w.worktreesPending = false
-				if msg.err != nil {
-					w.worktreesLoaded = false
-					m.err = msg.err
-					return m, nil
-				}
-				w.worktrees = msg.worktrees
-				w.worktreesLoaded = true
-				w.worktreesOpen = true
-				updated = true
-			} else if e := m.closedEntryAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); e != nil && e.path == msg.dir {
-				e.worktreesPending = false
-				if msg.err != nil {
-					e.worktreesLoaded = false
-					m.err = msg.err
-					return m, nil
-				}
-				e.worktrees = msg.worktrees
-				e.worktreesLoaded = true
-				e.worktreesOpen = true
-				updated = true
-			}
-			if updated {
-				m.err = nil
-				m.rebuildRows()
-				return m, m.refreshPRStatuses(msg.dir, false)
-			}
+			return m, tea.Quit
+		}
+		// Validation runs only on Enter. On success, proceed to create;
+		// otherwise surface the error without leaving the form.
+		if msg.err != nil {
+			m.err = msg.err
 			return m, nil
-		case prStatusMsg:
-			if m.prStatusPending != nil {
-				m.prStatusPending[msg.repoKey] = false
-			}
+		}
+		m.worktreeBusy = true
+		return m, m.createWorktree()
+	case worktreeListMsg:
+		updated := false
+		if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil && w.cwd == msg.dir {
+			w.worktreesPending = false
 			if msg.err != nil {
-				if strings.Contains(msg.repoKey, "github.com") {
-					m.err = fmt.Errorf("refresh PR status: %w", msg.err)
-				}
+				w.worktreesLoaded = false
+				m.err = msg.err
 				return m, nil
 			}
-			if m.prStatusLastFetch == nil {
-				m.prStatusLastFetch = map[string]time.Time{}
+			w.worktrees = msg.worktrees
+			w.worktreesLoaded = true
+			w.worktreesOpen = true
+			updated = true
+		} else if e := m.closedEntryAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); e != nil && e.path == msg.dir {
+			e.worktreesPending = false
+			if msg.err != nil {
+				e.worktreesLoaded = false
+				m.err = msg.err
+				return m, nil
 			}
-			m.prStatusLastFetch[msg.repoKey] = time.Now()
-			focusedWorktree := m.focusedWorktreePath()
-			m.applyPRStatuses(msg.repoKey, msg.pullRequests)
+			e.worktrees = msg.worktrees
+			e.worktreesLoaded = true
+			e.worktreesOpen = true
+			updated = true
+		}
+		if updated {
+			m.err = nil
 			m.rebuildRows()
-			m.restoreFocusedWorktree(focusedWorktree)
-			return m, nil
-		case mergedWorktreeListMsg:
-			m.mergedWorktreeBusy = false
-			if msg.err != nil {
-				m.err = msg.err
-				return m, nil
+			return m, m.refreshPRStatuses(msg.dir, false)
+		}
+		return m, nil
+	case pathPRMsg:
+		if m.pathPRChecked == nil {
+			m.pathPRChecked = map[string]bool{}
+		}
+		m.pathPRChecked[msg.path] = true
+		for index := range m.entries {
+			if m.entries[index].path == msg.path {
+				m.entries[index].pathPR = msg.info
 			}
-			if len(msg.worktrees) == 0 {
-				m.err = fmt.Errorf("no merged worktrees to remove")
-				return m, nil
-			}
-			m.closeRow = msg.selected
-			m.mergedWorktrees = msg.worktrees
-			m.closing = true
-			m.closeBusy = false
-			m.worktreeForcePrompt = false
-			m.err = nil
-			return m, nil
-		case mergedWorktreeRemoveMsg:
-			m.closeBusy = false
-			m.closing = false
-			m.mergedWorktrees = nil
-			m.worktreeForcePrompt = false
-			if msg.err != nil {
-				m.invalidateWorktrees(msg.selected)
-				m.err = msg.err
-				m.rebuildRows()
-				return m, nil
-			}
-			m.err = nil
-			return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
-		case closedWorktreeListMsg:
-			m.closedWorktreeBusy = false
-			if msg.err != nil {
-				m.err = msg.err
-				return m, nil
-			}
-			if len(msg.worktrees) == 0 {
-				m.err = fmt.Errorf("no closed-PR worktrees to delete")
-				return m, nil
-			}
-			m.closeRow = msg.selected
-			m.closedWorktrees = msg.worktrees
-			m.closing = true
-			m.closeBusy = false
-			m.worktreeForcePrompt = false
-			m.err = nil
-			return m, nil
-		case closedWorktreeRemoveMsg:
-			m.closeBusy = false
-			m.closing = false
-			m.closedWorktrees = nil
-			m.worktreeForcePrompt = false
-			if msg.err != nil {
-				m.invalidateWorktrees(msg.selected)
-				m.err = msg.err
-				m.rebuildRows()
-				return m, nil
-			}
-			m.err = nil
-			return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
-		case worktreeRemoveMsg:
-			m.closeBusy = false
-			if msg.err != nil {
-				if !msg.forceTried {
-					// Normal remove failed (dirty, locked, etc.) — offer force.
-					m.worktreeForcePrompt = true
-					m.err = msg.err
-					return m, nil
+			for tabIndex := range m.entries[index].tabs {
+				for windowIndex := range m.entries[index].tabs[tabIndex].windows {
+					window := &m.entries[index].tabs[tabIndex].windows[windowIndex]
+					if window.cwd == msg.path {
+						window.pathPR = msg.info
+					}
 				}
-				// Force failed too: surface the error and leave the form.
-				m.closing = false
-				m.worktreeForcePrompt = false
+			}
+		}
+		if msg.info.RepoKey != "" {
+			return m, m.refreshPRStatuses(msg.path, false)
+		}
+		return m, nil
+	case prStatusMsg:
+		if m.prStatusPending != nil {
+			m.prStatusPending[msg.repoKey] = false
+		}
+		if msg.err != nil {
+			if strings.Contains(msg.repoKey, "github.com") {
+				m.err = fmt.Errorf("refresh PR status: %w", msg.err)
+			}
+			return m, nil
+		}
+		if m.prStatusLastFetch == nil {
+			m.prStatusLastFetch = map[string]time.Time{}
+		}
+		m.prStatusLastFetch[msg.repoKey] = time.Now()
+		focusedWorktree := m.focusedWorktreePath()
+		m.applyPRStatuses(msg.repoKey, msg.pullRequests)
+		m.rebuildRows()
+		m.restoreFocusedWorktree(focusedWorktree)
+		return m, nil
+	case mergedWorktreeListMsg:
+		m.mergedWorktreeBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		if len(msg.worktrees) == 0 {
+			m.err = fmt.Errorf("no merged worktrees to remove")
+			return m, nil
+		}
+		m.closeRow = msg.selected
+		m.mergedWorktrees = msg.worktrees
+		m.closing = true
+		m.closeBusy = false
+		m.worktreeForcePrompt = false
+		m.err = nil
+		return m, nil
+	case mergedWorktreeRemoveMsg:
+		m.closeBusy = false
+		m.closing = false
+		m.mergedWorktrees = nil
+		m.worktreeForcePrompt = false
+		if msg.err != nil {
+			m.invalidateWorktrees(msg.selected)
+			m.err = msg.err
+			m.rebuildRows()
+			return m, nil
+		}
+		m.err = nil
+		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
+	case closedWorktreeListMsg:
+		m.closedWorktreeBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		if len(msg.worktrees) == 0 {
+			m.err = fmt.Errorf("no closed-PR worktrees to delete")
+			return m, nil
+		}
+		m.closeRow = msg.selected
+		m.closedWorktrees = msg.worktrees
+		m.closing = true
+		m.closeBusy = false
+		m.worktreeForcePrompt = false
+		m.err = nil
+		return m, nil
+	case closedWorktreeRemoveMsg:
+		m.closeBusy = false
+		m.closing = false
+		m.closedWorktrees = nil
+		m.worktreeForcePrompt = false
+		if msg.err != nil {
+			m.invalidateWorktrees(msg.selected)
+			m.err = msg.err
+			m.rebuildRows()
+			return m, nil
+		}
+		m.err = nil
+		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
+	case worktreeRemoveMsg:
+		m.closeBusy = false
+		if msg.err != nil {
+			if !msg.forceTried {
+				// Normal remove failed (dirty, locked, etc.) — offer force.
+				m.worktreeForcePrompt = true
 				m.err = msg.err
 				return m, nil
 			}
-			// Removed: refresh that window's worktree list and close the popup.
+			// Force failed too: surface the error and leave the form.
 			m.closing = false
 			m.worktreeForcePrompt = false
-			m.err = nil
-			if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil {
-				return m, fetchWorktrees(w.cwd, msg.entryIndex, msg.tabIndex, msg.windowIndex)
-			}
+			m.err = msg.err
+			return m, nil
+		}
+		// Removed: refresh that window's worktree list and close the popup.
+		m.closing = false
+		m.worktreeForcePrompt = false
+		m.err = nil
+		if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil {
+			return m, fetchWorktrees(w.cwd, msg.entryIndex, msg.tabIndex, msg.windowIndex)
+		}
 		if e := m.closedEntryAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); e != nil {
 			return m, fetchWorktrees(e.path, msg.entryIndex, -1, -1)
 		}
-			return m, nil
+		return m, nil
 	case saveSessionMsg:
 		m.saving = false
 		m.saveConfirming = false
@@ -2079,7 +2117,50 @@ func (m *model) rebuildRows() {
 	}
 }
 
+func (m model) selectedDetailPath() string {
+	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return ""
+	}
+	selected := m.rows[m.cursor]
+	entry := m.entries[selected.entryIndex]
+	if selected.section == "wt-item" {
+		worktrees := m.worktreesForRow(selected)
+		if selected.wt >= 0 && selected.wt < len(worktrees) {
+			return worktrees[selected.wt].path
+		}
+	}
+	if selected.windowIndex >= 0 {
+		return entry.tabs[selected.tabIndex].windows[selected.windowIndex].cwd
+	}
+	if selected.tabIndex >= 0 {
+		for _, window := range entry.tabs[selected.tabIndex].windows {
+			if window.cwd != "" {
+				return window.cwd
+			}
+		}
+	}
+	return entry.path
+}
+
+func (m *model) queuePathPR() tea.Cmd {
+	path := m.selectedDetailPath()
+	if path == "" {
+		return nil
+	}
+	if m.pathPRChecked == nil {
+		m.pathPRChecked = map[string]bool{}
+	}
+	if m.pathPRChecked[path] {
+		return nil
+	}
+	m.pathPRChecked[path] = true
+	return func() tea.Msg {
+		return pathPRMsg{path: path, info: cachedPathPR(path)}
+	}
+}
+
 func (m *model) queuePreview() tea.Cmd {
+	commands := []tea.Cmd{m.queuePathPR()}
 	if m.filter != filterAgents || !m.showPreview || len(m.rows) == 0 {
 		if m.filter == filterAgents && len(m.rows) == 0 {
 			m.previewID = 0
@@ -2087,21 +2168,22 @@ func (m *model) queuePreview() tea.Cmd {
 			m.previewErr = nil
 			m.previewBusy = false
 		}
-		return nil
+		return tea.Batch(commands...)
 	}
 	r := m.rows[m.cursor]
 	if r.windowIndex < 0 {
-		return nil
+		return tea.Batch(commands...)
 	}
 	windowID := m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].id
 	if windowID == m.previewID {
-		return nil
+		return tea.Batch(commands...)
 	}
 	m.previewID = windowID
 	m.preview = ""
 	m.previewErr = nil
 	m.previewBusy = true
-	return fetchPreview(m.kitty, windowID)
+	commands = append(commands, fetchPreview(m.kitty, windowID))
+	return tea.Batch(commands...)
 }
 
 func fetchPreview(kitty string, windowID int) tea.Cmd {
@@ -2188,12 +2270,30 @@ func (m model) matchesFilter(e entry) bool {
 
 func (m model) View() string {
 	outerWidth := max(40, m.width-4)
-	showSidePreview := m.filter == filterAgents && m.showPreview && outerWidth >= 88
-	showBottomPreview := m.filter == filterAgents && m.showPreview && !showSidePreview
-	width := outerWidth
-	if showSidePreview {
-		width = max(40, outerWidth*43/100)
+	workspaceWidth := min(140, outerWidth)
+	_, hasSelectedWorktree := m.selectedWorktree()
+	selectedPRURL, _ := m.selectedPullRequest()
+	hasSelectedPR := selectedPRURL != ""
+	compactDetail := workspaceWidth < 64 || m.height < 18
+	showSideDetail := workspaceWidth >= 84 || m.height < 14
+	bodyHeight := max(5, m.height-6)
+	listWidth, detailWidth := workspaceWidth, workspaceWidth
+	listHeight, detailHeight := bodyHeight, bodyHeight
+	if showSideDetail {
+		detailWidth = max(20, min(42, workspaceWidth*28/100))
+		listWidth = workspaceWidth - detailWidth - 2
+		if listWidth < 18 {
+			listWidth = 18
+			detailWidth = max(12, workspaceWidth-listWidth-2)
+		}
+	} else {
+		detailHeight = 8
+		if compactDetail {
+			detailHeight = 5
+		}
+		listHeight = max(5, bodyHeight-detailHeight-1)
 	}
+
 	tabs := []string{"All", "Agents", "Open", "Projects", "SSH"}
 	for i := range tabs {
 		if i == m.filter {
@@ -2202,7 +2302,6 @@ func (m model) View() string {
 			tabs[i] = dimStyle.Render(" " + tabs[i] + " ")
 		}
 	}
-	promptLabel := "Search"
 	promptValue := dimStyle.Render("/ to search")
 	if m.query != "" {
 		promptValue = m.query
@@ -2219,31 +2318,22 @@ func (m model) View() string {
 			}
 		}
 		summary := fmt.Sprintf("Selected (%d): %s", len(names), strings.Join(names, ", "))
-		header += "  " + accentStyle.Render(truncate(summary, max(12, width-lipgloss.Width(header)-2)))
-	}
-	lines := []string{
-		header,
-		fmt.Sprintf("%-6s  %s", promptLabel, promptValue),
-		strings.Repeat("─", width),
+		header += "  " + accentStyle.Render(truncate(summary, max(12, workspaceWidth-lipgloss.Width(header)-2)))
 	}
 
-	available := max(3, m.height-7)
-	if showBottomPreview {
-		available = max(3, m.height/2-7)
-	}
+	available := max(1, listHeight-3)
 	start := 0
 	if m.cursor >= available {
 		start = m.cursor - available + 1
 	}
 	end := min(len(m.rows), start+available)
+	listLines := []string{accentStyle.Render(fmt.Sprintf("List (%d)", len(m.rows)))}
 	for i := start; i < end; i++ {
 		row := m.rows[i]
 		focused := i == m.cursor
-		line := m.renderRow(row, width-2, focused)
+		line := m.renderRow(row, max(8, listWidth-4), focused)
 		if focused {
 			if row.tabIndex < 0 && m.entries[row.entryIndex].open {
-				// The row renderer preserves only the green open indicator; the
-				// remaining columns still receive the focus treatment.
 				line = accentStyle.Render("▌") + " " + line
 			} else {
 				line = accentStyle.Render("▌") + " " + focusStyle.Render(ansi.Strip(line))
@@ -2251,17 +2341,34 @@ func (m model) View() string {
 		} else {
 			line = "  " + line
 		}
-		lines = append(lines, line)
+		listLines = append(listLines, line)
 	}
 	if len(m.rows) == 0 {
-		lines = append(lines, dimStyle.Render("  No matching sessions"))
+		listLines = append(listLines, dimStyle.Render("  No matching sessions"))
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
-		lines = append(lines, errorStyle.Render("Error: "+m.err.Error()))
+	listPanel := renderListPanel(listLines, listWidth, listHeight)
+	detailPanel := m.detailPanelView(detailWidth, detailHeight, compactDetail)
+	body := listPanel + "\n" + detailPanel
+	if showSideDetail {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
+
 	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if m.filter == filterAgents {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
+	} else if hasSelectedWorktree {
+		footer = "j/k move  enter open  o PR  x remove  X merged  D closed  q quit"
+	} else if workspaceWidth < 100 {
+		footer = "j/k move  enter open  e worktrees  h/l expand  x close  / search  q quit"
+		if hasSelectedPR {
+			footer = "j/k move  enter open  o PR  e worktrees  x close  / search  q quit"
+		}
+	}
+	if workspaceWidth < 64 {
+		footer = "j/k move  enter open  q quit"
+		if hasSelectedPR {
+			footer = "j/k move  enter open  o PR  q quit"
+		}
 	}
 	if m.searching {
 		footer = "type to filter  ctrl+j/k move  backspace delete  ctrl+u clear  enter/esc normal mode"
@@ -2269,19 +2376,44 @@ func (m model) View() string {
 	if m.saving {
 		footer = "Saving workspace…"
 	}
-	lines = append(lines, dimStyle.Render(footer))
-	if popup := m.popupView(width); popup != "" {
-		lines = overlayPopup(lines, popup, width)
+	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
+		footer = errorStyle.Render("Error: " + m.err.Error())
+	} else {
+		footer = dimStyle.Render(footer)
 	}
-	list := strings.Join(lines, "\n")
-	if showSidePreview {
-		previewWidth := max(30, outerWidth-width-3)
-		divider := dimStyle.Render(" │ ")
-		list = lipgloss.JoinHorizontal(lipgloss.Top, list, divider, m.previewView(previewWidth, max(5, m.height-4)))
-	} else if showBottomPreview {
-		list += "\n\n" + m.previewView(width, max(5, m.height/2-1))
+
+	content := strings.Join([]string{
+		ansi.Truncate(header, workspaceWidth, "…"),
+		ansi.Truncate(fmt.Sprintf("%-6s  %s", "Search", promptValue), workspaceWidth, "…"),
+		strings.Repeat("─", workspaceWidth),
+		body,
+		ansi.Truncate(footer, workspaceWidth, "…"),
+	}, "\n")
+	if popup := m.popupView(workspaceWidth); popup != "" {
+		content = strings.Join(overlayPopup(strings.Split(content, "\n"), popup, workspaceWidth), "\n")
 	}
-	return lipgloss.NewStyle().Padding(1, 2).Render(list)
+	content = lipgloss.PlaceHorizontal(outerWidth, lipgloss.Center, content)
+	return lipgloss.NewStyle().Padding(1, 2).Render(content)
+}
+
+func renderListPanel(lines []string, width, height int) string {
+	panelWidth := max(12, width-2)
+	contentHeight := max(1, height-2)
+	if len(lines) > contentHeight {
+		lines = lines[:contentHeight]
+	}
+	for len(lines) < contentHeight {
+		lines = append(lines, "")
+	}
+	for index := range lines {
+		lines[index] = ansi.Truncate(lines[index], panelWidth, "…")
+	}
+	return lipgloss.NewStyle().
+		Width(panelWidth).
+		Height(contentHeight).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("241")).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (m model) previewView(width, height int) string {
@@ -2297,6 +2429,282 @@ func (m model) previewView(width, height int) string {
 	header := accentStyle.Render("Agent screen")
 	body := lipgloss.NewStyle().Width(width).MaxWidth(width).MaxHeight(height - 2).Render(content)
 	return lipgloss.NewStyle().Width(width).Height(height).Render(header + "\n" + strings.Repeat("─", width) + "\n" + body)
+}
+
+func middleTruncate(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(value) <= width {
+		return value
+	}
+	if width <= 3 {
+		return strings.Repeat(".", width)
+	}
+	runes := []rune(value)
+	left := (width - 1) / 2
+	right := width - 1 - left
+	if left+right >= len(runes) {
+		return value
+	}
+	return string(runes[:left]) + "…" + string(runes[len(runes)-right:])
+}
+
+type detailField struct {
+	label  string
+	value  string
+	middle bool
+}
+
+func worktreePRSummary(worktree worktreeItem) string {
+	if worktree.prNumber == 0 {
+		return "—"
+	}
+	summary := strings.TrimSpace(prStatusIcon(worktree.prStatus) + " #" + strconv.Itoa(worktree.prNumber))
+	if !worktree.prExact {
+		summary += " · local HEAD differs"
+	}
+	return summary
+}
+
+func pathPRSummary(info pathPRInfo) string {
+	pullRequest := info.PullRequest
+	if pullRequest.Number == 0 {
+		return ""
+	}
+	summary := strings.TrimSpace(prStatusIcon(pullRequest.Status) + " #" + strconv.Itoa(pullRequest.Number))
+	if !info.Exact {
+		summary += " · local HEAD differs"
+	}
+	return summary
+}
+
+func renderDetailPanel(title string, fields []detailField, action string, extra []string, width, height int, compact bool) string {
+	panelWidth := max(12, width-2)
+	contentHeight := max(1, height-2)
+	valueWidth := max(4, panelWidth-8)
+	lines := make([]string, 0, contentHeight)
+	if !compact {
+		lines = append(lines, accentStyle.Render(title))
+	}
+	fieldLimit := len(fields)
+	if compact {
+		fieldLimit = min(fieldLimit, 3)
+	}
+	for _, field := range fields[:fieldLimit] {
+		value := field.value
+		if compact {
+			parts := strings.Split(value, "\n")
+			if len(parts) > 1 {
+				value = fmt.Sprintf("%s (+%d more)", parts[0], len(parts)-1)
+			}
+			if field.middle {
+				value = middleTruncate(value, valueWidth)
+			} else {
+				value = ansi.Truncate(value, valueWidth, "…")
+			}
+			lines = append(lines, mutedStyle.Render(fmt.Sprintf("%-8s", field.label))+value)
+			continue
+		}
+		wrapped := strings.Split(ansi.Wrap(value, valueWidth, " /_·"), "\n")
+		for index, line := range wrapped {
+			label := strings.Repeat(" ", 8)
+			if index == 0 {
+				label = fmt.Sprintf("%-8s", field.label)
+			}
+			lines = append(lines, mutedStyle.Render(label)+line)
+		}
+	}
+	if !compact && action != "" {
+		lines = append(lines, "", dimStyle.Render(action))
+	}
+	if !compact && len(extra) > 0 {
+		if len(lines)+2 < contentHeight {
+			lines = append(lines, "")
+		}
+		lines = append(lines, accentStyle.Render("Screen"))
+		for _, line := range extra {
+			lines = append(lines, ansi.Truncate(line, max(8, panelWidth-2), "…"))
+		}
+	}
+	if len(lines) > contentHeight {
+		lines = lines[:contentHeight]
+	}
+	for len(lines) < contentHeight {
+		lines = append(lines, "")
+	}
+	return lipgloss.NewStyle().
+		Width(panelWidth).
+		Height(contentHeight).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("241")).
+		Render(strings.Join(lines, "\n"))
+}
+
+func worktreeInfoView(worktree worktreeItem, width int, compact bool) string {
+	height := 8
+	if compact {
+		height = 5
+	}
+	action := "No matching pull request"
+	if worktree.prURL != "" {
+		action = "o Open PR"
+	}
+	return renderDetailPanel("Worktree", []detailField{
+		{label: "Branch", value: worktree.branch, middle: true},
+		{label: "Path", value: displayPath(worktree.path, os.Getenv("HOME")), middle: true},
+		{label: "PR", value: worktreePRSummary(worktree)},
+	}, action, nil, width, height, compact)
+}
+
+func entryDirectoryField(entry entry) detailField {
+	seen := map[string]bool{}
+	directories := make([]string, 0)
+	for _, tab := range entry.tabs {
+		for _, window := range tab.windows {
+			if window.cwd == "" {
+				continue
+			}
+			directory := displayPath(window.cwd, os.Getenv("HOME"))
+			if !seen[directory] {
+				seen[directory] = true
+				directories = append(directories, directory)
+			}
+		}
+	}
+	if len(directories) == 0 {
+		directory := entry.path
+		if directory == "" {
+			directory = entry.detail
+		} else {
+			directory = displayPath(directory, os.Getenv("HOME"))
+		}
+		return detailField{label: "Path", value: directory, middle: true}
+	}
+	if len(directories) == 1 {
+		return detailField{label: "Path", value: directories[0], middle: true}
+	}
+	visible := directories
+	if len(visible) > 3 {
+		visible = append([]string{}, visible[:3]...)
+		visible = append(visible, fmt.Sprintf("…and %d more", len(directories)-3))
+	}
+	return detailField{label: "Paths", value: strings.Join(visible, "\n")}
+}
+
+func (m model) detailPanelView(width, height int, compact bool) string {
+	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return renderDetailPanel("Info", []detailField{{label: "Selection", value: "No matching rows"}}, "", nil, width, height, compact)
+	}
+	selected := m.rows[m.cursor]
+	entry := m.entries[selected.entryIndex]
+	if selected.section == "wt-item" {
+		worktrees := m.worktreesForRow(selected)
+		if selected.wt >= 0 && selected.wt < len(worktrees) {
+			worktree := worktrees[selected.wt]
+			action := "No matching pull request"
+			if worktree.prURL != "" {
+				action = "o Open PR"
+			}
+			return renderDetailPanel("Worktree", []detailField{
+				{label: "Branch", value: worktree.branch, middle: true},
+				{label: "Path", value: displayPath(worktree.path, os.Getenv("HOME")), middle: true},
+				{label: "PR", value: worktreePRSummary(worktree)},
+			}, action, nil, width, height, compact)
+		}
+	}
+	if selected.section == "wt-head" {
+		worktrees := m.worktreesForRow(selected)
+		return renderDetailPanel("Worktrees", []detailField{
+			{label: "Project", value: entry.name},
+			{label: "Path", value: displayPath(m.worktreeDirectory(selected), os.Getenv("HOME")), middle: true},
+			{label: "Count", value: strconv.Itoa(len(worktrees))},
+		}, "Select a branch for actions", nil, width, height, compact)
+	}
+	if selected.windowIndex >= 0 {
+		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
+		fields := []detailField{
+			{label: "Name", value: window.title},
+			{label: "Project", value: entry.name},
+			{label: "Path", value: displayPath(window.cwd, os.Getenv("HOME")), middle: true},
+		}
+		if window.pathPR.PullRequest.Number > 0 {
+			fields = []detailField{
+				{label: "Name", value: window.title},
+				{label: "Path", value: displayPath(window.cwd, os.Getenv("HOME")), middle: true},
+				{label: "PR", value: pathPRSummary(window.pathPR)},
+				{label: "Branch", value: window.pathPR.Branch, middle: true},
+			}
+		}
+		if m.filter == filterAgents {
+			fields = []detailField{
+				{label: "Agent", value: window.agent},
+				{label: "Project", value: entry.name},
+				{label: "Path", value: displayPath(window.cwd, os.Getenv("HOME")), middle: true},
+			}
+			if window.pathPR.PullRequest.Number > 0 {
+				fields[2] = detailField{label: "PR", value: pathPRSummary(window.pathPR)}
+			}
+		} else {
+			if window.command != "" {
+				fields = append(fields, detailField{label: "Command", value: window.command})
+			}
+			if window.agent != "" {
+				fields = append(fields, detailField{label: "Agent", value: window.agent})
+			}
+		}
+		var screen []string
+		title := "Window"
+		if m.filter == filterAgents {
+			title = "Agent screen"
+		}
+		if m.filter == filterAgents && m.showPreview {
+			screen = strings.Split(m.preview, "\n")
+			if m.previewBusy {
+				screen = []string{"Loading preview…"}
+			} else if m.previewErr != nil {
+				screen = []string{"Preview unavailable: " + m.previewErr.Error()}
+			} else if m.preview == "" {
+				screen = []string{"No terminal content"}
+			}
+		}
+		return renderDetailPanel(title, fields, "", screen, width, height, compact)
+	}
+	if selected.tabIndex >= 0 {
+		tab := entry.tabs[selected.tabIndex]
+		fields := []detailField{
+			{label: "Name", value: tab.title},
+			{label: "Project", value: entry.name},
+			{label: "Windows", value: strconv.Itoa(len(tab.windows))},
+		}
+		for _, window := range tab.windows {
+			if window.pathPR.PullRequest.Number > 0 {
+				fields = append(fields, detailField{label: "PR", value: pathPRSummary(window.pathPR)})
+				break
+			}
+		}
+		return renderDetailPanel("Tab", fields, "Enter focus · r rename", nil, width, height, compact)
+	}
+	directoryField := entryDirectoryField(entry)
+	title := "Project"
+	if entry.kind == "workspace" {
+		title = "Workspace"
+	} else if entry.kind == "ssh" {
+		title = "SSH"
+	}
+	fields := []detailField{
+		{label: "Name", value: entry.name},
+		directoryField,
+	}
+	if entry.pathPR.PullRequest.Number > 0 {
+		fields = []detailField{
+			{label: "Name", value: entry.name},
+			directoryField,
+			{label: "PR", value: pathPRSummary(entry.pathPR)},
+			{label: "Branch", value: entry.pathPR.Branch, middle: true},
+		}
+	}
+	return renderDetailPanel(title, fields, "Enter open · e worktrees", nil, width, height, compact)
 }
 
 func (m model) popupView(width int) string {
@@ -2383,42 +2791,42 @@ func (m model) popupView(width int) string {
 		title = "Rename"
 		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
 		help = "Enter save  •  Esc cancel"
-		} else if m.worktreeMode {
-			title = "Create worktree"
-			cursor := "█"
-			if m.worktreeBranch != "" && !m.worktreeBusy {
-				cursor = ""
-			}
-			branchField := dimStyle.Render("Branch: ") + focusStyle.Render(m.worktreeBranch+cursor)
-			fieldWidth := popupWidth - 6
-			
-			var pathsField string
-			if len(m.worktreePaths) > 0 {
-				label := "Preview"
-				if len(m.worktreePaths) > 1 {
-					label = fmt.Sprintf("Preview (%d)", len(m.worktreePaths))
-				}
-				pathsField = "\n\n" + dimStyle.Render(label+":") + "\n"
-				prefix := "  󰉋 "
-				hanging := strings.Repeat(" ", lipgloss.Width(prefix))
-				wrapWidth := fieldWidth - lipgloss.Width(prefix)
-				for i, path := range m.worktreePaths {
-					if i >= 3 {
-						pathsField += "\n  " + dimStyle.Render(fmt.Sprintf("…and %d more", len(m.worktreePaths)-i))
-						break
-					}
-					wrapped := lipgloss.NewStyle().Width(wrapWidth).Render(path)
-					wrapped = strings.ReplaceAll(wrapped, "\n", "\n"+hanging)
-					pathsField += "\n" + mutedStyle.Render(prefix + wrapped)
-				}
-			}
+	} else if m.worktreeMode {
+		title = "Create worktree"
+		cursor := "█"
+		if m.worktreeBranch != "" && !m.worktreeBusy {
+			cursor = ""
+		}
+		branchField := dimStyle.Render("Branch: ") + focusStyle.Render(m.worktreeBranch+cursor)
+		fieldWidth := popupWidth - 6
 
-			field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
-			if m.worktreeBusy {
-				help = "Creating…"
-			} else {
-				help = "Enter create  •  Esc cancel"
+		var pathsField string
+		if len(m.worktreePaths) > 0 {
+			label := "Preview"
+			if len(m.worktreePaths) > 1 {
+				label = fmt.Sprintf("Preview (%d)", len(m.worktreePaths))
 			}
+			pathsField = "\n\n" + dimStyle.Render(label+":") + "\n"
+			prefix := "  󰉋 "
+			hanging := strings.Repeat(" ", lipgloss.Width(prefix))
+			wrapWidth := fieldWidth - lipgloss.Width(prefix)
+			for i, path := range m.worktreePaths {
+				if i >= 3 {
+					pathsField += "\n  " + dimStyle.Render(fmt.Sprintf("…and %d more", len(m.worktreePaths)-i))
+					break
+				}
+				wrapped := lipgloss.NewStyle().Width(wrapWidth).Render(path)
+				wrapped = strings.ReplaceAll(wrapped, "\n", "\n"+hanging)
+				pathsField += "\n" + mutedStyle.Render(prefix+wrapped)
+			}
+		}
+
+		field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
+		if m.worktreeBusy {
+			help = "Creating…"
+		} else {
+			help = "Enter create  •  Esc cancel"
+		}
 	} else if m.pinning {
 		title = "Pin " + m.entries[m.pinEntry].name
 		slot := "█"
@@ -2572,10 +2980,13 @@ func (m model) renderRow(r row, width int, focused bool) string {
 			connector = "└─"
 		}
 		indicator := prStatusIcon(wt.prStatus)
-		if indicator != "" {
-			indicator += " "
+		if wt.prNumber > 0 {
+			indicator += " " + dimStyle.Render("#"+strconv.Itoa(wt.prNumber))
 		}
-		left := indent + connector + " " + indicator + truncate(wt.branch, max(6, width*4/10))
+		if indicator != "" {
+			indicator += "  "
+		}
+		left := indent + connector + " " + indicator + truncate(wt.branch, max(6, width-lipgloss.Width(indent)-lipgloss.Width(indicator)-6))
 		right := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
 		if wt.current {
 			right = dimStyle.Render("← here")
@@ -2584,7 +2995,10 @@ func (m model) renderRow(r row, width int, focused bool) string {
 			left = focusStyle.Render(ansi.Strip(left))
 			right = focusStyle.Render(ansi.Strip(right))
 		}
-		return padColumns(left, right, width)
+		if width >= 64 {
+			return padColumns(left, right, width)
+		}
+		return ansi.Truncate(left, width, "…")
 	}
 	if r.windowIndex >= 0 {
 		window := e.tabs[r.tabIndex].windows[r.windowIndex]
@@ -2595,13 +3009,16 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		if r.windowIndex == len(e.tabs[r.tabIndex].windows)-1 {
 			branch = "└─"
 		}
+		nameWidth := max(8, width*45/100-17)
+		left := "           " + branch + " " + agentIcon(window.agent) + " " + truncate(window.title, nameWidth)
 		detail := window.detail
 		if window.command != "" && window.command != window.title {
 			detail = window.command + "  " + detail
 		}
-		nameWidth := max(8, width*4/10-13)
-		left := "        " + branch + " " + agentIcon(window.agent) + " " + truncate(window.title, nameWidth)
-		return padColumns(left, dimStyle.Render(truncate(detail, max(10, width-44))), width)
+		if width >= 52 {
+			return padColumns(left, dimStyle.Render(detail), width)
+		}
+		return ansi.Truncate(left, width, "…")
 	}
 	if r.tabIndex >= 0 {
 		tab := e.tabs[r.tabIndex]
@@ -2616,9 +3033,13 @@ func (m model) renderRow(r row, width int, focused bool) string {
 				arrow = "▾"
 			}
 		}
-		nameWidth := max(8, width*4/10-14)
-		left := fmt.Sprintf("    %s %s %s %s %s", branch, arrow, projectStyle.Render("󱂬"), agentIcon(tab.agent), truncate(tab.title, nameWidth))
-		return padColumns(left, dimStyle.Render(tab.detail), width)
+		windowCount := dimStyle.Render(fmt.Sprintf("%d window%s", len(tab.windows), plural(len(tab.windows))))
+		nameWidth := max(8, width*45/100-17)
+		left := fmt.Sprintf("       %s %s %s %s", branch, arrow, projectStyle.Render("󱂬"), truncate(tab.title, nameWidth))
+		if width >= 52 {
+			return padColumns(left, windowCount, width)
+		}
+		return ansi.Truncate(left+"  "+windowCount, width, "…")
 	}
 	selection := " "
 	if m.selected[e.key] {
@@ -2631,7 +3052,7 @@ func (m model) renderRow(r row, width int, focused bool) string {
 			arrow = "▾"
 		}
 	}
-	nameWidth := max(8, width*4/10-13)
+	nameWidth := max(8, width*45/100-18)
 	iconGlyph := ""
 	if e.kind == "workspace" {
 		iconGlyph = ""
@@ -2641,9 +3062,7 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		iconGlyph = ""
 		icon = sshStyle.Render(iconGlyph)
 	}
-	// Pad before styling: fmt counts ANSI escape bytes as printable width, which
-	// otherwise shifts the details column for open (styled) entries.
-	name := fmt.Sprintf("%-*s", nameWidth, truncate(e.name, nameWidth))
+	name := truncate(e.name, nameWidth)
 	if e.open {
 		icon = openStyle.Render(iconGlyph)
 		name = openStyle.Bold(true).Render(name)
@@ -2652,17 +3071,20 @@ func (m model) renderRow(r row, width int, focused bool) string {
 	if e.pin != "" {
 		pin = accentStyle.Render("[" + e.pin + "]")
 	}
-	agent := agentIcon(e.agent)
-	detail := dimStyle.Render(truncate(e.detail, max(10, width-38)))
 	if focused && e.open {
 		selection = focusStyle.Render(ansi.Strip(selection))
 		pin = focusStyle.Render(ansi.Strip(pin))
 		arrow = focusStyle.Render(arrow)
-		agent = focusStyle.Render(ansi.Strip(agent))
+	}
+	left := fmt.Sprintf("%s   %s %s %s %s", selection, pin, arrow, icon, name)
+	detail := dimStyle.Render(e.detail)
+	if focused && e.open {
 		detail = focusStyle.Render(ansi.Strip(detail))
 	}
-	left := fmt.Sprintf("%s   %s %s %s %s %s", selection, pin, arrow, icon, agent, name)
-	return padColumns(left, detail, width)
+	if width >= 52 {
+		return padColumns(left, detail, width)
+	}
+	return ansi.Truncate(left, width, "…")
 }
 
 func prStatusIcon(status string) string {
@@ -2684,13 +3106,15 @@ func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int
 	if tab.title != "" && tab.title != e.name {
 		context += " / " + tab.title
 	}
-	leftWidth := max(12, width*4/10)
-	left := agentIcon(window.agent) + " " + agent + "  " + truncate(context, max(8, leftWidth-len(agent)-3))
+	left := agentIcon(window.agent) + " " + agent + "  " + truncate(context, max(8, width*45/100-lipgloss.Width(agent)-6))
 	detail := window.detail
 	if window.command != "" && window.command != window.title {
 		detail = window.command + "  " + detail
 	}
-	return padColumns(left, dimStyle.Render(truncate(detail, max(10, width-leftWidth-2))), width)
+	if width >= 52 {
+		return padColumns(left, dimStyle.Render(detail), width)
+	}
+	return ansi.Truncate(left, width, "…")
 }
 
 func agentLabel(agent string) string {
@@ -2720,12 +3144,11 @@ func agentIcon(agent string) string {
 }
 
 func padColumns(left, right string, width int) string {
-	// Use 40% for the name/tree column and 60% for details.
-	space := width*4/10 - lipgloss.Width(left)
+	space := width*45/100 - lipgloss.Width(left)
 	if space < 2 {
 		space = 2
 	}
-	return left + strings.Repeat(" ", space) + right
+	return ansi.Truncate(left+strings.Repeat(" ", space)+right, width, "…")
 }
 
 func truncate(value string, width int) string {
@@ -3038,6 +3461,24 @@ func foregroundCmdlines(window kittyWindow) [][]string {
 		commands = append(commands, process.Cmdline)
 	}
 	return commands
+}
+
+func cachedPathPR(path string) pathPRInfo {
+	if path == "" {
+		return pathPRInfo{}
+	}
+	output, err := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel", "HEAD", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return pathPRInfo{}
+	}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) < 3 {
+		return pathPRInfo{}
+	}
+	repoKey := repositoryCacheKey(path)
+	pullRequests, _ := loadPRStatusCache(repoKey)
+	pullRequest, exact := matchPullRequest(pullRequests, lines[2], lines[1])
+	return pathPRInfo{Branch: lines[2], Head: lines[1], RepoKey: repoKey, PullRequest: pullRequest, Exact: exact}
 }
 
 func windowPath(window kittyWindow) string {
@@ -3541,10 +3982,10 @@ func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 			}
 			if selected.tabIndex >= 0 && selected.tabIndex < len(e.tabs) && selected.windowIndex >= 0 &&
 				selected.windowIndex < len(e.tabs[selected.tabIndex].windows) &&
-			selected.wt < len(e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees) {
-			wt := e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees[selected.wt]
-			return actionMsg{err: openProjectSession(kitty, zoxide, wt.path, false)}
-		}
+				selected.wt < len(e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees) {
+				wt := e.tabs[selected.tabIndex].windows[selected.windowIndex].worktrees[selected.wt]
+				return actionMsg{err: openProjectSession(kitty, zoxide, wt.path, false)}
+			}
 		}
 		if selected.windowIndex >= 0 {
 			window := e.tabs[selected.tabIndex].windows[selected.windowIndex]
@@ -3663,7 +4104,7 @@ func (m *model) validateWorktreeBranch() tea.Cmd {
 	if len(entries) == 0 {
 		return nil
 	}
-	
+
 	return func() tea.Msg {
 		// Validate branch exists on origin for all selected projects
 		for _, entry := range entries {
@@ -3678,7 +4119,7 @@ func (m *model) validateWorktreeBranch() tea.Cmd {
 			if strings.TrimSpace(string(output)) == "" {
 				return worktreeMsg{err: fmt.Errorf("branch %q does not exist in origin for %s", m.worktreeBranch, entry.name)}
 			}
-			
+
 			// Check if worktree path already exists
 			owner, repo := m.getRepoOwner(entry.path)
 			worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
@@ -3700,18 +4141,18 @@ func (m *model) createWorktree() tea.Cmd {
 			}
 			owner, repo := m.getRepoOwner(entry.path)
 			worktreePath := filepath.Join(m.worktreeRoot, owner, repo, m.worktreeBranch)
-			
+
 			// Create worktree using the branch from origin
 			cmd := exec.Command("git", "-C", entry.path, "worktree", "add", worktreePath, "origin/"+m.worktreeBranch)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				return worktreeMsg{err: fmt.Errorf("failed to create worktree for %s: %w\n%s", entry.name, err, output)}
 			}
-			
+
 			// Add to zoxide
 			_ = run(m.zoxide, "add", "--", worktreePath)
 		}
-		
+
 		// Return success - worktrees are created and added to zoxide
 		return worktreeMsg{err: nil}
 	}
@@ -3736,7 +4177,7 @@ func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
 		return "user", filepath.Base(repoPath)
 	}
 	url := strings.TrimSpace(string(output))
-	
+
 	// Parse GitHub URL: git@github.com:owner/repo.git or https://github.com/owner/repo.git
 	if strings.HasPrefix(url, "git@github.com:") {
 		parts := strings.TrimPrefix(url, "git@github.com:")
@@ -3758,24 +4199,45 @@ func (m *model) getRepoOwner(repoPath string) (owner, repo string) {
 	return "user", filepath.Base(repoPath)
 }
 
-func (m *model) openWorktreePR() tea.Cmd {
-	if len(m.rows) == 0 {
-		return nil
+func (m model) selectedPullRequest() (string, string) {
+	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return "", ""
 	}
 	selected := m.rows[m.cursor]
-	if selected.section != "wt-item" {
-		m.err = fmt.Errorf("select a worktree with a pull request")
-		return nil
+	entry := m.entries[selected.entryIndex]
+	pullRequestURL := ""
+	branch := entry.pathPR.Branch
+	switch {
+	case selected.section == "wt-item":
+		worktrees := m.worktreesForRow(selected)
+		if selected.wt >= 0 && selected.wt < len(worktrees) {
+			pullRequestURL = worktrees[selected.wt].prURL
+			branch = worktrees[selected.wt].branch
+		}
+	case selected.windowIndex >= 0:
+		info := entry.tabs[selected.tabIndex].windows[selected.windowIndex].pathPR
+		pullRequestURL, branch = info.PullRequest.URL, info.Branch
+	case selected.tabIndex >= 0:
+		for _, window := range entry.tabs[selected.tabIndex].windows {
+			if window.pathPR.PullRequest.URL != "" {
+				pullRequestURL, branch = window.pathPR.PullRequest.URL, window.pathPR.Branch
+				break
+			}
+		}
+	default:
+		pullRequestURL = entry.pathPR.PullRequest.URL
 	}
-	worktrees := m.worktreesForRow(selected)
-	if selected.wt < 0 || selected.wt >= len(worktrees) {
-		m.err = fmt.Errorf("worktree is no longer available")
-		return nil
-	}
-	pullRequestURL := worktrees[selected.wt].prURL
+	return pullRequestURL, branch
+}
+
+func (m *model) openWorktreePR() tea.Cmd {
+	pullRequestURL, branch := m.selectedPullRequest()
 	parsed, err := url.Parse(pullRequestURL)
 	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
-		m.err = fmt.Errorf("no matching pull request for %s", worktrees[selected.wt].branch)
+		if branch == "" {
+			branch = "selected row"
+		}
+		m.err = fmt.Errorf("no matching pull request for %s", branch)
 		return nil
 	}
 	m.err = nil
@@ -3794,17 +4256,17 @@ func (m *model) toggleWorktrees() tea.Cmd {
 	}
 	r := m.rows[m.cursor]
 	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil && w.cwd != "" {
-	if w.worktreesOpen {
-		w.worktreesOpen = false
-		m.rebuildRows()
-		return nil
-	}
-	if w.worktreesLoaded {
-		w.worktreesOpen = true
-		m.rebuildRows()
-		return m.refreshPRStatuses(w.cwd, false)
-	}
-	w.worktreesPending = true
+		if w.worktreesOpen {
+			w.worktreesOpen = false
+			m.rebuildRows()
+			return nil
+		}
+		if w.worktreesLoaded {
+			w.worktreesOpen = true
+			m.rebuildRows()
+			return m.refreshPRStatuses(w.cwd, false)
+		}
+		w.worktreesPending = true
 		return fetchWorktrees(w.cwd, r.entryIndex, r.tabIndex, r.windowIndex)
 	}
 
@@ -3836,6 +4298,20 @@ func prStatusCachePath() string {
 
 func prStatusKey(branch, head string) string {
 	return branch + "\x00" + head
+}
+
+func matchPullRequest(pullRequests map[string]prInfo, branch, head string) (prInfo, bool) {
+	if pullRequest, ok := pullRequests[prStatusKey(branch, head)]; ok {
+		return pullRequest, true
+	}
+	var latest prInfo
+	for key, pullRequest := range pullRequests {
+		parts := strings.SplitN(key, "\x00", 2)
+		if len(parts) == 2 && parts[0] == branch && pullRequest.Number > latest.Number {
+			latest = pullRequest
+		}
+	}
+	return latest, false
 }
 
 func repositoryCacheKey(dir string) string {
@@ -4045,18 +4521,28 @@ func (m *model) applyPRStatuses(repoKey string, pullRequests map[string]prInfo) 
 	apply := func(worktrees []worktreeItem) {
 		for index := range worktrees {
 			if worktrees[index].prRepoKey == repoKey {
-				pullRequest := pullRequests[prStatusKey(worktrees[index].branch, worktrees[index].head)]
+				pullRequest, exact := matchPullRequest(pullRequests, worktrees[index].branch, worktrees[index].head)
 				worktrees[index].prStatus = pullRequest.Status
 				worktrees[index].prURL = pullRequest.URL
+				worktrees[index].prNumber = pullRequest.Number
+				worktrees[index].prExact = exact
 			}
 		}
 		sortWorktreeItems(worktrees)
 	}
+	applyPath := func(info *pathPRInfo) {
+		if info.RepoKey == repoKey && info.Branch != "" {
+			info.PullRequest, info.Exact = matchPullRequest(pullRequests, info.Branch, info.Head)
+		}
+	}
 	for index := range m.entries {
 		apply(m.entries[index].worktrees)
+		applyPath(&m.entries[index].pathPR)
 		for tabIndex := range m.entries[index].tabs {
 			for windowIndex := range m.entries[index].tabs[tabIndex].windows {
-				apply(m.entries[index].tabs[tabIndex].windows[windowIndex].worktrees)
+				window := &m.entries[index].tabs[tabIndex].windows[windowIndex]
+				apply(window.worktrees)
+				applyPath(&window.pathPR)
 			}
 		}
 	}
@@ -4288,7 +4774,7 @@ func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 	if r.wt < 0 || r.wt >= len(worktrees) {
 		return func() tea.Msg {
 			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")}
-	}
+		}
 	}
 	dir := ""
 	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
@@ -4350,6 +4836,21 @@ func (m *model) closedEntryAt(entryIndex, tabIndex, windowIndex int) *entry {
 		return nil
 	}
 	return e
+}
+
+func (m model) selectedWorktree() (worktreeItem, bool) {
+	if m.cursor < 0 || m.cursor >= len(m.rows) {
+		return worktreeItem{}, false
+	}
+	selected := m.rows[m.cursor]
+	if selected.section != "wt-item" {
+		return worktreeItem{}, false
+	}
+	worktrees := m.worktreesForRow(selected)
+	if selected.wt < 0 || selected.wt >= len(worktrees) {
+		return worktreeItem{}, false
+	}
+	return worktrees[selected.wt], true
 }
 
 func (m model) focusedWorktreePath() string {
@@ -4426,9 +4927,11 @@ func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 			}
 			worktrees[i].isDefault = worktrees[i].branch == defaultBranch
 			worktrees[i].prRepoKey = repoKey
-			pullRequest := cachedStatuses[prStatusKey(worktrees[i].branch, worktrees[i].head)]
+			pullRequest, exact := matchPullRequest(cachedStatuses, worktrees[i].branch, worktrees[i].head)
 			worktrees[i].prStatus = pullRequest.Status
 			worktrees[i].prURL = pullRequest.URL
+			worktrees[i].prNumber = pullRequest.Number
+			worktrees[i].prExact = exact
 		}
 		sortWorktreeItems(worktrees)
 		return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, worktrees: worktrees}

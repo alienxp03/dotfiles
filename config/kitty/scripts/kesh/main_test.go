@@ -11,16 +11,17 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
 func TestParseArgs(t *testing.T) {
 	tests := []struct {
-		args            []string
-		wantFilter      int
-		wantSlot        string
-		wantPinCommand  string
-		wantError       bool
+		args           []string
+		wantFilter     int
+		wantSlot       string
+		wantPinCommand string
+		wantError      bool
 	}{
 		{wantFilter: filterAll},
 		{args: []string{"agents"}, wantFilter: filterAgents},
@@ -212,6 +213,274 @@ esac
 	}
 }
 
+func TestHierarchyNamesIndentByDepth(t *testing.T) {
+	m := model{entries: []entry{{
+		name: ".dotfiles",
+		tabs: []tabItem{{title: "kesh", windows: []windowItem{{title: "shell"}}}},
+	}}}
+	tests := []struct {
+		row  row
+		name string
+	}{
+		{row: row{entryIndex: 0, tabIndex: -1, windowIndex: -1}, name: ".dotfiles"},
+		{row: row{entryIndex: 0, tabIndex: 0, windowIndex: -1}, name: "kesh"},
+		{row: row{entryIndex: 0, tabIndex: 0, windowIndex: 0}, name: "shell"},
+	}
+	columns := make([]int, 0, len(tests))
+	for _, test := range tests {
+		rendered := ansi.Strip(m.renderRow(test.row, 100, false))
+		before, _, found := strings.Cut(rendered, test.name)
+		if !found {
+			t.Fatalf("row is missing name %q: %q", test.name, rendered)
+		}
+		columns = append(columns, lipgloss.Width(before))
+	}
+	if columns[1] != columns[0]+2 || columns[2] != columns[1]+2 {
+		t.Fatalf("hierarchy name columns = %v, want each child indented by 2", columns)
+	}
+}
+
+func TestAgentIconOnlyAppearsOnWindowRows(t *testing.T) {
+	m := model{entries: []entry{{
+		name: "repo", agent: "pi",
+		tabs: []tabItem{{title: "code", agent: "pi", windows: []windowItem{{title: "terminal", agent: "pi"}}}},
+	}}}
+	entryRow := row{entryIndex: 0, tabIndex: -1, windowIndex: -1}
+	tabRow := row{entryIndex: 0, tabIndex: 0, windowIndex: -1}
+	windowRow := row{entryIndex: 0, tabIndex: 0, windowIndex: 0}
+	for _, parent := range []row{entryRow, tabRow} {
+		if rendered := ansi.Strip(m.renderRow(parent, 80, false)); strings.Contains(rendered, "π") {
+			t.Fatalf("parent row contains noisy agent icon: %q", rendered)
+		}
+	}
+	if rendered := ansi.Strip(m.renderRow(windowRow, 80, false)); !strings.Contains(rendered, "π") {
+		t.Fatalf("window row is missing agent icon: %q", rendered)
+	}
+}
+
+func TestRowsShowSecondDetailColumnOnlyWhenSpaceAllows(t *testing.T) {
+	m := model{entries: []entry{{
+		key: "repo", name: "repo", detail: "/workspace/repo", path: "/workspace/repo",
+		tabs: []tabItem{{title: "code", detail: "1 window", windows: []windowItem{{title: "editor", detail: "/workspace/repo", cwd: "/workspace/repo", command: "nvim"}}}},
+	}}}
+	tests := []row{
+		{entryIndex: 0, tabIndex: -1, windowIndex: -1},
+		{entryIndex: 0, tabIndex: 0, windowIndex: -1},
+		{entryIndex: 0, tabIndex: 0, windowIndex: 0},
+	}
+	if rendered := ansi.Strip(m.renderRow(tests[0], 100, false)); !strings.Contains(rendered, "/workspace/repo") {
+		t.Fatalf("entry row is missing wide detail column: %q", rendered)
+	}
+	if rendered := ansi.Strip(m.renderRow(tests[1], 100, false)); !strings.Contains(rendered, "1 window") {
+		t.Fatalf("tab row lost window count: %q", rendered)
+	}
+	if rendered := ansi.Strip(m.renderRow(tests[2], 100, false)); !strings.Contains(rendered, "nvim") || !strings.Contains(rendered, "/workspace/repo") {
+		t.Fatalf("window row is missing command/path detail: %q", rendered)
+	}
+	for _, selected := range tests {
+		if rendered := ansi.Strip(m.renderRow(selected, 40, false)); strings.Contains(rendered, "/workspace/repo") {
+			t.Fatalf("narrow row retained detail column: %q", rendered)
+		}
+	}
+}
+
+func TestWorktreeRowUsesResponsivePathColumn(t *testing.T) {
+	m := model{entries: []entry{{worktrees: []worktreeItem{{
+		path: "/workspace/worktrees/repo/feature", branch: "feat/feature", prStatus: "open", prNumber: 42,
+	}}}}}
+	rendered := ansi.Strip(m.renderRow(row{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: 0}, 80, false))
+	if !strings.Contains(rendered, "#42") || !strings.Contains(rendered, "feat/feature") {
+		t.Fatalf("worktree row = %q", rendered)
+	}
+	if !strings.Contains(rendered, "/workspace/worktrees") {
+		t.Fatalf("wide worktree row is missing path column: %q", rendered)
+	}
+	narrow := ansi.Strip(m.renderRow(row{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: 0}, 50, false))
+	if strings.Contains(narrow, "/workspace/worktrees") {
+		t.Fatalf("narrow worktree row retained path column: %q", narrow)
+	}
+}
+
+func TestEntryDetailPanelShowsUniqueSessionDirectories(t *testing.T) {
+	m := model{
+		entries: []entry{{name: "session", tabs: []tabItem{
+			{windows: []windowItem{{cwd: "/workspace/api"}, {cwd: "/workspace/api"}}},
+			{windows: []windowItem{{cwd: "/workspace/web"}}},
+		}}},
+		rows: []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+	}
+	panel := ansi.Strip(m.detailPanelView(44, 10, false))
+	for _, expected := range []string{"Paths", "/workspace/api", "/workspace/web"} {
+		if !strings.Contains(panel, expected) {
+			t.Fatalf("session detail panel missing %q:\n%s", expected, panel)
+		}
+	}
+	if strings.Count(panel, "/workspace/api") != 1 {
+		t.Fatalf("session detail panel did not deduplicate paths:\n%s", panel)
+	}
+
+	compact := ansi.Strip(m.detailPanelView(40, 5, true))
+	if !strings.Contains(compact, "(+1 more)") {
+		t.Fatalf("compact session detail panel does not summarize extra paths:\n%s", compact)
+	}
+}
+
+func TestDetailPanelWrapsLongValuesWithHangingIndent(t *testing.T) {
+	panel := ansi.Strip(renderDetailPanel("Info", []detailField{{
+		label: "Path", value: "/workspace/worktrees/aurora/configurable-chat-component",
+	}}, "", nil, 34, 10, false))
+	lines := strings.Split(panel, "\n")
+	for index, line := range lines {
+		if !strings.Contains(line, "Path    /workspace") {
+			continue
+		}
+		if index+1 >= len(lines) || !strings.HasPrefix(lines[index+1], "│        ") {
+			t.Fatalf("wrapped detail value lacks hanging indent:\n%s", panel)
+		}
+		return
+	}
+	t.Fatalf("detail value did not wrap as expected:\n%s", panel)
+}
+
+func TestWorktreeInfoPanelIsResponsiveAndOmitsFullPRURL(t *testing.T) {
+	worktree := worktreeItem{
+		path: "/workspace/worktrees/repo/feature", branch: "feat/feature", prStatus: "open", prNumber: 42,
+		prURL: "https://github.com/example/repo/pull/42",
+	}
+	full := worktreeInfoView(worktree, 80, false)
+	plain := ansi.Strip(full)
+	for _, field := range []string{"Worktree", "Branch", "Path", "PR", "#42", "o Open PR"} {
+		if !strings.Contains(plain, field) {
+			t.Fatalf("full info panel missing %q:\n%s", field, plain)
+		}
+	}
+	if strings.Contains(plain, worktree.prURL) {
+		t.Fatalf("full info panel exposes PR URL:\n%s", plain)
+	}
+	if got := lipgloss.Width(full); got > 80 {
+		t.Fatalf("full info panel width = %d, want <= 80", got)
+	}
+
+	compact := worktreeInfoView(worktree, 40, true)
+	if got := lipgloss.Height(compact); got > 5 {
+		t.Fatalf("compact info panel height = %d, want <= 5", got)
+	}
+	if strings.Contains(ansi.Strip(compact), "o Open PR") {
+		t.Fatalf("compact info panel should omit action help:\n%s", ansi.Strip(compact))
+	}
+}
+
+func TestDetailPanelSupportsEveryRowType(t *testing.T) {
+	m := model{entries: []entry{{
+		name: "repo", kind: "project", path: "/workspace/repo", open: false,
+		worktrees: []worktreeItem{{path: "/workspace/tree", branch: "feat/tree", prNumber: 42, prStatus: "open"}},
+		tabs: []tabItem{{title: "code", windows: []windowItem{{
+			title: "editor", cwd: "/workspace/repo", command: "nvim",
+			pathPR: pathPRInfo{
+				Branch: "feat/tree", Head: "local-head", Exact: false,
+				PullRequest: prInfo{Status: "open", Number: 42, URL: "https://github.com/example/repo/pull/42"},
+			},
+		}}}},
+	}}}
+	tests := []struct {
+		name string
+		row  row
+		want string
+	}{
+		{name: "entry", row: row{entryIndex: 0, tabIndex: -1, windowIndex: -1}, want: "Project"},
+		{name: "tab", row: row{entryIndex: 0, tabIndex: 0, windowIndex: -1}, want: "Tab"},
+		{name: "window", row: row{entryIndex: 0, tabIndex: 0, windowIndex: 0}, want: "Window"},
+		{name: "worktree header", row: row{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-head"}, want: "Worktrees"},
+		{name: "worktree", row: row{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-item", wt: 0}, want: "Worktree"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			m.rows = []row{test.row}
+			m.cursor = 0
+			panel := ansi.Strip(m.detailPanelView(80, 8, false))
+			if !strings.Contains(panel, test.want) {
+				t.Fatalf("detail panel does not contain %q:\n%s", test.want, panel)
+			}
+			if test.name == "window" {
+				for _, prDetail := range []string{"#42", "local HEAD differs"} {
+					if !strings.Contains(panel, prDetail) {
+						t.Fatalf("window detail panel missing PR detail %q:\n%s", prDetail, panel)
+					}
+				}
+				for _, omitted := range []string{"Open", "Closed", "Merged"} {
+					if strings.Contains(panel, omitted) {
+						t.Fatalf("window detail panel includes redundant PR text %q:\n%s", omitted, panel)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestWideLayoutRendersAdjacentListAndDetailPanels(t *testing.T) {
+	m := model{
+		width: 120, height: 24,
+		entries: []entry{{name: "repo", kind: "project", path: "/workspace/repo", session: "kesh-repo", saved: true}},
+	}
+	m.rebuildRows()
+	view := ansi.Strip(m.View())
+	for _, expected := range []string{"Project", "Name", "repo", "Path", "/workspace/repo"} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("fixed detail panel missing %q:\n%s", expected, view)
+		}
+	}
+	for _, omitted := range []string{"Session", "kesh-repo", "State", "Saved"} {
+		if strings.Contains(view, omitted) {
+			t.Fatalf("detail panel contains redundant field %q:\n%s", omitted, view)
+		}
+	}
+	adjacentPanels := false
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Count(line, "╭") == 2 {
+			adjacentPanels = true
+			break
+		}
+	}
+	if !adjacentPanels {
+		t.Fatalf("wide layout does not place list and details side by side:\n%s", view)
+	}
+}
+
+func TestFixedDetailPanelFitsSmallSplitForEntry(t *testing.T) {
+	m := model{
+		width: 50, height: 12,
+		entries: []entry{{name: "repo", kind: "project", path: "/workspace/repo"}},
+	}
+	m.rebuildRows()
+	view := m.View()
+	if got := lipgloss.Width(view); got > m.width {
+		t.Fatalf("small entry view width = %d, want <= %d", got, m.width)
+	}
+	if got := lipgloss.Height(view); got > m.height {
+		t.Fatalf("small entry view height = %d, want <= %d\n%s", got, m.height, ansi.Strip(view))
+	}
+}
+
+func TestWorktreeInfoFitsSmallSplit(t *testing.T) {
+	m := model{
+		width: 50, height: 12,
+		entries: []entry{{
+			name: "repo", kind: "project", path: "/workspace/repo",
+			worktrees:     []worktreeItem{{path: "/workspace/worktrees/repo/feature", branch: "feat/feature", prStatus: "open", prNumber: 42}},
+			worktreesOpen: true, worktreesLoaded: true,
+		}},
+	}
+	m.rebuildRows()
+	m.cursor = 2
+	view := m.View()
+	if got := lipgloss.Width(view); got > m.width {
+		t.Fatalf("small split view width = %d, want <= %d", got, m.width)
+	}
+	if got := lipgloss.Height(view); got > m.height {
+		t.Fatalf("small split view height = %d, want <= %d\n%s", got, m.height, ansi.Strip(view))
+	}
+}
+
 func TestSortWorktreesPrioritizesDefaultAndPRStatus(t *testing.T) {
 	worktrees := []worktreeItem{
 		{branch: "z-no-pr"},
@@ -270,7 +539,7 @@ func TestPRStatusCacheRoundTrip(t *testing.T) {
 	}
 }
 
-func TestApplyPRStatusesMatchesRepositoryBranchAndHead(t *testing.T) {
+func TestApplyPRStatusesPrefersExactHeadAndFallsBackToBranch(t *testing.T) {
 	const repoKey = "git@github.com:loveholidays/aurora.git"
 	m := model{entries: []entry{{
 		worktrees: []worktreeItem{
@@ -291,8 +560,14 @@ func TestApplyPRStatusesMatchesRepositoryBranchAndHead(t *testing.T) {
 	if got := m.entries[0].worktrees[0].prURL; got != "https://github.com/loveholidays/aurora/pull/1" {
 		t.Fatalf("open PR URL = %q", got)
 	}
-	if got := m.entries[0].worktrees[1].prStatus; got != "" {
-		t.Fatalf("newer branch HEAD retained stale status %q", got)
+	if got := m.entries[0].worktrees[1].prStatus; got != "open" {
+		t.Fatalf("branch fallback status = %q", got)
+	}
+	if m.entries[0].worktrees[1].prExact {
+		t.Fatal("branch fallback was incorrectly marked as an exact HEAD match")
+	}
+	if !m.entries[0].worktrees[0].prExact {
+		t.Fatal("exact PR HEAD was not marked exact")
 	}
 	if got := m.entries[0].tabs[0].windows[0].worktrees[0].prStatus; got != "merged" {
 		t.Fatalf("merged status = %q", got)
@@ -332,6 +607,17 @@ func TestOpenWorktreePROpensExactCachedURL(t *testing.T) {
 	}
 	if got := string(content); got != pullRequestURL {
 		t.Fatalf("opened URL = %q", got)
+	}
+
+	m = model{
+		entries: []entry{{tabs: []tabItem{{windows: []windowItem{{pathPR: pathPRInfo{
+			Branch: "feat/window", PullRequest: prInfo{URL: pullRequestURL, Number: 42, Status: "open"},
+		}}}}}}},
+		rows: []row{{entryIndex: 0, tabIndex: 0, windowIndex: 0}},
+	}
+	message = m.openWorktreePR()().(openPRMsg)
+	if message.err != nil {
+		t.Fatal(message.err)
 	}
 }
 
@@ -444,6 +730,32 @@ func TestToggleWorktreesRequiresWindowForOpenEntry(t *testing.T) {
 	}
 	if m.entries[0].worktreesPending {
 		t.Fatal("open entry row was marked pending")
+	}
+}
+
+func TestLoadEntriesDoesNotInspectGitRepositoriesDuringStartup(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GIT_STARTUP_CAPTURE", filepath.Join(directory, "git-called"))
+	kitty := filepath.Join(directory, "kitty")
+	zoxide := filepath.Join(directory, "zoxide")
+	git := filepath.Join(directory, "git")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf '%s\\n' '[{\"tabs\":[]}]'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(zoxide, []byte("#!/bin/sh\nprintf '%s\\n' '/projects/repo'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(git, []byte("#!/bin/sh\ntouch \"$GIT_STARTUP_CAPTURE\"\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadEntries(kitty, zoxide); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(os.Getenv("GIT_STARTUP_CAPTURE")); !os.IsNotExist(err) {
+		t.Fatal("Kesh inspected Git repositories during startup")
 	}
 }
 
