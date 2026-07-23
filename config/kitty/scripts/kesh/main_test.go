@@ -430,7 +430,7 @@ func TestWideLayoutRendersAdjacentListAndDetailPanels(t *testing.T) {
 			t.Fatalf("fixed detail panel missing %q:\n%s", expected, view)
 		}
 	}
-	for _, omitted := range []string{"Session", "kesh-repo", "State", "Saved"} {
+	for _, omitted := range []string{"Session", "kesh-repo", "State"} {
 		if strings.Contains(view, omitted) {
 			t.Fatalf("detail panel contains redundant field %q:\n%s", omitted, view)
 		}
@@ -1980,6 +1980,34 @@ func TestWorkspaceAndProjectFiltersUseSeparateEntries(t *testing.T) {
 	m.rebuildRows()
 	if len(m.rows) != 1 || m.entries[m.rows[0].entryIndex].kind != "project" {
 		t.Fatalf("project rows = %#v, want source project only", m.rows)
+	}
+}
+
+func TestSavedFilterShowsOnlySavedEntries(t *testing.T) {
+	entries := []entry{
+		{key: "workspace:aurora", name: "aurora", kind: "workspace", saved: true},
+		{key: "workspace:frontier", name: "frontier", kind: "workspace", saved: true, open: true},
+		{key: "/projects/drafts", name: "drafts", kind: "project"},
+	}
+	m := model{entries: entries, filter: filterSaved}
+	m.rebuildRows()
+	if len(m.rows) != 2 {
+		t.Fatalf("saved rows = %#v, want the 2 saved entries", m.rows)
+	}
+	for _, r := range m.rows {
+		if !m.entries[r.entryIndex].saved {
+			t.Fatalf("non-saved entry leaked into saved filter: %#v", m.entries[r.entryIndex])
+		}
+	}
+	// Saved includes open saved sessions, mirroring how SSH ignores open state.
+	sawOpen := false
+	for _, r := range m.rows {
+		if m.entries[r.entryIndex].open {
+			sawOpen = true
+		}
+	}
+	if !sawOpen {
+		t.Fatalf("expected the open saved session to remain visible under Saved")
 	}
 }
 

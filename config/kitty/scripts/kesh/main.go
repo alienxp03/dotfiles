@@ -385,6 +385,7 @@ const (
 	filterOpen
 	filterProjects
 	filterSSH
+	filterSaved
 )
 
 const (
@@ -2064,10 +2065,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.beginPin()
 			}
 		case "tab":
-			m.filter = (m.filter + 1) % 5
+			m.filter = (m.filter + 1) % 6
 			m.rebuildRows()
 		case "shift+tab":
-			m.filter = (m.filter + 4) % 5
+			m.filter = (m.filter + 5) % 6
 			m.rebuildRows()
 		}
 		return m, m.queuePreview()
@@ -2566,6 +2567,8 @@ func (m model) matchesFilter(e entry) bool {
 		return e.kind == "project"
 	case filterSSH:
 		return e.kind == "ssh"
+	case filterSaved:
+		return e.saved
 	default:
 		return true
 	}
@@ -2597,7 +2600,7 @@ func (m model) View() string {
 		listHeight = max(5, bodyHeight-detailHeight-1)
 	}
 
-	tabs := []string{"All", "Agents", "Open", "Projects", "SSH"}
+	tabs := []string{"All", "Agents", "Open", "Projects", "SSH", "Saved"}
 	for i := range tabs {
 		if i == m.filter {
 			tabs[i] = accentStyle.Render("[" + tabs[i] + "]")
