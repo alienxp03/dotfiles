@@ -149,6 +149,10 @@ run = [
   "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 
+[tasks.kesh]
+description = "Rebuild Kitty Kesh"
+run         = "cd \"$HOME/.config/kitty/scripts/kesh\" && go build -o kesh ."
+
 [tasks.bump-all]
 description = "Update development environment"
 run = [
