@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseArgs(t *testing.T) {
@@ -2136,5 +2137,96 @@ func TestCloseRequiresConfirmationAndRejectsInactiveWorkspace(t *testing.T) {
 	inactive = updated.(model)
 	if inactive.closing || inactive.err == nil || !strings.Contains(inactive.err.Error(), "not open") {
 		t.Fatalf("inactive close state: closing=%v err=%v", inactive.closing, inactive.err)
+	}
+}
+
+func worktreeSelectedTestRecipe(t *testing.T) *wktreeRecipe {
+	t.Helper()
+	var recipe wktreeRecipe
+	if err := yaml.Unmarshal([]byte(strings.Join([]string{
+		"workspace_mode: selected",
+		"default_workspaces: [backend, worker]",
+		"workspaces:",
+		"  - name: backend",
+		"  - name: frontend",
+		"  - name: worker",
+		"",
+	}, "\n")), &recipe); err != nil {
+		t.Fatalf("unmarshal recipe: %v", err)
+	}
+	return &recipe
+}
+
+func TestWorktreeTabCycleIncludesSelected(t *testing.T) {
+	recipe := worktreeSelectedTestRecipe(t)
+	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "none"}
+	for _, want := range []string{"single", "all", "selected", "none"} {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = updated.(model)
+		if m.worktreeRecipeMode != want {
+			t.Fatalf("after Tab: mode=%q want %q", m.worktreeRecipeMode, want)
+		}
+	}
+
+	// Entering selected initializes the toggle state to default_workspaces.
+	recipe2 := worktreeSelectedTestRecipe(t)
+	m2 := model{worktreeMode: true, worktreeRecipe: recipe2, worktreeRecipeMode: "all"}
+	updated, _ := m2.Update(tea.KeyMsg{Type: tea.KeyTab}) // all -> selected
+	m2 = updated.(model)
+	if m2.worktreeRecipeMode != "selected" {
+		t.Fatalf("expected selected, got %q", m2.worktreeRecipeMode)
+	}
+	if names := m2.selectedWorkspaceNames(); !reflect.DeepEqual(names, []string{"backend", "worker"}) {
+		t.Fatalf("default selection = %v, want [backend worker]", names)
+	}
+}
+
+func TestWorktreeSelectedSpaceAndEnterGuard(t *testing.T) {
+	recipe := worktreeSelectedTestRecipe(t)
+	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "selected", worktreeBranch: "feat/x"}
+	m.ensureWorktreeSelection()
+	// Defaults: [backend on, frontend off, worker on]. Cursor at backend; toggle it off.
+	if !reflect.DeepEqual(m.selectedWorkspaceNames(), []string{"backend", "worker"}) {
+		t.Fatalf("defaults = %v", m.selectedWorkspaceNames())
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(model)
+	if m.worktreeSelected[0] {
+		t.Fatalf("expected backend toggled off")
+	}
+	// Move cursor down to frontend (index 1).
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(model)
+	if m.worktreeWorkspaceCursor != 1 {
+		t.Fatalf("cursor = %d, want 1", m.worktreeWorkspaceCursor)
+	}
+	// Deselect worker too so nothing remains, then Enter must guard without exec.
+	m.worktreeSelected[2] = false
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(model)
+	if m.err == nil || !strings.Contains(m.err.Error(), "select at least one workspace") {
+		t.Fatalf("expected guard error, got err=%v busy=%v", m.err, m.worktreeBusy)
+	}
+	if m.worktreeBusy {
+		t.Fatalf("Enter should not start creation with no selection")
+	}
+}
+
+func TestWktreeLayoutPreviewModes(t *testing.T) {
+	recipe := worktreeSelectedTestRecipe(t)
+	selected := []bool{true, false, true}
+	sel := strings.Join(wktreeLayoutPreview(recipe, "/repo/.wktree.yaml", "selected", 60, selected), "\n")
+	if !strings.Contains(sel, "backend") || !strings.Contains(sel, "worker") || strings.Contains(sel, "frontend") {
+		t.Fatalf("selected preview = %q", sel)
+	}
+	single := strings.Join(wktreeLayoutPreview(recipe, "/repo/.wktree.yaml", "single", 60, nil), "\n")
+	if !strings.Contains(single, "backend") || strings.Contains(single, "worker") || strings.Contains(single, "frontend") {
+		t.Fatalf("single preview = %q", single)
+	}
+	all := strings.Join(wktreeLayoutPreview(recipe, "/repo/.wktree.yaml", "all", 60, nil), "\n")
+	for _, name := range []string{"backend", "frontend", "worker"} {
+		if !strings.Contains(all, name) {
+			t.Fatalf("all preview missing %s: %q", name, all)
+		}
 	}
 }

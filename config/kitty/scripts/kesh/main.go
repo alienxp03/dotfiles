@@ -282,8 +282,9 @@ type prStatusCacheStore struct {
 }
 
 type wktreeRecipe struct {
-	WorkspaceMode string `yaml:"workspace_mode"`
-	Terminal      struct {
+	WorkspaceMode     string   `yaml:"workspace_mode"`
+	DefaultWorkspaces []string `yaml:"default_workspaces"`
+	Terminal          struct {
 		SessionName string `yaml:"session_name"`
 	} `yaml:"terminal"`
 	Workspaces []struct {
@@ -312,68 +313,70 @@ type keshConfig struct {
 }
 
 type model struct {
-	entries                []entry
-	rows                   []row
-	cursor                 int
-	query                  string
-	searching              bool
-	renaming               bool
-	renameValue            string
-	creating               bool
-	createValue            string
-	cloning                bool
-	cloneBusy              bool
-	prCheckout             bool
-	prCheckoutBusy         bool
-	prCheckoutValue        string
-	prCheckoutBranch       string
-	checkoutRoot           string
-	saving                 bool
-	saveConfirming         bool
-	saveForeground         bool
-	saveEntry              int
-	cloneDestinationFocus  bool
-	cloneDestinationEdited bool
-	cloneRepository        string
-	cloneDestination       string
-	cloneRoot              string
-	selected               map[string]bool
-	pinning                bool
-	pinEntry               int
-	confirmSlot            string
-	closing                bool
-	closeBusy              bool
-	closeRow               row
-	pins                   pinStore
-	names                  nameStore
-	filter                 int
-	width                  int
-	height                 int
-	err                    error
-	kitty                  string
-	zoxide                 string
-	preview                string
-	previewErr             error
-	previewID              int
-	previewBusy            bool
-	showPreview            bool
-	worktreeMode           bool
-	worktreeBranch         string
-	worktreePaths          []string
-	worktreeBusy           bool
-	worktreeRoot           string
-	worktreeRecipe         *wktreeRecipe
-	worktreeRecipePath     string
-	worktreeRecipeMode     string
-	worktreeForcePrompt    bool
-	mergedWorktrees        []worktreeItem
-	mergedWorktreeBusy     bool
-	closedWorktrees        []worktreeItem
-	closedWorktreeBusy     bool
-	prStatusPending        map[string]bool
-	prStatusLastFetch      map[string]time.Time
-	pathPRChecked          map[string]bool
-	startupCmd             tea.Cmd
+	entries                 []entry
+	rows                    []row
+	cursor                  int
+	query                   string
+	searching               bool
+	renaming                bool
+	renameValue             string
+	creating                bool
+	createValue             string
+	cloning                 bool
+	cloneBusy               bool
+	prCheckout              bool
+	prCheckoutBusy          bool
+	prCheckoutValue         string
+	prCheckoutBranch        string
+	checkoutRoot            string
+	saving                  bool
+	saveConfirming          bool
+	saveForeground          bool
+	saveEntry               int
+	cloneDestinationFocus   bool
+	cloneDestinationEdited  bool
+	cloneRepository         string
+	cloneDestination        string
+	cloneRoot               string
+	selected                map[string]bool
+	pinning                 bool
+	pinEntry                int
+	confirmSlot             string
+	closing                 bool
+	closeBusy               bool
+	closeRow                row
+	pins                    pinStore
+	names                   nameStore
+	filter                  int
+	width                   int
+	height                  int
+	err                     error
+	kitty                   string
+	zoxide                  string
+	preview                 string
+	previewErr              error
+	previewID               int
+	previewBusy             bool
+	showPreview             bool
+	worktreeMode            bool
+	worktreeBranch          string
+	worktreePaths           []string
+	worktreeBusy            bool
+	worktreeRoot            string
+	worktreeRecipe          *wktreeRecipe
+	worktreeRecipePath      string
+	worktreeRecipeMode      string
+	worktreeSelected        []bool
+	worktreeWorkspaceCursor int
+	worktreeForcePrompt     bool
+	mergedWorktrees         []worktreeItem
+	mergedWorktreeBusy      bool
+	closedWorktrees         []worktreeItem
+	closedWorktreeBusy      bool
+	prStatusPending         map[string]bool
+	prStatusLastFetch       map[string]time.Time
+	pathPRChecked           map[string]bool
+	startupCmd              tea.Cmd
 }
 
 const (
@@ -667,7 +670,7 @@ func loadWktreeRecipe(path string) (*wktreeRecipe, string, error) {
 			if recipe.WorkspaceMode == "" {
 				recipe.WorkspaceMode = "single"
 			}
-			if recipe.WorkspaceMode != "single" && recipe.WorkspaceMode != "all" {
+			if recipe.WorkspaceMode != "single" && recipe.WorkspaceMode != "all" && recipe.WorkspaceMode != "selected" {
 				return nil, candidate, fmt.Errorf("invalid .wktree.yaml workspace_mode %q", recipe.WorkspaceMode)
 			}
 			return &recipe, candidate, nil
@@ -680,6 +683,57 @@ func loadWktreeRecipe(path string) (*wktreeRecipe, string, error) {
 		}
 	}
 	return nil, "", nil
+}
+
+// ensureWorktreeSelection initializes (or resizes) the per-workspace toggle
+// state used by "selected" mode. It defaults to the recipe's default_workspaces
+// when configured, otherwise every workspace on. An existing selection of the
+// right size is preserved, so tabbing away and back keeps the user's picks.
+func (m *model) ensureWorktreeSelection() {
+	if m.worktreeRecipe == nil {
+		m.worktreeSelected = nil
+		m.worktreeWorkspaceCursor = 0
+		return
+	}
+	n := len(m.worktreeRecipe.Workspaces)
+	if n == 0 {
+		m.worktreeSelected = nil
+		m.worktreeWorkspaceCursor = 0
+		return
+	}
+	if len(m.worktreeSelected) == n {
+		return
+	}
+	m.worktreeSelected = make([]bool, n)
+	defaults := make(map[string]bool, len(m.worktreeRecipe.DefaultWorkspaces))
+	for _, name := range m.worktreeRecipe.DefaultWorkspaces {
+		defaults[name] = true
+	}
+	for i, workspace := range m.worktreeRecipe.Workspaces {
+		if len(defaults) > 0 {
+			m.worktreeSelected[i] = defaults[workspace.Name]
+		} else {
+			m.worktreeSelected[i] = true
+		}
+	}
+	if m.worktreeWorkspaceCursor >= n {
+		m.worktreeWorkspaceCursor = max(0, n-1)
+	}
+}
+
+// selectedWorkspaceNames returns the names of the workspaces toggled on in
+// "selected" mode, in recipe order.
+func (m *model) selectedWorkspaceNames() []string {
+	if m.worktreeRecipe == nil {
+		return nil
+	}
+	var names []string
+	for i, workspace := range m.worktreeRecipe.Workspaces {
+		if i < len(m.worktreeSelected) && m.worktreeSelected[i] {
+			names = append(names, workspace.Name)
+		}
+	}
+	return names
 }
 
 func expandHomePath(path string) (string, error) {
@@ -1721,9 +1775,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.worktreeRecipeMode = "single"
 					case "single":
 						m.worktreeRecipeMode = "all"
-					default:
+					case "all":
+						if len(m.worktreeRecipe.Workspaces) > 1 {
+							m.worktreeRecipeMode = "selected"
+							m.ensureWorktreeSelection()
+						} else {
+							m.worktreeRecipeMode = "none"
+						}
+					default: // "selected"
 						m.worktreeRecipeMode = "none"
 					}
+				}
+			case "up":
+				if m.worktreeRecipeMode == "selected" && m.worktreeWorkspaceCursor > 0 {
+					m.worktreeWorkspaceCursor--
+				}
+			case "down":
+				if m.worktreeRecipeMode == "selected" && m.worktreeWorkspaceCursor < len(m.worktreeSelected)-1 {
+					m.worktreeWorkspaceCursor++
 				}
 			case "enter":
 				if m.worktreeBranch == "" {
@@ -1732,8 +1801,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.err = nil
 				if m.worktreeRecipe != nil && m.worktreeRecipeMode != "none" {
+					var selected []string
+					if m.worktreeRecipeMode == "selected" {
+						selected = m.selectedWorkspaceNames()
+						if len(selected) == 0 {
+							m.err = fmt.Errorf("select at least one workspace")
+							return m, nil
+						}
+					}
 					m.worktreeBusy = true
-					return m, runWktreeNew(m.worktreeRecipePath, m.worktreeRecipeMode, m.worktreeBranch)
+					return m, runWktreeNew(m.worktreeRecipePath, m.worktreeRecipeMode, m.worktreeBranch, selected)
 				}
 				return m, m.validateWorktreeBranch()
 			case "backspace":
@@ -1748,6 +1825,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.worktreePaths = m.calculateWorktreePaths()
 				m.err = nil
 			default:
+				if m.worktreeRecipeMode == "selected" && key == " " && len(m.worktreeSelected) > 0 {
+					m.worktreeSelected[m.worktreeWorkspaceCursor] = !m.worktreeSelected[m.worktreeWorkspaceCursor]
+					return m, nil
+				}
 				if len(msg.Runes) > 0 && !msg.Alt && !msg.Paste {
 					m.worktreeBranch += string(msg.Runes)
 					m.worktreePaths = m.calculateWorktreePaths()
@@ -1966,6 +2047,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.worktreeRecipe, m.worktreeRecipePath = recipe, recipePath
 				if recipe != nil {
 					m.worktreeRecipeMode = recipe.WorkspaceMode
+					m.ensureWorktreeSelection()
 				}
 			}
 			m.err = nil
@@ -3133,15 +3215,30 @@ func wktreeWorkspaceRepoPath(workspace struct {
 	return displayPath(filepath.Clean(repo), os.Getenv("HOME"))
 }
 
-func wktreeLayoutPreview(recipe *wktreeRecipe, recipePath, mode string, width int) []string {
-	workspaces := recipe.Workspaces
-	if mode == "single" && len(workspaces) > 1 {
-		workspaces = workspaces[:1]
+func wktreeLayoutPreview(recipe *wktreeRecipe, recipePath, mode string, width int, selected []bool) []string {
+	all := recipe.Workspaces
+	var indices []int
+	switch mode {
+	case "single":
+		if len(all) > 0 {
+			indices = []int{0}
+		}
+	case "selected":
+		for i := range all {
+			if i < len(selected) && selected[i] {
+				indices = append(indices, i)
+			}
+		}
+	default: // "all" and others show every workspace
+		for i := range all {
+			indices = append(indices, i)
+		}
 	}
 	var lines []string
-	for i, workspace := range workspaces {
+	for display, i := range indices {
+		workspace := all[i]
 		connector := "├─"
-		if i == len(workspaces)-1 {
+		if display == len(indices)-1 {
 			connector = "└─"
 		}
 		lines = append(lines, connector+" "+workspace.Name+"  "+wktreeWorkspaceRepoPath(workspace, recipePath))
@@ -3150,6 +3247,26 @@ func wktreeLayoutPreview(recipe *wktreeRecipe, recipePath, mode string, width in
 		}
 	}
 	return lines
+}
+
+// renderWorktreeChecklist renders the multi-select workspace list used in
+// "selected" mode: a checkbox, the workspace name and its repo path, with the
+// cursor row highlighted.
+func (m *model) renderWorktreeChecklist() string {
+	var rows []string
+	for i, workspace := range m.worktreeRecipe.Workspaces {
+		mark := "☐"
+		if i < len(m.worktreeSelected) && m.worktreeSelected[i] {
+			mark = "☑"
+		}
+		label := mark + " " + workspace.Name + "  " + wktreeWorkspaceRepoPath(workspace, m.worktreeRecipePath)
+		if i == m.worktreeWorkspaceCursor {
+			rows = append(rows, focusStyle.Render("› "+label))
+		} else {
+			rows = append(rows, dimStyle.Render("  "+label))
+		}
+	}
+	return strings.Join(rows, "\n") + "\n"
 }
 
 func renderPreviewLines(lines []string, fieldWidth int) string {
@@ -3261,13 +3378,17 @@ func (m model) popupView(width int) string {
 			if entries := m.worktreeEntries(); len(entries) == 1 {
 				repoPath = entries[0].path
 			}
-			layout := wktreeLayoutPreview(m.worktreeRecipe, m.worktreeRecipePath, m.worktreeRecipeMode, fieldWidth)
-			pathsField = "\n\n" + dimStyle.Render("Recipe: "+displayPath(m.worktreeRecipePath, os.Getenv("HOME"))) + "\n" +
+			// wktree uses this generated-layout identity in WKTREE_KITTY_SESSION;
+			// it is not Kitty's native session name.
+			header := "\n\n" + dimStyle.Render("Recipe: "+displayPath(m.worktreeRecipePath, os.Getenv("HOME"))) + "\n" +
 				dimStyle.Render("Mode: "+m.worktreeRecipeMode) + "\n" +
-				// wktree uses this generated-layout identity in WKTREE_KITTY_SESSION;
-				// it is not Kitty's native session name.
-				dimStyle.Render("wktree layout: "+wktreeSessionPreview(m.worktreeRecipe, repoPath, m.worktreeBranch)) + "\n" +
-				dimStyle.Render(strings.Join(layout, "\n"))
+				dimStyle.Render("wktree layout: "+wktreeSessionPreview(m.worktreeRecipe, repoPath, m.worktreeBranch)) + "\n"
+			if m.worktreeRecipeMode == "selected" {
+				pathsField = header + m.renderWorktreeChecklist()
+			} else {
+				layout := wktreeLayoutPreview(m.worktreeRecipe, m.worktreeRecipePath, m.worktreeRecipeMode, fieldWidth, m.worktreeSelected)
+				pathsField = header + dimStyle.Render(strings.Join(layout, "\n"))
+			}
 		} else if len(m.worktreePaths) > 0 {
 			if m.worktreeRecipe != nil {
 				pathsField = "\n\n" + dimStyle.Render("Mode: none (native Kesh worktree)")
@@ -3294,6 +3415,8 @@ func (m model) popupView(width int) string {
 		field = lipgloss.NewStyle().Width(fieldWidth).Render(branchField + pathsField)
 		if m.worktreeBusy {
 			help = "Creating…"
+		} else if m.worktreeRecipe != nil && m.worktreeRecipeMode == "selected" {
+			help = "↑↓ choose  •  space toggle  •  Tab mode  •  Enter create  •  Esc cancel"
 		} else if m.worktreeRecipe != nil {
 			help = "Enter create  •  Tab mode  •  Esc cancel"
 		} else {
@@ -4696,15 +4819,20 @@ func dirExists(path string) bool {
 
 // runWktreeNew delegates recipe-driven creation and Kitty layout setup to
 // wktree; Kesh only owns the interactive branch prompt and refresh afterward.
-func runWktreeNew(recipePath, mode, branch string) tea.Cmd {
+func runWktreeNew(recipePath, mode, branch string, selected []string) tea.Cmd {
 	return func() tea.Msg {
 		wktree := findCommand("wktree", filepath.Join(os.Getenv("HOME"), ".local", "bin", "wktree"), "/opt/homebrew/bin/wktree")
 		if wktree == "" {
 			return worktreeMsg{err: fmt.Errorf("wktree was not found")}
 		}
 		args := []string{"new"}
-		if mode == "all" {
+		switch mode {
+		case "all":
 			args = append(args, "--workspaces")
+		case "selected":
+			for _, name := range selected {
+				args = append(args, "--workspace", name)
+			}
 		}
 		args = append(args, branch)
 		command := exec.Command(wktree, args...)
