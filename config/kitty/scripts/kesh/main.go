@@ -177,6 +177,13 @@ type createMsg struct{ err error }
 
 type cloneMsg struct{ err error }
 
+type prCheckoutMsg struct{ err error }
+
+type prPreviewMsg struct {
+	value  string
+	branch string
+}
+
 type saveSessionMsg struct {
 	entryIndex int
 	record     savedSessionRecord
@@ -280,6 +287,9 @@ type keshConfig struct {
 	Worktree struct {
 		Root string `toml:"root"`
 	} `toml:"worktree"`
+	Checkout struct {
+		Root string `toml:"root"`
+	} `toml:"checkout"`
 }
 
 type model struct {
@@ -294,6 +304,11 @@ type model struct {
 	createValue            string
 	cloning                bool
 	cloneBusy              bool
+	prCheckout             bool
+	prCheckoutBusy         bool
+	prCheckoutValue        string
+	prCheckoutBranch       string
+	checkoutRoot           string
 	saving                 bool
 	saveConfirming         bool
 	saveForeground         bool
@@ -576,6 +591,38 @@ func loadWorktreeRoot() (string, error) {
 	}
 	if !filepath.IsAbs(root) {
 		return "", fmt.Errorf("worktree root must be an absolute or home-relative path")
+	}
+	return filepath.Clean(root), nil
+}
+
+// loadCheckoutRoot returns the directory searched for an existing clone when
+// checking out a pull request. It defaults to the clone root so the feature
+// works with no configuration, and only falls back here when [checkout].root
+// is unset — a configured value always wins.
+func loadCheckoutRoot() (string, error) {
+	root, err := loadCloneRoot()
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(configPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return root, nil
+		}
+		return "", fmt.Errorf("read Kesh config: %w", err)
+	}
+	var config keshConfig
+	if _, err := toml.Decode(string(content), &config); err != nil {
+		return "", fmt.Errorf("invalid Kesh config: %w", err)
+	}
+	if configured := strings.TrimSpace(config.Checkout.Root); configured != "" {
+		root, err = expandHomePath(configured)
+		if err != nil {
+			return "", fmt.Errorf("invalid checkout root: %w", err)
+		}
+	}
+	if !filepath.IsAbs(root) {
+		return "", fmt.Errorf("checkout root must be an absolute or home-relative path")
 	}
 	return filepath.Clean(root), nil
 }
@@ -1190,6 +1237,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
+	case prCheckoutMsg:
+		m.prCheckoutBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		return m, tea.Quit
+	case prPreviewMsg:
+		// A lookup may finish after the input changed; never show its stale path.
+		if m.prCheckout && msg.value == m.prCheckoutValue {
+			m.prCheckoutBranch = msg.branch
+		}
+		return m, nil
 	case worktreeMsg:
 		if m.worktreeBusy {
 			// Creation completed
@@ -1475,7 +1535,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selected := m.closeRow
 				return m, runClose(m.kitty, m.zoxide, m.entries[selected.entryIndex], selected)
 			case "f":
-				if isWorktreeRow && m.worktreeForcePrompt {
+				if isWorktreeRow {
 					m.closeBusy = true
 					m.err = nil
 					return m, m.runRemoveWorktree(true)
@@ -1626,6 +1686,63 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.prCheckout {
+			if m.prCheckoutBusy {
+				return m, nil
+			}
+			previousValue := m.prCheckoutValue
+			switch key {
+			case "esc":
+				m.prCheckout = false
+				m.prCheckoutValue = ""
+				m.prCheckoutBranch = ""
+				m.checkoutRoot = ""
+				m.err = nil
+			case "enter":
+				owner, repo, number, useSelected, err := parsePullRequestInput(m.prCheckoutValue)
+				if err != nil {
+					m.err = err
+					return m, nil
+				}
+				selectedRepoPath := ""
+				if useSelected {
+					if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+						m.err = fmt.Errorf("select a project or paste a full PR URL")
+						return m, nil
+					}
+					selectedRepoPath = m.entries[m.rows[m.cursor].entryIndex].path
+					if selectedRepoPath == "" {
+						m.err = fmt.Errorf("select a project or paste a full PR URL")
+						return m, nil
+					}
+				}
+				m.prCheckoutBusy = true
+				m.err = nil
+				return m, runCheckoutPR(m.kitty, m.zoxide, owner, repo, number, selectedRepoPath, m.checkoutRoot, m.cloneRoot)
+			case "backspace":
+				runes := []rune(m.prCheckoutValue)
+				if len(runes) > 0 {
+					m.prCheckoutValue = string(runes[:len(runes)-1])
+					m.err = nil
+				}
+			case "ctrl+u":
+				m.prCheckoutValue = ""
+				m.err = nil
+			default:
+				if len(msg.Runes) > 0 && !msg.Alt {
+					m.prCheckoutValue += string(msg.Runes)
+					m.err = nil
+				}
+			}
+			if m.prCheckoutValue == previousValue {
+				return m, nil
+			}
+			m.prCheckoutBranch = ""
+			if owner, repo, number, selected, err := parsePullRequestInput(m.prCheckoutValue); err == nil && !selected {
+				return m, resolvePRPreview(m.prCheckoutValue, owner, repo, number)
+			}
+			return m, nil
+		}
 		if m.searching {
 			switch key {
 			case "esc", "enter":
@@ -1708,6 +1825,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cloneDestination = displayPath(root, os.Getenv("HOME"))
 			m.cloneDestinationFocus = false
 			m.cloneDestinationEdited = false
+			m.err = nil
+			return m, nil
+		case "C":
+			cloneRoot, err := loadCloneRoot()
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			checkoutRoot, err := loadCheckoutRoot()
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			m.prCheckout = true
+			m.prCheckoutValue = ""
+			m.prCheckoutBranch = ""
+			m.cloneRoot = cloneRoot
+			m.checkoutRoot = checkoutRoot
 			m.err = nil
 			return m, nil
 		case "r":
@@ -2393,6 +2528,21 @@ func (m model) View() string {
 		content = strings.Join(overlayPopup(strings.Split(content, "\n"), popup, workspaceWidth), "\n")
 	}
 	content = lipgloss.PlaceHorizontal(outerWidth, lipgloss.Center, content)
+	// Keep the alternate-screen frame at a stable height. Some detail values
+	// wrap differently (notably the worktree summary), and an extra rendered
+	// line makes the terminal scroll the entire view upward.
+	if m.height > 3 {
+		// The two vertical padding rows are outside this fixed content frame.
+		frameHeight := m.height - 2
+		lines := strings.Split(content, "\n")
+		if len(lines) > frameHeight {
+			lines = lines[:frameHeight]
+		}
+		for len(lines) < frameHeight {
+			lines = append(lines, "")
+		}
+		content = strings.Join(lines, "\n")
+	}
 	return lipgloss.NewStyle().Padding(1, 2).Render(content)
 }
 
@@ -2707,13 +2857,67 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 	return renderDetailPanel(title, fields, "Enter open · e worktrees", nil, width, height, compact)
 }
 
+// prCheckoutPreview renders the dim summary block under the PR input. Once gh
+// resolves the PR head, it shows the exact worktree path that checkout uses. A
+// bare PR number has no owner/repo to resolve until its selected project is
+// inspected, so only that project is noted.
+func prCheckoutPreview(value, branch, selectedRepoPath, checkoutRoot, cloneRoot, worktreeRoot string, fieldWidth int) string {
+	owner, repo, _, useSelected, err := parsePullRequestInput(value)
+	if err != nil {
+		return ""
+	}
+	var lines []string
+	if useSelected || owner == "" {
+		if selectedRepoPath == "" {
+			lines = append(lines, "Root repo path: select a project")
+		} else {
+			lines = append(lines, "Root repo path: "+displayPath(selectedRepoPath, os.Getenv("HOME")))
+		}
+		return renderPreviewLines(lines, fieldWidth)
+	}
+	repoPath := filepath.Join(checkoutRoot, owner, repo)
+	newClone := !dirExists(repoPath)
+	if newClone {
+		repoPath = filepath.Join(cloneRoot, owner, repo)
+	}
+	rootNote := ""
+	if newClone {
+		rootNote = " (new clone)"
+	}
+	lines = append(lines, "Root repo path: "+displayPath(repoPath, os.Getenv("HOME"))+rootNote)
+	// Worktrees land under <worktreeRoot>/<owner>/<repo>/<branch>; fall back to
+	// the clone root when the worktree root is unconfigured so the path is still
+	// informative.
+	root := worktreeRoot
+	if root == "" {
+		root = cloneRoot
+	}
+	if branch == "" {
+		lines = append(lines, "Worktree path: resolving PR branch…")
+		return renderPreviewLines(lines, fieldWidth)
+	}
+	worktreePath := displayPath(filepath.Join(root, owner, repo, worktreeDirectoryName(branch)), os.Getenv("HOME"))
+	lines = append(lines, "Worktree path: "+worktreePath+rootNote)
+	return renderPreviewLines(lines, fieldWidth)
+}
+
+func renderPreviewLines(lines []string, fieldWidth int) string {
+	wrapped := lipgloss.NewStyle().Width(fieldWidth).Render(strings.Join(lines, "\n"))
+	return "\n\n" + dimStyle.Render(wrapped)
+}
+
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.mergedWorktreeBusy && !m.closedWorktreeBusy {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy && !m.closedWorktreeBusy {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
 	if m.cloning || m.saveForeground || m.worktreeMode || (m.closing && (m.closeRow.section == "wt-item" || len(m.closedWorktrees) > 0)) {
 		popupWidth = min(72, max(36, width-6))
+	}
+	// PR URLs and worktree paths are often long. Let this form use the available
+	// terminal width instead of leaving an artificial empty right-hand column.
+	if m.prCheckout {
+		popupWidth = min(100, max(36, width-6))
 	}
 	var title, field, help string
 	if m.mergedWorktreeBusy {
@@ -2827,6 +3031,33 @@ func (m model) popupView(width int) string {
 		} else {
 			help = "Enter create  •  Esc cancel"
 		}
+	} else if m.prCheckout {
+		title = "Checkout pull request"
+		fieldWidth := popupWidth - 6
+		cursor := "█"
+		if m.prCheckoutBusy {
+			cursor = ""
+		}
+		inputField := lipgloss.NewStyle().Width(fieldWidth).Render(
+			dimStyle.Render("PR: ") + focusStyle.Render(m.prCheckoutValue+cursor),
+		)
+		previewField := ""
+		if !m.prCheckoutBusy {
+			selectedRepoPath := ""
+			if m.cursor >= 0 && m.cursor < len(m.rows) {
+				entryIndex := m.rows[m.cursor].entryIndex
+				if entryIndex >= 0 && entryIndex < len(m.entries) {
+					selectedRepoPath = m.entries[entryIndex].path
+				}
+			}
+			previewField = prCheckoutPreview(m.prCheckoutValue, m.prCheckoutBranch, selectedRepoPath, m.checkoutRoot, m.cloneRoot, m.worktreeRoot, fieldWidth)
+		}
+		field = inputField + previewField
+		if m.prCheckoutBusy {
+			help = "Fetching…"
+		} else {
+			help = "Enter checkout  •  Esc cancel"
+		}
 	} else if m.pinning {
 		title = "Pin " + m.entries[m.pinEntry].name
 		slot := "█"
@@ -2853,7 +3084,11 @@ func (m model) popupView(width int) string {
 		case m.worktreeForcePrompt:
 			help = "Press f to force  •  Esc cancel"
 		default:
-			help = "Press y to confirm  •  Esc cancel"
+			if m.closeRow.section == "wt-item" {
+				help = "y remove  •  f force  •  Esc cancel"
+			} else {
+				help = "Press y to confirm  •  Esc cancel"
+			}
 		}
 	}
 	body := accentStyle.Render(title) + "\n\n" + field + "\n\n" + dimStyle.Render(help)
@@ -3908,6 +4143,100 @@ func repositoryName(repository string) (string, error) {
 	return name, nil
 }
 
+// parsePullRequestInput accepts a pull request reference and returns the GitHub
+// owner, repository, and PR number. It recognises three shapes:
+//
+//   - a full URL: https://github.com/owner/repo/pull/123 (optionally with a
+//     trailing path such as /files); the host may differ for self-hosted GitHub
+//   - owner/repo#123
+//   - a bare number (123), in which case useSelected is true and the caller
+//     resolves owner/repo from the project under the cursor
+//
+// An empty value, a non-numeric PR, or an SSH git URL is an error.
+func parsePullRequestInput(value string) (owner, repo string, number int, useSelected bool, err error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "", 0, false, fmt.Errorf("enter a pull request URL or number")
+	}
+	if strings.ContainsAny(value, "\r\n") {
+		return "", "", 0, false, fmt.Errorf("pull request reference cannot contain a line break")
+	}
+
+	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		parsed, parseErr := url.Parse(value)
+		if parseErr != nil || parsed.Host == "" {
+			return "", "", 0, false, fmt.Errorf("could not parse pull request URL %q", value)
+		}
+		segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		// Expect owner/repo/pull/<number> [...]; "pulls" is GitHub's plural alias.
+		pullIndex := -1
+		for i, segment := range segments {
+			if segment == "pull" || segment == "pulls" {
+				pullIndex = i
+				break
+			}
+		}
+		if pullIndex < 0 || pullIndex < 2 {
+			return "", "", 0, false, fmt.Errorf("could not find owner/repo/pull/<number> in %q", value)
+		}
+		owner = segments[pullIndex-2]
+		repo = strings.TrimSuffix(segments[pullIndex-1], ".git")
+		number, err = parsePRNumber(segments[pullIndex+1:])
+		if err != nil {
+			return "", "", 0, false, err
+		}
+		return owner, repo, number, false, nil
+	}
+
+	if strings.HasPrefix(value, "git@") || strings.Contains(value, "://") {
+		return "", "", 0, false, fmt.Errorf("paste the pull request's web URL, not a git URL")
+	}
+
+	if hash := strings.Index(value, "#"); hash >= 0 {
+		left := strings.TrimSpace(value[:hash])
+		number, err = parsePRNumber([]string{strings.TrimSpace(value[hash+1:])})
+		if err != nil {
+			return "", "", 0, false, err
+		}
+		parts := strings.Split(strings.Trim(left, "/"), "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return "", "", 0, false, fmt.Errorf("owner/repo#<number> expected, got %q", value)
+		}
+		return parts[0], strings.TrimSuffix(parts[1], ".git"), number, false, nil
+	}
+
+	// Bare number: the caller resolves owner/repo from the selected project.
+	number, err = parsePRNumber([]string{value})
+	if err != nil {
+		return "", "", 0, false, err
+	}
+	return "", "", number, true, nil
+}
+
+// parsePRNumber reads the leading digits of the first non-empty segment and
+// rejects anything that is not a positive PR number.
+func parsePRNumber(segments []string) (int, error) {
+	for _, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		digits := segment
+		for i, r := range segment {
+			if r < '0' || r > '9' {
+				digits = segment[:i]
+				break
+			}
+		}
+		number, convErr := strconv.Atoi(digits)
+		if convErr != nil || number <= 0 {
+			return 0, fmt.Errorf("invalid pull request number %q", segment)
+		}
+		return number, nil
+	}
+	return 0, fmt.Errorf("could not find a pull request number")
+}
+
 func resolveCloneDestination(value, root string) (string, error) {
 	destination, err := expandHomePath(value)
 	if err != nil {
@@ -3941,6 +4270,160 @@ func runClone(kitty, zoxide, repository, destination string) tea.Cmd {
 		}
 		return cloneMsg{}
 	}
+}
+
+// runCheckoutPR turns a GitHub pull request into an open workspace. It resolves
+// an existing local clone (the project under the cursor, or a candidate under
+// the checkout root), cloning first when none exists; fetches the PR head into a
+// local branch named after the PR's head ref; creates a worktree for it; and
+// opens the workspace. If a worktree on that branch already exists it is focused
+// instead, so re-checking out the same PR is a no-op.
+// resolvePRPreview fetches only the head branch for the input preview. Its
+// value is carried with the result so Update can ignore stale lookups.
+func resolvePRPreview(value, owner, repo string, number int) tea.Cmd {
+	return func() tea.Msg {
+		branch, _ := lookupPRHeadBranch(owner, repo, number, "")
+		return prPreviewMsg{value: value, branch: branch}
+	}
+}
+
+func lookupPRHeadBranch(owner, repo string, number int, dir string) (string, error) {
+	gh := findCommand("gh",
+		filepath.Join(os.Getenv("HOME"), ".local", "share", "mise", "shims", "gh"),
+		"/opt/homebrew/bin/gh",
+		"/usr/local/bin/gh",
+	)
+	if gh == "" {
+		return "", fmt.Errorf("gh was not found")
+	}
+	view := exec.Command(gh, "pr", "view", strconv.Itoa(number), "--repo", owner+"/"+repo, "--json", "headRefName")
+	view.Dir = dir
+	output, err := view.CombinedOutput()
+	if err != nil {
+		return "", commandError("gh pr view", output, err)
+	}
+	var pr struct {
+		HeadRefName string `json:"headRefName"`
+	}
+	if err := json.Unmarshal(output, &pr); err != nil {
+		return "", fmt.Errorf("parse pull request: %w", err)
+	}
+	branch := strings.TrimSpace(pr.HeadRefName)
+	if branch == "" {
+		return "", fmt.Errorf("pull request #%d has no head branch", number)
+	}
+	return branch, nil
+}
+
+func runCheckoutPR(kitty, zoxide, owner, repo string, number int, selectedRepoPath, checkoutRoot, cloneRoot string) tea.Cmd {
+	cloneURL := "https://github.com/" + owner + "/" + repo + ".git"
+	return func() tea.Msg {
+		var probe model // gives access to getRepoOwner without model state
+		matchesRepo := func(path string) bool {
+			remoteOwner, remoteRepo := probe.getRepoOwner(path)
+			return strings.EqualFold(remoteOwner, owner) && strings.EqualFold(remoteRepo, repo)
+		}
+
+		// 1. Resolve an existing local clone, preferring the selected project.
+		repoPath := ""
+		if selectedRepoPath != "" && matchesRepo(selectedRepoPath) {
+			repoPath = selectedRepoPath
+		}
+		if repoPath == "" {
+			if candidate := filepath.Join(checkoutRoot, owner, repo); dirExists(candidate) && matchesRepo(candidate) {
+				repoPath = candidate
+			}
+		}
+
+		// 2. Clone when no local clone is found.
+		if repoPath == "" {
+			destination := filepath.Join(cloneRoot, owner, repo)
+			if _, err := os.Stat(destination); err == nil {
+				return prCheckoutMsg{err: fmt.Errorf("clone destination already exists: %s", displayPath(destination, os.Getenv("HOME")))}
+			} else if !os.IsNotExist(err) {
+				return prCheckoutMsg{err: fmt.Errorf("check clone destination: %w", err)}
+			}
+			if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+				return prCheckoutMsg{err: fmt.Errorf("create clone directory: %w", err)}
+			}
+			if err := run("git", "clone", "--", cloneURL, destination); err != nil {
+				return prCheckoutMsg{err: fmt.Errorf("clone repository: %w", err)}
+			}
+			repoPath = destination
+		}
+
+		// 3. Resolve the PR's head branch via gh.
+		branch, err := lookupPRHeadBranch(owner, repo, number, repoPath)
+		if err != nil {
+			return prCheckoutMsg{err: err}
+		}
+		return checkoutPRBranch(kitty, zoxide, owner, repo, number, branch, repoPath, cloneURL, matchesRepo)
+	}
+}
+
+// checkoutPRBranch is the worktree-creating half of runCheckoutPR, split out so
+// the head branch is the only PR detail it needs.
+func checkoutPRBranch(kitty, zoxide, owner, repo string, number int, branch, repoPath, cloneURL string, matchesRepo func(string) bool) tea.Msg {
+	// 4. Idempotency: a worktree on this branch already exists → focus it.
+	listOutput, err := exec.Command("git", "-C", repoPath, "worktree", "list", "--porcelain").CombinedOutput()
+	if err != nil {
+		return prCheckoutMsg{err: fmt.Errorf("git worktree list: %w", err)}
+	}
+	for _, wt := range parseWorktreePorcelain(string(listOutput)) {
+		if wt.branch == branch {
+			_ = run(zoxide, "add", "--", wt.path)
+			return prCheckoutMsg{err: openProjectSession(kitty, zoxide, wt.path, false)}
+		}
+	}
+
+	// 5. Fetch the PR head into a local branch and create a worktree for it.
+	worktreeRoot, err := loadWorktreeRoot()
+	if err != nil {
+		return prCheckoutMsg{err: err}
+	}
+	wtPath := filepath.Join(worktreeRoot, owner, repo, worktreeDirectoryName(branch))
+	if _, err := os.Stat(wtPath); err == nil {
+		return prCheckoutMsg{err: fmt.Errorf("worktree already exists at %s", displayPath(wtPath, os.Getenv("HOME")))}
+	} else if !os.IsNotExist(err) {
+		return prCheckoutMsg{err: fmt.Errorf("check worktree path: %w", err)}
+	}
+	if err := os.MkdirAll(filepath.Dir(wtPath), 0o755); err != nil {
+		return prCheckoutMsg{err: fmt.Errorf("create worktree directory: %w", err)}
+	}
+	// Fork-origin checkouts still resolve the PR via the canonical GitHub URL.
+	fetchSource := "origin"
+	if !matchesRepo(repoPath) {
+		fetchSource = cloneURL
+	}
+	// The local PR branch may have been fetched previously and rewritten since;
+	// PR refs are not guaranteed to fast-forward, so update this managed ref
+	// explicitly rather than rejecting a valid re-checkout.
+	fetch := exec.Command("git", "-C", repoPath, "fetch", "--", fetchSource,
+		fmt.Sprintf("+refs/pull/%d/head:refs/heads/%s", number, branch))
+	if fetchOutput, ferr := fetch.CombinedOutput(); ferr != nil {
+		return prCheckoutMsg{err: commandError("git fetch", fetchOutput, ferr)}
+	}
+	add := exec.Command("git", "-C", repoPath, "worktree", "add", wtPath, branch)
+	if addOutput, aerr := add.CombinedOutput(); aerr != nil {
+		return prCheckoutMsg{err: commandError("git worktree add", addOutput, aerr)}
+	}
+
+	// 6. Open the workspace.
+	_ = run(zoxide, "add", "--", wtPath)
+	return prCheckoutMsg{err: openProjectSession(kitty, zoxide, wtPath, false)}
+}
+
+// worktreeDirectoryName keeps a PR branch in one directory. Git branch names
+// commonly contain slashes (for example fix/widget), which should not create
+// an accidental nested directory tree beneath the worktree root.
+func worktreeDirectoryName(branch string) string {
+	return strings.ReplaceAll(branch, "/", "-")
+}
+
+// dirExists reports whether path is an existing directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
@@ -4766,8 +5249,37 @@ func (m *model) invalidateWorktrees(r row) {
 	}
 }
 
-// runRemoveWorktree deletes the selected worktree via git. A normal attempt
-// runs first; the caller offers --force (worktreeForcePrompt) if it fails.
+// worktreeWindowIDs returns live Kitty windows rooted in target (including a
+// child directory). Querying Kitty here, rather than relying on the picker
+// snapshot, prevents deleting a worktree opened after Kesh started.
+func worktreeWindowIDs(kitty, target string) ([]int, error) {
+	output, err := exec.Command(kitty, "@", "ls").Output()
+	if err != nil {
+		return nil, fmt.Errorf("kitty @ ls: %w", err)
+	}
+	var state kittyState
+	if err := json.Unmarshal(output, &state); err != nil {
+		return nil, fmt.Errorf("decode kitty state: %w", err)
+	}
+	target = filepath.Clean(target)
+	prefix := target + string(filepath.Separator)
+	var ids []int
+	for _, osWindow := range state {
+		for _, tab := range osWindow.Tabs {
+			for _, window := range tab.Windows {
+				cwd := filepath.Clean(window.CWD)
+				if cwd == target || strings.HasPrefix(cwd, prefix) {
+					ids = append(ids, window.ID)
+				}
+			}
+		}
+	}
+	return ids, nil
+}
+
+// runRemoveWorktree deletes the selected worktree via git. It first protects
+// live Kitty windows from being left in a deleted working directory; force
+// removal closes those windows, then removes the worktree.
 func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 	r := m.closeRow
 	worktrees := m.worktreesForRow(r)
@@ -4790,6 +5302,20 @@ func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 	target := worktrees[r.wt].path
 	entryIndex, tabIndex, windowIndex := r.entryIndex, r.tabIndex, r.windowIndex
 	return func() tea.Msg {
+		windowIDs, windowErr := worktreeWindowIDs(m.kitty, target)
+		if windowErr != nil {
+			return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, forceTried: force, err: windowErr}
+		}
+		if len(windowIDs) > 0 && !force {
+			return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, err: fmt.Errorf("%d Kitty window(s) are open in this worktree; press f to close them and force-remove", len(windowIDs))}
+		}
+		if force {
+			for _, id := range windowIDs {
+				if err := run(m.kitty, "@", "close-window", "--match", "id:"+strconv.Itoa(id)); err != nil {
+					return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, forceTried: true, err: fmt.Errorf("close Kitty window %d: %w", id, err)}
+				}
+			}
+		}
 		args := []string{"-C", dir, "worktree", "remove"}
 		if force {
 			args = append(args, "--force")

@@ -1167,6 +1167,71 @@ func TestRepositoryNameAndCloneDestination(t *testing.T) {
 	}
 }
 
+func TestParsePullRequestInput(t *testing.T) {
+	tests := []struct {
+		value       string
+		owner       string
+		repo        string
+		number      int
+		useSelected bool
+		wantErr     bool
+	}{
+		{"https://github.com/owner/repo/pull/123", "owner", "repo", 123, false, false},
+		{"https://github.com/owner/repo/pull/123/files", "owner", "repo", 123, false, false},
+		{"https://github.com/owner/repo/pulls/456", "owner", "repo", 456, false, false},
+		{"https://git.example.com/acme/widget/pull/9", "acme", "widget", 9, false, false},
+		{"owner/repo#123", "owner", "repo", 123, false, false},
+		{"  owner/repo#42  ", "owner", "repo", 42, false, false},
+		{"123", "", "", 123, true, false},
+		{"  7 ", "", "", 7, true, false},
+		// Errors
+		{"", "", "", 0, false, true},
+		{"git@github.com:owner/repo.git", "", "", 0, false, true},
+		{"https://github.com/owner/repo", "", "", 0, false, true},
+		{"owner/repo", "", "", 0, false, true},
+		{"https://github.com/owner/repo/pull/abc", "", "", 0, false, true},
+		{"owner#0", "", "", 0, false, true},
+		{"owner/repo#-3", "", "", 0, false, true},
+	}
+	for _, tt := range tests {
+		owner, repo, number, useSelected, err := parsePullRequestInput(tt.value)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("parsePullRequestInput(%q) expected error, got (%q, %q, %d, %v)", tt.value, owner, repo, number, useSelected)
+			}
+			continue
+		}
+		if err != nil || owner != tt.owner || repo != tt.repo || number != tt.number || useSelected != tt.useSelected {
+			t.Errorf("parsePullRequestInput(%q) = (%q, %q, %d, %v, %v), want (%q, %q, %d, %v, nil)",
+				tt.value, owner, repo, number, useSelected, err, tt.owner, tt.repo, tt.number, tt.useSelected)
+		}
+	}
+}
+
+func TestViewHeightStaysStableForWorktreeRows(t *testing.T) {
+	m := model{
+		width: 100, height: 24,
+		entries: []entry{{
+			key: "repo", name: "repo", path: "/workspace/repo", open: true,
+			worktreesOpen: true, worktreesLoaded: true,
+			worktrees: []worktreeItem{{branch: "master", path: "/workspace/repo"}, {branch: "fix/a-long-branch-name", path: "/workspace/worktree/repo/fix-a-long-branch-name"}},
+		}},
+	}
+	m.rebuildRows()
+	for cursor := range m.rows {
+		m.cursor = cursor
+		if got := lipgloss.Height(m.View()); got != m.height {
+			t.Fatalf("cursor %d view height = %d, want %d", cursor, got, m.height)
+		}
+	}
+}
+
+func TestWorktreeDirectoryName(t *testing.T) {
+	if got := worktreeDirectoryName("fix/verify-asset-sync-on-build"); got != "fix-verify-asset-sync-on-build" {
+		t.Fatalf("worktreeDirectoryName() = %q", got)
+	}
+}
+
 func TestCloneFormShowsAndUpdatesBothFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -1199,6 +1264,51 @@ func TestCloneFormShowsAndUpdatesBothFields(t *testing.T) {
 	m = updated.(model)
 	if m.cloneDestination != "~/code/custom" || !m.cloneDestinationEdited {
 		t.Fatalf("edited clone destination = %q, edited = %t", m.cloneDestination, m.cloneDestinationEdited)
+	}
+}
+
+func TestPRCheckoutPopupShowsResolvedTarget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	checkoutRoot := filepath.Join(home, "workspace")
+	cloneRoot := filepath.Join(home, "workspace")
+	worktreeRoot := filepath.Join(home, "worktree")
+	// Existing clone under the checkout root → preview shows the full worktree path.
+	if err := os.MkdirAll(filepath.Join(checkoutRoot, "owner", "repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := model{
+		prCheckout:   true,
+		checkoutRoot: checkoutRoot,
+		cloneRoot:    cloneRoot,
+		worktreeRoot: worktreeRoot,
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://github.com/owner/repo/pull/123"), Paste: true})
+	m = updated.(model)
+	if cmd == nil || m.prCheckoutValue == "" {
+		t.Fatalf("PR input not captured or preview lookup not started: %q (cmd=%v)", m.prCheckoutValue, cmd)
+	}
+	updated, _ = m.Update(prPreviewMsg{value: m.prCheckoutValue, branch: "feature/checkout"})
+	m = updated.(model)
+	popup := ansi.Strip(m.popupView(100))
+	if !strings.Contains(popup, "Checkout pull request") || !strings.Contains(popup, "Root repo path: ~/workspace/owner/repo") {
+		t.Fatalf("PR popup missing title/summary:\n%s", popup)
+	}
+	if !strings.Contains(popup, "Worktree path: ~/worktree/owner/repo/feature-checkout") {
+		t.Fatalf("PR popup does not show full worktree path:\n%s", popup)
+	}
+
+	// A repo not present locally → preview marks a fresh clone destination.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	m = updated.(model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://github.com/other/widget/pull/7")})
+	m = updated.(model)
+	updated, _ = m.Update(prPreviewMsg{value: m.prCheckoutValue, branch: "fix/widget"})
+	m = updated.(model)
+	popup = ansi.Strip(m.popupView(100))
+	if !strings.Contains(popup, "Root repo path: ~/workspace/other/widget (new clone)") || !strings.Contains(popup, "Worktree path: ~/worktree/other/widget/fix-widget (new clone)") {
+		t.Fatalf("PR popup does not show clone target:\n%s", popup)
 	}
 }
 

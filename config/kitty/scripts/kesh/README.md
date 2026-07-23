@@ -18,6 +18,7 @@ The picker starts in normal mode:
 - `space`: toggle a project or SSH host for a new multi-tab session
 - `n`: name and create a session with one tab per selected item
 - `c`: clone a Git repository into an editable destination and open it
+- `C`: check out a GitHub pull request (paste a URL, `owner/repo#123`, or a bare number on a selected project) — clones if needed, then creates a worktree on the PR head
 - `l`: expand or descend through session → tabs → windows
 - `h`: return to the parent or collapse the current level
 - `enter`: open a session, focus a tab, or focus a window
@@ -60,5 +61,12 @@ root = "~/workspace"
 ```
 
 Press `c` to open a form with the Git URL and inferred destination together. Use `tab` to switch fields, edit either value, then press `enter` to clone. After a successful clone, Kesh adds the directory to zoxide and opens its Kitty workspace.
+
+Press `C` to check out a GitHub pull request. Paste the PR's web URL (or `owner/repo#123`, or a bare number with the cursor on one of the project's rows). Kesh reuses an existing local clone — the project under the cursor, or a candidate under the checkout root — cloning first when none exists, then fetches the PR head and creates a worktree on its branch and opens the workspace. Re-checking out the same PR focuses the existing worktree instead of recreating it. The `[checkout] root` option in `config.toml` controls where existing clones are searched and defaults to the clone root:
+
+```toml
+[checkout]
+root = "~/workspace"
+```
 
 Workspace names are Kesh aliases stored in `${XDG_CONFIG_HOME:-~/.config}/kesh/names.json`. Kitty's internal session identity remains unchanged, so aliases can be edited without recreating a live session. Search matches both the alias and the original project or SSH name.
