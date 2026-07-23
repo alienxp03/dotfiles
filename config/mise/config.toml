@@ -18,11 +18,11 @@ rust   = "1.96.0"
 pnpm = "11.9.0"
 
 # AI agents
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.215", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "0.80.10"
-"npm:@openai/codex"                   = "0.144.6"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.218", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "0.81.1"
+"npm:@openai/codex"                   = "0.145.0"
 "npm:happy"                           = { version = "1.1.10", npm_args = "--ignore-scripts=false" }
-"npm:opencode-ai"                     = { version = "1.18.3", npm_args = "--ignore-scripts=false" }
+"npm:opencode-ai"                     = { version = "1.18.4", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
 "npm:promptfoo"                       = { version = "0.121.18", npm_args = "--ignore-scripts=false" }
 
