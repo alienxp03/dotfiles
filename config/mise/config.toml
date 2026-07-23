@@ -24,7 +24,6 @@ pnpm = "11.9.0"
 "npm:happy"                           = { version = "1.1.10", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.18.4", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
-"npm:promptfoo"                       = { version = "0.121.18", npm_args = "--ignore-scripts=false" }
 
 # Python tooling
 "pipx:httpie" = "3.2.4"
