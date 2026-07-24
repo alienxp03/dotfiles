@@ -4,7 +4,6 @@
     "version": "LuaJIT"
   },
   "workspace": {
-    "checkThirdParty": false,
-    "library": ["/opt/homebrew/Cellar/neovim/0.11.6/share/nvim/runtime/lua"]
+    "checkThirdParty": false
   }
 }

@@ -7,7 +7,6 @@ return {
   },
   config = function()
     local mason_lspconfig = require("mason-lspconfig")
-    local lspconfig = require("lspconfig")
     local capabilities = require("blink.cmp").get_lsp_capabilities()
 
     mason_lspconfig.setup({
@@ -30,7 +29,6 @@ return {
         -- "ruby_lsp", -- Managed manually via mise
       },
       -- Auto-install configured servers with lspconfig
-      automatic_installation = true,
       automatic_enable = false,
     })
 
@@ -63,7 +61,8 @@ return {
           }
         end
 
-        lspconfig[server_name].setup(server_config)
+        vim.lsp.config(server_name, server_config)
+        vim.lsp.enable(server_name)
       end
     end
   end,

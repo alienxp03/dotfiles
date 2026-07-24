@@ -7,9 +7,6 @@ return {
     "b0o/schemastore.nvim",
   },
   config = function()
-    -- import lspconfig plugin
-    local lspconfig = require("lspconfig")
-
     -- import cmp-nvim-lsp plugin
     -- local cmp_nvim_lsp = require("cmp_nvim_lsp")
 
@@ -38,7 +35,7 @@ return {
       -- from mise installs instead of relying on shims or the current shell environment.
       ruby_lsp = {
         cmd = { nvim_config .. "/bin/ruby-lsp-launcher" },
-        root_dir = lspconfig.util.root_pattern("Gemfile", ".ruby-version", ".tool-versions", "mise.toml", ".git"),
+        root_markers = { "Gemfile", ".ruby-version", ".tool-versions", "mise.toml", ".git" },
         init_options = {
           formatter = "rubocop",
           linters = { "rubocop" },
@@ -70,8 +67,6 @@ return {
           end, { desc = "Show Ruby dependencies" })
         end,
       },
-      -- SQL LSP server (if needed)
-      sqlls = {},
       yamlls = {
         settings = {
           yaml = {
@@ -109,7 +104,8 @@ return {
         capabilities = capabilities,
       }, config)
 
-      lspconfig[name].setup(config)
+      vim.lsp.config(name, config)
+      vim.lsp.enable(name)
     end
   end,
 }
