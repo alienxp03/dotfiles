@@ -1,7 +1,9 @@
 [bootstrap.packages]
-"brew:ranger" = "latest"
-"brew:witr"   = "latest"
-"brew:viu"    = "latest"
+"brew:ghostscript" = "latest"
+"brew:imagemagick" = "latest"
+"brew:ranger"      = "latest"
+"brew:witr"        = "latest"
+"brew:viu"         = "latest"
 
 [tools]
 # Languages / runtimes
@@ -16,6 +18,9 @@ rust   = "1.97.1"
 
 # JavaScript package managers
 pnpm = "11.16.0"
+
+# Diagram rendering
+"npm:@mermaid-js/mermaid-cli" = "11.16.0"
 
 # AI agents
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.218", npm_args = "--ignore-scripts=false" }
