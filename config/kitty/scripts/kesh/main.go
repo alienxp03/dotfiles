@@ -3065,6 +3065,7 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			fields = []detailField{
 				{label: "Agent", value: window.agent},
 				{label: "Project", value: entry.name},
+				{label: "Last active", value: relativeLastActive(window.lastFocused, m.lastFocusedReference())},
 				{label: "Path", value: displayPath(window.cwd, os.Getenv("HOME")), middle: true},
 			}
 			if window.pathPR.PullRequest.Number > 0 {
@@ -3894,9 +3895,10 @@ func prStatusIcon(status string) string {
 func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int) string {
 	agent := agentLabel(window.agent)
 	prefix := windowIcon(window) + " " + agent + "  "
+	lastActive := relativeLastActive(window.lastFocused, m.lastFocusedReference())
 	nameWidth := max(8, width*45/100-lipgloss.Width(prefix))
 	if m.showPreview {
-		nameWidth = max(8, width-lipgloss.Width(prefix))
+		nameWidth = max(8, width-lipgloss.Width(prefix)-lipgloss.Width(lastActive)-2)
 	}
 
 	// A project name identifies the agent more reliably than its tab title.
@@ -3911,13 +3913,45 @@ func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int
 	}
 	left := prefix + middleTruncate(context, nameWidth)
 	if m.showPreview {
-		return ansi.Truncate(left, width, "…")
+		return ansi.Truncate(left+"  "+dimStyle.Render(lastActive), width, "…")
 	}
 	detail := window.detail
 	if width >= 52 {
-		return padColumns(left, dimStyle.Render(detail), width)
+		return padColumns(left, dimStyle.Render(detail+" · "+lastActive), width)
 	}
 	return ansi.Truncate(left, width, "…")
+}
+
+// Kitty reports last_focused_at as seconds since Kitty started, not a Unix
+// timestamp. The most recently focused window is therefore our best available
+// reference point when the picker opens.
+func (m model) lastFocusedReference() float64 {
+	var latest float64
+	for _, entry := range m.entries {
+		for _, tab := range entry.tabs {
+			for _, window := range tab.windows {
+				latest = max(latest, window.lastFocused)
+			}
+		}
+	}
+	return latest
+}
+
+func relativeLastActive(lastFocused, reference float64) string {
+	if lastFocused <= 0 || reference <= 0 {
+		return "unknown"
+	}
+	elapsed := time.Duration(max(0, reference-lastFocused) * float64(time.Second))
+	if elapsed < time.Minute {
+		return "just now"
+	}
+	if elapsed < time.Hour {
+		return fmt.Sprintf("%dm ago", int(elapsed/time.Minute))
+	}
+	if elapsed < 24*time.Hour {
+		return fmt.Sprintf("%dh ago", int(elapsed/time.Hour))
+	}
+	return fmt.Sprintf("%dd ago", int(elapsed/(24*time.Hour)))
 }
 
 func agentLabel(agent string) string {

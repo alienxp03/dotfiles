@@ -44,6 +44,27 @@ func TestParseArgs(t *testing.T) {
 	}
 }
 
+func TestRelativeLastActive(t *testing.T) {
+	const reference = 1_000_000.0
+	for _, test := range []struct {
+		name    string
+		focused float64
+		want    string
+	}{
+		{name: "unknown", want: "unknown"},
+		{name: "just now", focused: reference - 30, want: "just now"},
+		{name: "minutes", focused: reference - 60, want: "1m ago"},
+		{name: "hours", focused: reference - 2*60*60, want: "2h ago"},
+		{name: "days", focused: reference - 3*24*60*60, want: "3d ago"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := relativeLastActive(test.focused, reference); got != test.want {
+				t.Fatalf("relativeLastActive() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestRebuildRowsPrioritizesPinnedEntriesBySlot(t *testing.T) {
 	m := model{entries: []entry{
 		{name: "unpinned-first"},
