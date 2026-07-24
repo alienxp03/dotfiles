@@ -10,8 +10,8 @@ return {
     vim.o.foldlevelstart = 99
     vim.o.foldenable = true
 
-    vim.keymap.set("n", "<leader>la", require("ufo").closeAllFolds, { desc = "Close all folds" })
-    vim.keymap.set("n", "<leader>lr", require("ufo").openAllFolds, { desc = "Open all folds" })
+    vim.keymap.set("n", "<leader>cc", "za", { desc = "Toggle fold" })
+    vim.keymap.set("n", "<leader>cr", require("ufo").openAllFolds, { desc = "Open all folds" })
 
     require("ufo").setup({
       provider_selector = function(bufnr, filetype, buftype)

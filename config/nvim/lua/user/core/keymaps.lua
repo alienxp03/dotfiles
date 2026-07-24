@@ -157,7 +157,9 @@ keymap(
   opts({ desc = "Toggle trouble view", noremap = true, silent = true })
 )
 
-keymap("n", "<C-e>", ":Legendary<cr>", opts({ desc = "Open legendary menu", noremap = true, silent = true }))
+keymap("n", "<C-e>", function()
+  require("snacks").picker.commands()
+end, opts({ desc = "Commands" }))
 
 keymap("n", "<leader>tc", ":GoCoverage -p<cr>", opts({ desc = "Run go coverage" }))
 vim.keymap.set("n", "<leader>gv", function()
@@ -165,11 +167,6 @@ vim.keymap.set("n", "<leader>gv", function()
   vim.cmd("GoModVendor")
 end)
 keymap("n", "<leader>to", ":GoAlt<cr>", opts({ desc = "Switch between go and test file" }))
-
--- neo-clip
-keymap("n", "<leader>fy", ":lua require('neoclip.fzf')()<cr>", opts({ desc = "View yank history" }))
-
-keymap("n", "<leader>cc", ":CodeCompanionChat Toggle<cr>", opts({ desc = "Toggle code companion" }))
 
 vim.api.nvim_create_user_command("OpenInFinder", function()
   local file = vim.fn.expand("%:p") -- full path of current file
