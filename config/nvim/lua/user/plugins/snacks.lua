@@ -355,9 +355,16 @@ return {
     {
       "<leader>sm",
       function()
-        Snacks.picker.marks()
+        Snacks.picker.marks({
+          finder = function(opts, ctx)
+            local marks = require("snacks.picker.source.vim").marks(opts, ctx)
+            return vim.tbl_filter(function(mark)
+              return mark.label:match("^[a-zA-Z]$") ~= nil
+            end, marks)
+          end,
+        })
       end,
-      desc = "Marks",
+      desc = "User marks",
     },
     {
       "<leader>su",
