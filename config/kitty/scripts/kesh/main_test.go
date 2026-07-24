@@ -249,7 +249,7 @@ func TestHierarchyNamesIndentByDepth(t *testing.T) {
 	}
 }
 
-func TestShellIconOnlyAppearsOnWindowRows(t *testing.T) {
+func TestWindowIconsOnlyAppearOnWindowRows(t *testing.T) {
 	m := model{entries: []entry{{
 		name: "repo", agent: "pi",
 		tabs: []tabItem{{title: "code", agent: "pi", windows: []windowItem{{title: "terminal", agent: "pi"}}}},
@@ -262,8 +262,8 @@ func TestShellIconOnlyAppearsOnWindowRows(t *testing.T) {
 			t.Fatalf("parent row contains a window icon: %q", rendered)
 		}
 	}
-	if rendered := ansi.Strip(m.renderRow(windowRow, 80, false)); !strings.Contains(rendered, shellIcon) {
-		t.Fatalf("window row is missing shell icon: %q", rendered)
+	if rendered := ansi.Strip(m.renderRow(windowRow, 80, false)); !strings.Contains(rendered, "π") {
+		t.Fatalf("agent window row is missing pi icon: %q", rendered)
 	}
 }
 
@@ -1131,12 +1131,18 @@ func TestPreviewRefreshFetchesCurrentAgentScreen(t *testing.T) {
 	}
 }
 
-func TestWindowIconUsesShellForUnrecognizedProcesses(t *testing.T) {
-	if got := windowIcon(windowItem{command: "pi", agent: "pi"}); got != shellIcon {
-		t.Errorf("agent window icon = %q, want shell icon %q", got, shellIcon)
+func TestWindowIconPrioritizesAgentIcons(t *testing.T) {
+	if got := windowIcon(windowItem{command: "zsh", agent: "pi"}); got != "π" {
+		t.Errorf("pi window icon = %q, want π", got)
+	}
+	if got := windowIcon(windowItem{command: "zsh", agent: "codex"}); got != "󰚩" {
+		t.Errorf("Codex window icon = %q, want Codex icon", got)
 	}
 	if got := windowIcon(windowItem{command: "nvim"}); got != "" {
 		t.Errorf("Neovim window icon = %q, want editor icon", got)
+	}
+	if got := windowIcon(windowItem{command: "unknown"}); got != shellIcon {
+		t.Errorf("unrecognized window icon = %q, want shell icon", got)
 	}
 }
 

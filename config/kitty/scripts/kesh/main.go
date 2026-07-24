@@ -3970,10 +3970,26 @@ func agentLabel(agent string) string {
 const shellIcon = ""
 
 func windowIcon(window windowItem) string {
+	if icon := agentIcon(window.agent); icon != "" {
+		return icon
+	}
 	if icon := processIcon(window.command); icon != "" {
 		return icon
 	}
 	return shellIcon
+}
+
+func agentIcon(agent string) string {
+	switch agent {
+	case "pi":
+		return "π"
+	case "codex":
+		return "󰚩"
+	case "pi,codex":
+		return "π󰚩"
+	default:
+		return ""
+	}
 }
 
 func processIcon(command string) string {
