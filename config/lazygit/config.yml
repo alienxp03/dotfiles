@@ -13,6 +13,25 @@ git:
       # pager: delta --dark --paging=never --line-numbers --features=mellow-barbet
       # pager: delta --dark --paging=never --line-numbers --features=chameleon
 customCommands:
+  - key: "<c-g>"
+    context: "global"
+    description: "Review PR diff against the default branch"
+    command: |
+      BASE=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+      if [ -z "$BASE" ]; then
+        for candidate in origin/main main origin/master master; do
+          if git rev-parse --verify --quiet "$candidate" >/dev/null; then
+            BASE="$candidate"
+            break
+          fi
+        done
+      fi
+      if [ -z "$BASE" ]; then
+        echo "Could not determine the default branch. Set origin/HEAD or add main/master."
+        exit 1
+      fi
+      git diff "$BASE...HEAD"
+    output: terminal
   - key: "E"
     context: "global"
     command: "git commit --allow-empty -m '{{index .PromptResponses 0}}'"
