@@ -2172,33 +2172,44 @@ func worktreeSelectedTestRecipe(t *testing.T) *wktreeRecipe {
 	return &recipe
 }
 
-func TestWorktreeTabCycleIncludesSelected(t *testing.T) {
+func TestWorktreeTabCyclesNativeTemplateAndWorkspaces(t *testing.T) {
 	recipe := worktreeSelectedTestRecipe(t)
 	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "none"}
-	for _, want := range []string{"single", "all", "selected", "none"} {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-		m = updated.(model)
-		if m.worktreeRecipeMode != want {
-			t.Fatalf("after Tab: mode=%q want %q", m.worktreeRecipeMode, want)
-		}
+	m.ensureWorktreeSelection()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab}) // native -> template
+	m = updated.(model)
+	if m.worktreeRecipeMode != "selected" || m.worktreeCustomWorkspaces {
+		t.Fatalf("expected template default selected mode, got mode=%q custom=%v", m.worktreeRecipeMode, m.worktreeCustomWorkspaces)
+	}
+	if names := m.selectedWorkspaceNames(); !reflect.DeepEqual(names, []string{"backend", "worker"}) {
+		t.Fatalf("template defaults = %v, want [backend worker]", names)
 	}
 
-	// Entering selected initializes the toggle state to default_workspaces.
-	recipe2 := worktreeSelectedTestRecipe(t)
-	m2 := model{worktreeMode: true, worktreeRecipe: recipe2, worktreeRecipeMode: "all"}
-	updated, _ := m2.Update(tea.KeyMsg{Type: tea.KeyTab}) // all -> selected
-	m2 = updated.(model)
-	if m2.worktreeRecipeMode != "selected" {
-		t.Fatalf("expected selected, got %q", m2.worktreeRecipeMode)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // template -> workspaces
+	m = updated.(model)
+	if m.worktreeRecipeMode != "selected" || !m.worktreeCustomWorkspaces {
+		t.Fatalf("expected workspace override, got mode=%q custom=%v", m.worktreeRecipeMode, m.worktreeCustomWorkspaces)
 	}
-	if names := m2.selectedWorkspaceNames(); !reflect.DeepEqual(names, []string{"backend", "worker"}) {
-		t.Fatalf("default selection = %v, want [backend worker]", names)
+	if names := m.selectedWorkspaceNames(); !reflect.DeepEqual(names, []string{"backend", "frontend", "worker"}) {
+		t.Fatalf("workspace selection = %v, want every workspace", names)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab}) // workspaces -> template
+	m = updated.(model)
+	if m.worktreeRecipeMode != "selected" || m.worktreeCustomWorkspaces {
+		t.Fatalf("expected template after Shift+Tab, got mode=%q custom=%v", m.worktreeRecipeMode, m.worktreeCustomWorkspaces)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyShiftTab}) // template -> native
+	m = updated.(model)
+	if m.worktreeRecipeMode != "none" {
+		t.Fatalf("expected native after Shift+Tab, got %q", m.worktreeRecipeMode)
 	}
 }
 
 func TestWorktreeSelectedSpaceAndEnterGuard(t *testing.T) {
 	recipe := worktreeSelectedTestRecipe(t)
-	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "selected", worktreeBranch: "feat/x"}
+	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "selected", worktreeCustomWorkspaces: true, worktreeBranch: "feat/x"}
 	m.ensureWorktreeSelection()
 	// Defaults: [backend on, frontend off, worker on]. Cursor at backend; toggle it off.
 	if !reflect.DeepEqual(m.selectedWorkspaceNames(), []string{"backend", "worker"}) {
@@ -2209,11 +2220,16 @@ func TestWorktreeSelectedSpaceAndEnterGuard(t *testing.T) {
 	if m.worktreeSelected[0] {
 		t.Fatalf("expected backend toggled off")
 	}
-	// Move cursor down to frontend (index 1).
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	// Ctrl+J/K move the editable workspace cursor without consuming branch text.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
 	m = updated.(model)
 	if m.worktreeWorkspaceCursor != 1 {
-		t.Fatalf("cursor = %d, want 1", m.worktreeWorkspaceCursor)
+		t.Fatalf("cursor after Ctrl+J = %d, want 1", m.worktreeWorkspaceCursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
+	m = updated.(model)
+	if m.worktreeWorkspaceCursor != 0 {
+		t.Fatalf("cursor after Ctrl+K = %d, want 0", m.worktreeWorkspaceCursor)
 	}
 	// Deselect worker too so nothing remains, then Enter must guard without exec.
 	m.worktreeSelected[2] = false
