@@ -47,6 +47,7 @@ return {
         if server_name == "lua_ls" then
           server_config.settings = {
             Lua = {
+              hint = { enable = false },
               runtime = { version = "LuaJIT" },
               diagnostics = { globals = { "vim" } },
               workspace = {
