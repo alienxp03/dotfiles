@@ -262,12 +262,52 @@ func TestRowsShowSecondDetailColumnOnlyWhenSpaceAllows(t *testing.T) {
 	if rendered := ansi.Strip(m.renderRow(tests[1], 100, false)); !strings.Contains(rendered, "1 window") {
 		t.Fatalf("tab row lost window count: %q", rendered)
 	}
-	if rendered := ansi.Strip(m.renderRow(tests[2], 100, false)); !strings.Contains(rendered, "nvim") || !strings.Contains(rendered, "/workspace/repo") {
-		t.Fatalf("window row is missing command/path detail: %q", rendered)
+	if rendered := ansi.Strip(m.renderRow(tests[2], 100, false)); !strings.Contains(rendered, "") || !strings.Contains(rendered, "/workspace/repo") {
+		t.Fatalf("window row is missing process icon/path detail: %q", rendered)
 	}
 	for _, selected := range tests {
 		if rendered := ansi.Strip(m.renderRow(selected, 40, false)); strings.Contains(rendered, "/workspace/repo") {
 			t.Fatalf("narrow row retained detail column: %q", rendered)
+		}
+	}
+}
+
+func TestCleanAgentTitleOmitsAgentPrefixes(t *testing.T) {
+	for _, test := range []struct {
+		title, agent, want string
+	}{
+		{"⠋ π - .dotfiles", "pi", ".dotfiles"},
+		{"󰚩 - api", "codex", "api"},
+	} {
+		if got := cleanAgentTitle(test.title, test.agent); got != test.want {
+			t.Errorf("cleanAgentTitle(%q, %q) = %q, want %q", test.title, test.agent, got, test.want)
+		}
+	}
+}
+
+func TestPiWindowTitleOmitsPiPrefixInKesh(t *testing.T) {
+	window := kittyWindow{
+		ID: 1, Title: "⠋ π - .dotfiles", CWD: "/Users/azuan/.dotfiles",
+		ForegroundProcesses: []struct {
+			Cmdline []string `json:"cmdline"`
+			CWD     string   `json:"cwd"`
+		}{{Cmdline: []string{"pi"}, CWD: "/Users/azuan/.dotfiles"}},
+	}
+	if got := windowItemFromKitty(window).title; got != ".dotfiles" {
+		t.Fatalf("Pi window title = %q, want %q", got, ".dotfiles")
+	}
+}
+
+func TestProcessIcon(t *testing.T) {
+	tests := map[string]string{
+		"nvim": "",
+		"-zsh": "",
+		"pi":   "π",
+		"git":  "",
+	}
+	for command, want := range tests {
+		if got := processIcon(command); got != want {
+			t.Errorf("processIcon(%q) = %q, want %q", command, got, want)
 		}
 	}
 }
@@ -688,7 +728,7 @@ func TestToggleWorktreesForClosedEntries(t *testing.T) {
 			}
 			header := ansi.Strip(updated.renderRow(updated.rows[1], 100, false))
 			item := ansi.Strip(updated.renderRow(updated.rows[2], 100, false))
-			if !strings.HasPrefix(header, "        └─ worktrees") || !strings.HasPrefix(item, "            └─ ") {
+			if !strings.HasPrefix(header, "            └─ worktrees") || !strings.HasPrefix(item, "                └─ ") {
 				t.Fatalf("closed worktree hierarchy is misaligned:\n%q\n%q", header, item)
 			}
 

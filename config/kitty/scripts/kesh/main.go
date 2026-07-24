@@ -1282,6 +1282,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pins = updatedPins
 			}
 		}
+		preserveExpandedState(m.entries, msg.entries)
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
 		applyPins(m.entries, m.pins)
@@ -1300,6 +1301,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		preserveExpandedState(m.entries, msg.entries)
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
 		applyPins(m.entries, m.pins)
@@ -2080,7 +2082,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			return m, m.toggleWorktrees()
 		case "p":
-			if m.filter == filterAgents {
+			if m.hasSelectedAgentWindow() {
 				m.showPreview = !m.showPreview
 				if m.showPreview {
 					m.previewID = 0
@@ -2362,6 +2364,32 @@ func (m *model) ascendOrCollapse() {
 	}
 }
 
+// preserveExpandedState keeps hierarchy navigation stable when an operation
+// reloads Kitty's entries. IDs are supplied by Kitty and remain stable across a
+// refresh, while the entry structs themselves are rebuilt from scratch.
+func preserveExpandedState(previous, refreshed []entry) {
+	oldEntries := make(map[string]entry, len(previous))
+	for _, entry := range previous {
+		oldEntries[entry.key] = entry
+	}
+	for i := range refreshed {
+		old, ok := oldEntries[refreshed[i].key]
+		if !ok {
+			continue
+		}
+		refreshed[i].expanded = old.expanded
+		oldTabs := make(map[int]bool, len(old.tabs))
+		for _, tab := range old.tabs {
+			oldTabs[tab.id] = tab.expanded
+		}
+		for tabIndex := range refreshed[i].tabs {
+			if expanded, ok := oldTabs[refreshed[i].tabs[tabIndex].id]; ok {
+				refreshed[i].tabs[tabIndex].expanded = expanded
+			}
+		}
+	}
+}
+
 func (m *model) rebuildRows() {
 	if m.filter == filterAgents {
 		m.rebuildAgentRows()
@@ -2486,10 +2514,18 @@ func (m *model) queuePathPR() tea.Cmd {
 	}
 }
 
+func (m model) hasSelectedAgentWindow() bool {
+	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return false
+	}
+	r := m.rows[m.cursor]
+	return r.windowIndex >= 0 && m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].agent != ""
+}
+
 func (m *model) queuePreview() tea.Cmd {
 	commands := []tea.Cmd{m.queuePathPR()}
-	if m.filter != filterAgents || !m.showPreview || len(m.rows) == 0 {
-		if m.filter == filterAgents && len(m.rows) == 0 {
+	if !m.showPreview || !m.hasSelectedAgentWindow() {
+		if len(m.rows) == 0 {
 			m.previewID = 0
 			m.preview = ""
 			m.previewErr = nil
@@ -2498,9 +2534,6 @@ func (m *model) queuePreview() tea.Cmd {
 		return tea.Batch(commands...)
 	}
 	r := m.rows[m.cursor]
-	if r.windowIndex < 0 {
-		return tea.Batch(commands...)
-	}
 	windowID := m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].id
 	if windowID == m.previewID {
 		return tea.Batch(commands...)
@@ -2606,9 +2639,20 @@ func (m model) View() string {
 	compactDetail := workspaceWidth < 64 || m.height < 18
 	showSideDetail := workspaceWidth >= 84 || m.height < 14
 	bodyHeight := max(5, m.height-6)
+	showAgentPreview := m.showPreview && m.hasSelectedAgentWindow() && bodyHeight >= 14
 	listWidth, detailWidth := workspaceWidth, workspaceWidth
 	listHeight, detailHeight := bodyHeight, bodyHeight
-	if showSideDetail {
+	if showAgentPreview && m.filter == filterAgents {
+		// Agent browsing benefits from a compact chooser and a wide live screen.
+		listWidth = max(38, min(48, workspaceWidth*35/100))
+		detailWidth = workspaceWidth - listWidth - 2
+		showSideDetail = true
+	} else if showAgentPreview {
+		// The hierarchy stays readable above a full-width terminal preview.
+		listHeight = max(5, bodyHeight*40/100)
+		detailHeight = max(6, bodyHeight-listHeight-1)
+		showSideDetail = false
+	} else if showSideDetail {
 		detailWidth = max(20, min(42, workspaceWidth*28/100))
 		listWidth = workspaceWidth - detailWidth - 2
 		if listWidth < 18 {
@@ -2677,13 +2721,16 @@ func (m model) View() string {
 	}
 	listPanel := renderListPanel(listLines, listWidth, listHeight)
 	detailPanel := m.detailPanelView(detailWidth, detailHeight, compactDetail)
+	if showAgentPreview {
+		detailPanel = m.previewView(detailWidth, detailHeight)
+	}
 	body := listPanel + "\n" + detailPanel
 	if showSideDetail {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
 	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
-	if m.filter == filterAgents {
+	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	} else if hasSelectedWorktree {
 		footer = "j/k move  enter open  o PR  x remove  X merged  D closed  q quit"
@@ -2837,6 +2884,14 @@ func renderDetailPanel(title string, fields []detailField, action string, extra 
 	}
 	for _, field := range fields[:fieldLimit] {
 		value := field.value
+		if field.label == "" {
+			if compact {
+				lines = append(lines, ansi.Truncate(value, panelWidth, "…"))
+			} else {
+				lines = append(lines, strings.Split(ansi.Wrap(value, panelWidth, " /_·"), "\n")...)
+			}
+			continue
+		}
 		if compact {
 			parts := strings.Split(value, "\n")
 			if len(parts) > 1 {
@@ -2938,7 +2993,7 @@ func entryDirectoryField(entry entry) detailField {
 
 func (m model) detailPanelView(width, height int, compact bool) string {
 	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
-		return renderDetailPanel("Info", []detailField{{label: "Selection", value: "No matching rows"}}, "", nil, width, height, compact)
+		return renderDetailPanel("Info", []detailField{{value: "No matching rows — change or clear the filter."}}, "", nil, width, height, compact)
 	}
 	selected := m.rows[m.cursor]
 	entry := m.entries[selected.entryIndex]
@@ -3673,23 +3728,20 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		if len(worktrees) != 1 {
 			label = fmt.Sprintf("worktrees (%d)", len(worktrees))
 		}
-		if r.windowIndex < 0 {
-			return "        " + dimStyle.Render("└─ "+label)
+		indent := "            "
+		if r.windowIndex >= 0 {
+			indent = "               "
 		}
-		fill := width - lipgloss.Width(label) - 13
-		if fill < 0 {
-			fill = 0
-		}
-		return "          " + dimStyle.Render("┄ "+label+" "+strings.Repeat("┄", fill))
+		return indent + dimStyle.Render("└─ "+label)
 	case "wt-item":
 		worktrees := m.worktreesForRow(r)
 		if r.wt < 0 || r.wt >= len(worktrees) {
 			return ""
 		}
 		wt := worktrees[r.wt]
-		indent := "            "
+		indent := "                "
 		if r.windowIndex >= 0 {
-			indent = "          "
+			indent = "                   "
 		}
 		connector := "├─"
 		if r.wt == len(worktrees)-1 {
@@ -3726,11 +3778,8 @@ func (m model) renderRow(r row, width int, focused bool) string {
 			branch = "└─"
 		}
 		nameWidth := max(8, width*45/100-17)
-		left := "           " + branch + " " + agentIcon(window.agent) + " " + truncate(window.title, nameWidth)
+		left := "           " + branch + " " + windowIcon(window) + " " + truncate(window.title, nameWidth)
 		detail := window.detail
-		if window.command != "" && window.command != window.title {
-			detail = window.command + "  " + detail
-		}
 		if width >= 52 {
 			return padColumns(left, dimStyle.Render(detail), width)
 		}
@@ -3822,11 +3871,15 @@ func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int
 	if tab.title != "" && tab.title != e.name {
 		context += " / " + tab.title
 	}
-	left := agentIcon(window.agent) + " " + agent + "  " + truncate(context, max(8, width*45/100-lipgloss.Width(agent)-6))
-	detail := window.detail
-	if window.command != "" && window.command != window.title {
-		detail = window.command + "  " + detail
+	nameWidth := max(8, width*45/100-lipgloss.Width(agent)-6)
+	if m.showPreview {
+		nameWidth = max(8, width-lipgloss.Width(agent)-4)
 	}
+	left := windowIcon(window) + " " + agent + "  " + truncate(context, nameWidth)
+	if m.showPreview {
+		return ansi.Truncate(left, width, "…")
+	}
+	detail := window.detail
 	if width >= 52 {
 		return padColumns(left, dimStyle.Render(detail), width)
 	}
@@ -3856,6 +3909,26 @@ func agentIcon(agent string) string {
 		return piStyle.Render("π") + codexStyle.Render("󰚩")
 	default:
 		return " "
+	}
+}
+
+func windowIcon(window windowItem) string {
+	if icon := processIcon(window.command); icon != "" {
+		return icon
+	}
+	return agentIcon(window.agent)
+}
+
+func processIcon(command string) string {
+	switch strings.TrimPrefix(command, "-") {
+	case "nvim", "vim":
+		return ""
+	case "zsh", "bash", "sh", "fish":
+		return ""
+	case "pi":
+		return "π"
+	default:
+		return ""
 	}
 }
 
@@ -3953,14 +4026,15 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 				windows = append(windows, windowItemFromKitty(window))
 			}
 			if len(windows) > 0 {
-				title := tab.Title
+				agent := mergedAgents(windows)
+				title := cleanAgentTitle(tab.Title, agent)
 				if title == "" {
 					title = "tab " + strconv.Itoa(tab.ID)
 				}
 				item := tabItem{
 					id: tab.ID, title: title,
 					detail:  fmt.Sprintf("%d window%s", len(windows), plural(len(windows))),
-					agent:   mergedAgents(windows),
+					agent:   agent,
 					windows: windows,
 				}
 				if sessionName == "" && canonicalPath != "" {
@@ -4218,7 +4292,8 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 			detail = process.CWD
 		}
 	}
-	title := window.Title
+	agent := agentFromWindow(window)
+	title := cleanAgentTitle(window.Title, agent)
 	if title == "" {
 		title = command
 	}
@@ -4227,8 +4302,23 @@ func windowItemFromKitty(window kittyWindow) windowItem {
 	}
 	return windowItem{
 		id: window.ID, title: title, detail: displayPath(detail, os.Getenv("HOME")), command: command,
-		fullCommand: fullCommand, agent: agentFromWindow(window), lastFocused: window.LastFocusedAt, cwd: detail,
+		fullCommand: fullCommand, agent: agent, lastFocused: window.LastFocusedAt, cwd: detail,
 	}
+}
+
+func cleanAgentTitle(title, agent string) string {
+	if strings.Contains(agent, "pi") {
+		// Pi owns its terminal title (including an animated prefix while working).
+		if _, cleanTitle, found := strings.Cut(title, "π - "); found {
+			title = cleanTitle
+		}
+	}
+	if strings.Contains(agent, "codex") {
+		if _, cleanTitle, found := strings.Cut(title, "󰚩 - "); found {
+			title = cleanTitle
+		}
+	}
+	return title
 }
 
 func agentFromWindow(window kittyWindow) string {
@@ -5745,17 +5835,26 @@ func linkedWorktreeBranch(dir string) (branch string, ok bool) {
 // worktreeMainPath returns the main worktree path for the repo containing dir,
 // so a worktree is never removed from within itself. It falls back to dir.
 func worktreeMainPath(dir string) string {
-	output, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").Output()
-	if err != nil {
-		return dir
-	}
-	for _, raw := range strings.Split(string(output), "\n") {
-		line := strings.TrimSpace(raw)
-		if strings.HasPrefix(line, "worktree ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+	// A stale linked worktree may no longer exist. Walk its parents to find the
+	// repository that still owns its metadata, then remove it from there.
+	candidate := dir
+	for {
+		output, err := exec.Command("git", "-C", candidate, "worktree", "list", "--porcelain").Output()
+		if err == nil {
+			for _, raw := range strings.Split(string(output), "\n") {
+				line := strings.TrimSpace(raw)
+				if strings.HasPrefix(line, "worktree ") {
+					return strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+				}
+			}
+			return candidate
 		}
+		parent := filepath.Dir(candidate)
+		if parent == candidate {
+			return dir
+		}
+		candidate = parent
 	}
-	return dir
 }
 
 // detectDestroyPlan builds the destroy plan for an entry. Folder and branch
@@ -5830,18 +5929,11 @@ func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")}
 		}
 	}
-	dir := ""
-	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
-		dir = w.cwd
-	} else if e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex); e != nil {
-		dir = e.path
-	}
-	if dir == "" {
-		return func() tea.Msg {
-			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree repository is no longer available")}
-		}
-	}
 	target := worktrees[r.wt].path
+	// The parent entry can be a stale saved or pruned worktree. Resolve the
+	// repository from the worktree being removed instead of running Git from
+	// that parent path.
+	repoDir := worktreeMainPath(target)
 	entryIndex, tabIndex, windowIndex := r.entryIndex, r.tabIndex, r.windowIndex
 	return func() tea.Msg {
 		windowIDs, windowErr := worktreeWindowIDs(m.kitty, target)
@@ -5858,7 +5950,7 @@ func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 				}
 			}
 		}
-		args := []string{"-C", dir, "worktree", "remove"}
+		args := []string{"-C", repoDir, "worktree", "remove"}
 		if force {
 			args = append(args, "--force")
 		}
