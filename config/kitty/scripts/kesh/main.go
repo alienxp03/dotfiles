@@ -131,6 +131,8 @@ type previewMsg struct {
 	err      error
 }
 
+type previewRefreshMsg struct{ windowID int }
+
 type commandResult struct {
 	output []byte
 	err    error
@@ -147,6 +149,7 @@ type pinTarget struct {
 const (
 	currentPinVersion          = 2
 	currentSavedSessionVersion = 1
+	previewRefreshInterval     = time.Second
 )
 
 type pinStore map[string]pinTarget
@@ -1320,6 +1323,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewBusy = false
 		m.preview = msg.content
 		m.previewErr = msg.err
+		return m, m.queuePreviewRefresh(msg.windowID)
+	case previewRefreshMsg:
+		if !m.shouldRefreshPreview(msg.windowID) {
+			return m, nil
+		}
+		return m, fetchPreview(m.kitty, msg.windowID)
 	case renameMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -2520,6 +2529,23 @@ func (m model) hasSelectedAgentWindow() bool {
 	}
 	r := m.rows[m.cursor]
 	return r.windowIndex >= 0 && m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].agent != ""
+}
+
+func (m model) shouldRefreshPreview(windowID int) bool {
+	if !m.showPreview || !m.hasSelectedAgentWindow() || m.previewID != windowID {
+		return false
+	}
+	r := m.rows[m.cursor]
+	return m.entries[r.entryIndex].tabs[r.tabIndex].windows[r.windowIndex].id == windowID
+}
+
+func (m model) queuePreviewRefresh(windowID int) tea.Cmd {
+	if !m.shouldRefreshPreview(windowID) {
+		return nil
+	}
+	return tea.Tick(previewRefreshInterval, func(time.Time) tea.Msg {
+		return previewRefreshMsg{windowID: windowID}
+	})
 }
 
 func (m *model) queuePreview() tea.Cmd {
@@ -3867,15 +3893,23 @@ func prStatusIcon(status string) string {
 
 func (m model) renderAgentRow(e entry, tab tabItem, window windowItem, width int) string {
 	agent := agentLabel(window.agent)
+	prefix := windowIcon(window) + " " + agent + "  "
+	nameWidth := max(8, width*45/100-lipgloss.Width(prefix))
+	if m.showPreview {
+		nameWidth = max(8, width-lipgloss.Width(prefix))
+	}
+
+	// A project name identifies the agent more reliably than its tab title.
+	// Only show the latter when it fits in full; a dangling " / foo…" hides
+	// useful information while still failing to identify the tab.
 	context := e.name
 	if tab.title != "" && tab.title != e.name {
-		context += " / " + tab.title
+		candidate := context + " / " + tab.title
+		if lipgloss.Width(candidate) <= nameWidth {
+			context = candidate
+		}
 	}
-	nameWidth := max(8, width*45/100-lipgloss.Width(agent)-6)
-	if m.showPreview {
-		nameWidth = max(8, width-lipgloss.Width(agent)-4)
-	}
-	left := windowIcon(window) + " " + agent + "  " + truncate(context, nameWidth)
+	left := prefix + middleTruncate(context, nameWidth)
 	if m.showPreview {
 		return ansi.Truncate(left, width, "…")
 	}
@@ -3899,24 +3933,13 @@ func agentLabel(agent string) string {
 	}
 }
 
-func agentIcon(agent string) string {
-	switch agent {
-	case "pi":
-		return piStyle.Render("π")
-	case "codex":
-		return codexStyle.Render("󰚩")
-	case "pi,codex":
-		return piStyle.Render("π") + codexStyle.Render("󰚩")
-	default:
-		return " "
-	}
-}
+const shellIcon = ""
 
 func windowIcon(window windowItem) string {
 	if icon := processIcon(window.command); icon != "" {
 		return icon
 	}
-	return agentIcon(window.agent)
+	return shellIcon
 }
 
 func processIcon(command string) string {
@@ -3924,9 +3947,7 @@ func processIcon(command string) string {
 	case "nvim", "vim":
 		return ""
 	case "zsh", "bash", "sh", "fish":
-		return ""
-	case "pi":
-		return "π"
+		return shellIcon
 	default:
 		return ""
 	}

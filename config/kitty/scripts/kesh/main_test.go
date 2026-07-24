@@ -228,7 +228,7 @@ func TestHierarchyNamesIndentByDepth(t *testing.T) {
 	}
 }
 
-func TestAgentIconOnlyAppearsOnWindowRows(t *testing.T) {
+func TestShellIconOnlyAppearsOnWindowRows(t *testing.T) {
 	m := model{entries: []entry{{
 		name: "repo", agent: "pi",
 		tabs: []tabItem{{title: "code", agent: "pi", windows: []windowItem{{title: "terminal", agent: "pi"}}}},
@@ -237,12 +237,12 @@ func TestAgentIconOnlyAppearsOnWindowRows(t *testing.T) {
 	tabRow := row{entryIndex: 0, tabIndex: 0, windowIndex: -1}
 	windowRow := row{entryIndex: 0, tabIndex: 0, windowIndex: 0}
 	for _, parent := range []row{entryRow, tabRow} {
-		if rendered := ansi.Strip(m.renderRow(parent, 80, false)); strings.Contains(rendered, "π") {
-			t.Fatalf("parent row contains noisy agent icon: %q", rendered)
+		if rendered := ansi.Strip(m.renderRow(parent, 80, false)); strings.Contains(rendered, shellIcon) {
+			t.Fatalf("parent row contains a window icon: %q", rendered)
 		}
 	}
-	if rendered := ansi.Strip(m.renderRow(windowRow, 80, false)); !strings.Contains(rendered, "π") {
-		t.Fatalf("window row is missing agent icon: %q", rendered)
+	if rendered := ansi.Strip(m.renderRow(windowRow, 80, false)); !strings.Contains(rendered, shellIcon) {
+		t.Fatalf("window row is missing shell icon: %q", rendered)
 	}
 }
 
@@ -302,7 +302,7 @@ func TestProcessIcon(t *testing.T) {
 	tests := map[string]string{
 		"nvim": "",
 		"-zsh": "",
-		"pi":   "π",
+		"pi":   "",
 		"git":  "",
 	}
 	for command, want := range tests {
@@ -1086,6 +1086,52 @@ func TestPreviewIgnoresStaleResponse(t *testing.T) {
 	got := updated.(model)
 	if got.preview != "" || !got.previewBusy {
 		t.Fatalf("stale preview changed model: %#v", got)
+	}
+}
+
+func TestPreviewRefreshFetchesCurrentAgentScreen(t *testing.T) {
+	directory := t.TempDir()
+	kitty := filepath.Join(directory, "kitty")
+	if err := os.WriteFile(kitty, []byte("#!/bin/sh\nprintf refreshed\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m := model{
+		kitty: kitty, filter: filterAgents, showPreview: true, previewID: 11,
+		entries: []entry{{tabs: []tabItem{{windows: []windowItem{{id: 11, agent: "codex"}}}}}},
+	}
+	m.rebuildRows()
+	_, command := m.Update(previewRefreshMsg{windowID: 11})
+	if command == nil {
+		t.Fatal("current agent preview did not schedule a refresh")
+	}
+	msg := command().(previewMsg)
+	if msg.err != nil || msg.content != "refreshed" {
+		t.Fatalf("refresh result = %#v, want refreshed screen", msg)
+	}
+}
+
+func TestWindowIconUsesShellForUnrecognizedProcesses(t *testing.T) {
+	if got := windowIcon(windowItem{command: "pi", agent: "pi"}); got != shellIcon {
+		t.Errorf("agent window icon = %q, want shell icon %q", got, shellIcon)
+	}
+	if got := windowIcon(windowItem{command: "nvim"}); got != "" {
+		t.Errorf("Neovim window icon = %q, want editor icon", got)
+	}
+}
+
+func TestAgentRowPrioritizesProjectNameOverTruncatedTabTitle(t *testing.T) {
+	m := model{showPreview: true}
+	line := ansi.Strip(m.renderAgentRow(
+		entry{name: "configurable-chat-component"},
+		tabItem{title: "aurora-long-running-agent-task"},
+		windowItem{agent: "pi"},
+		44,
+	))
+	if !strings.Contains(line, "configurable-chat-component") {
+		t.Errorf("agent row did not retain its project name: %q", line)
+	}
+	if strings.Contains(line, "…") || strings.Contains(line, "aurora") {
+		t.Errorf("agent row retained a truncated tab title: %q", line)
 	}
 }
 
