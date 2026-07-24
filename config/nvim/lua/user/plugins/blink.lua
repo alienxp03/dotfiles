@@ -29,8 +29,13 @@ return {
       nerd_font_variant = "mono",
     },
     sources = {
-      default = { "lsp", "path", "snippets", "buffer", "cmdline", "emoji" },
+      default = { "lazydev", "lsp", "path", "snippets", "buffer", "cmdline", "emoji" },
       providers = {
+        lazydev = {
+          name = "LazyDev",
+          module = "lazydev.integrations.blink",
+          score_offset = 100,
+        },
         buffer = {
           opts = {
             -- Performance goes brrr

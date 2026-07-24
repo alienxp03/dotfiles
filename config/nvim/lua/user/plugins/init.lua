@@ -1,6 +1,5 @@
 -- plugins that doesn't require any configuration
 return {
-  { "sbdchd/neoformat", cmd = "Neoformat" },
   { "tpope/vim-fugitive", cmd = { "Git", "G" } }, -- Git related plugins
   { "tpope/vim-rhubarb", event = "VeryLazy" },
   { "tpope/vim-surround", event = "VeryLazy" }, -- Change surrounding words

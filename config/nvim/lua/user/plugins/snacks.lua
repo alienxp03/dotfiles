@@ -116,10 +116,7 @@ return {
       height = 0.95,
     },
     image = { enabled = true },
-    notifier = {
-      enabled = true,
-      top_down = false,
-    },
+    notifier = { enabled = false },
     -- ascii pokemon
     dashboard = {
       enabled = true,
