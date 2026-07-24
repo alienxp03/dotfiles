@@ -156,7 +156,8 @@ function ide_kitty() {
 	local shell_window
 
 	kitty @ set-tab-title "${dir_name}-code" || return 1
-	kitty @ goto-layout splits || return 1
+	# Do not re-enter the splits layout here: Kitty rebuilds its split tree,
+	# flattening the right-hand nested split into three columns.
 
 	# Launch a persistent shell directly. The clone helper's window can vanish
 	# when its short-lived cloning process exits.
