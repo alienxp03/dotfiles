@@ -111,6 +111,17 @@ return {
     },
     cmdline = {
       keymap = {
+        -- Command completion has no stable selection when the menu first opens.
+        -- Tab should therefore accept the first displayed command, rather than
+        -- advancing to the next Diffview command.
+        ["<Tab>"] = {
+          function(cmp)
+            if cmp.is_menu_visible() then
+              return cmp.accept({ index = 1 })
+            end
+          end,
+          "fallback",
+        },
         ["<C-k>"] = { "select_prev", "fallback" },
         ["<C-j>"] = { "select_next", "fallback" },
       },
