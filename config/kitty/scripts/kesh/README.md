@@ -30,7 +30,7 @@ The picker starts in normal mode:
 - `e`: show or hide Git worktrees for a window, or for a closed project or saved session
 - `o`: open the exact pull request associated with the selected worktree in the browser
 - `X`, then `y`: remove every non-current worktree merged by Git ancestry or by a GitHub pull request at the same branch HEAD
-- `D`, then `y`: after live PR revalidation, permanently remove clean worktrees for closed-unmerged PRs and delete their local branches; remote branches remain untouched
+- `D`, then `y`: destroy the focused entry — close its Kitty session, remove its worktree (only when it is a linked worktree), delete its local branch, and delete its saved record; the confirmation lists exactly which layers apply. On a revealed worktree row, destroys that worktree and its branch
 - `x`, then `y`: close the selected workspace, tab, or window; on a revealed worktree, remove it
 - `/`: enter search mode and fuzzy-filter sessions as you type
 - `enter` / `esc`: return to command mode while retaining the filter

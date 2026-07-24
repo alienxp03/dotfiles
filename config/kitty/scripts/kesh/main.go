@@ -225,19 +225,6 @@ type mergedWorktreeRemoveMsg struct {
 	err      error
 }
 
-type closedWorktreeListMsg struct {
-	selected  row
-	dir       string
-	worktrees []worktreeItem
-	err       error
-}
-
-type closedWorktreeRemoveMsg struct {
-	selected row
-	dir      string
-	err      error
-}
-
 type prInfo struct {
 	Status string
 	URL    string
@@ -345,6 +332,7 @@ type model struct {
 	closing                 bool
 	closeBusy               bool
 	closeRow                row
+	destroyPlan             *destroyPlan
 	pins                    pinStore
 	names                   nameStore
 	filter                  int
@@ -371,8 +359,6 @@ type model struct {
 	worktreeForcePrompt     bool
 	mergedWorktrees         []worktreeItem
 	mergedWorktreeBusy      bool
-	closedWorktrees         []worktreeItem
-	closedWorktreeBusy      bool
 	prStatusPending         map[string]bool
 	prStatusLastFetch       map[string]time.Time
 	pathPRChecked           map[string]bool
@@ -1306,6 +1292,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewBusy = false
 		m.rebuildRows()
 		return m, m.queuePreview()
+	case destroyMsg:
+		m.closeBusy = false
+		m.destroyPlan = nil
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.entries = msg.entries
+		applyNames(m.entries, m.names)
+		applyPins(m.entries, m.pins)
+		m.closing = false
+		m.err = nil
+		m.previewID = 0
+		m.preview = ""
+		m.previewErr = nil
+		m.previewBusy = false
+		m.rebuildRows()
+		return m, m.queuePreview()
 	case previewMsg:
 		if msg.windowID != m.previewID {
 			return m, nil
@@ -1481,36 +1485,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = nil
 		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
-	case closedWorktreeListMsg:
-		m.closedWorktreeBusy = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		if len(msg.worktrees) == 0 {
-			m.err = fmt.Errorf("no closed-PR worktrees to delete")
-			return m, nil
-		}
-		m.closeRow = msg.selected
-		m.closedWorktrees = msg.worktrees
-		m.closing = true
-		m.closeBusy = false
-		m.worktreeForcePrompt = false
-		m.err = nil
-		return m, nil
-	case closedWorktreeRemoveMsg:
-		m.closeBusy = false
-		m.closing = false
-		m.closedWorktrees = nil
-		m.worktreeForcePrompt = false
-		if msg.err != nil {
-			m.invalidateWorktrees(msg.selected)
-			m.err = msg.err
-			m.rebuildRows()
-			return m, nil
-		}
-		m.err = nil
-		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
 	case worktreeRemoveMsg:
 		m.closeBusy = false
 		if msg.err != nil {
@@ -1573,7 +1547,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if m.saving || m.mergedWorktreeBusy || m.closedWorktreeBusy {
+		if m.saving || m.mergedWorktreeBusy {
 			return m, nil
 		}
 		if m.saveConfirming {
@@ -1618,13 +1592,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.closing = false
 				m.worktreeForcePrompt = false
 				m.mergedWorktrees = nil
-				m.closedWorktrees = nil
+				m.destroyPlan = nil
 				m.err = nil
 			case "y":
-				if len(m.closedWorktrees) > 0 {
+				if m.destroyPlan != nil {
 					m.closeBusy = true
 					m.err = nil
-					return m, m.runDeleteClosedWorktrees()
+					selected := m.closeRow
+					return m, runDestroy(m.kitty, m.zoxide, m.entries[selected.entryIndex], *m.destroyPlan)
 				}
 				if len(m.mergedWorktrees) > 0 {
 					m.closeBusy = true
@@ -2025,7 +2000,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "X":
 			return m, m.findMergedWorktrees()
 		case "D":
-			return m, m.findClosedWorktrees()
+			if len(m.rows) == 0 {
+				return m, nil
+			}
+			selected := m.rows[m.cursor]
+			entry := m.entries[selected.entryIndex]
+			plan := detectDestroyPlan(entry)
+			if selected.section == "wt-item" {
+				if worktrees := m.worktreesForRow(selected); selected.wt >= 0 && selected.wt < len(worktrees) {
+					wt := worktrees[selected.wt]
+					branch := wt.branch
+					if branch == "" || branch == "(detached)" {
+						branch = ""
+					}
+					plan = destroyPlan{entryName: wt.branch, worktreePath: wt.path, branch: branch}
+				}
+			}
+			m.closeRow = selected
+			m.destroyPlan = &plan
+			m.closing = true
+			m.closeBusy = false
+			m.worktreeForcePrompt = false
+			m.mergedWorktrees = nil
+			m.err = nil
+			return m, nil
 		case "w":
 			if len(m.worktreeEntries()) == 0 {
 				m.err = fmt.Errorf("place the cursor on a project, or select multiple")
@@ -2143,7 +2141,6 @@ func (m *model) beginClose() {
 	m.closeBusy = false
 	m.worktreeForcePrompt = false
 	m.mergedWorktrees = nil
-	m.closedWorktrees = nil
 	m.err = nil
 }
 
@@ -3278,11 +3275,11 @@ func renderPreviewLines(lines []string, fieldWidth int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy && !m.closedWorktreeBusy {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
-	if m.cloning || m.saveForeground || m.worktreeMode || (m.closing && (m.closeRow.section == "wt-item" || len(m.closedWorktrees) > 0)) {
+	if m.cloning || m.saveForeground || m.worktreeMode || (m.closing && m.closeRow.section == "wt-item") {
 		popupWidth = min(72, max(36, width-6))
 	}
 	// PR URLs and worktree paths are often long. Let this form use the available
@@ -3295,10 +3292,6 @@ func (m model) popupView(width int) string {
 		title = "Checking merged worktrees"
 		field = "Querying GitHub for current PR status…"
 		help = "This always uses live data before removal"
-	} else if m.closedWorktreeBusy {
-		title = "Checking closed PRs"
-		field = "Querying GitHub for current PR status…"
-		help = "This always uses live data before deletion"
 	} else if m.saveConfirming {
 		entry := m.entries[m.saveEntry]
 		if m.saveForeground {
@@ -3466,10 +3459,10 @@ func (m model) popupView(width int) string {
 		}
 	} else {
 		title = "Close"
-		if len(m.mergedWorktrees) > 0 {
+		if m.destroyPlan != nil {
+			title = "Destroy"
+		} else if len(m.mergedWorktrees) > 0 {
 			title = "Remove merged worktrees"
-		} else if len(m.closedWorktrees) > 0 {
-			title = "Delete closed-PR worktrees"
 		}
 		field = lipgloss.NewStyle().Width(popupWidth - 6).Render(m.closePrompt())
 		switch {
@@ -3477,6 +3470,8 @@ func (m model) popupView(width int) string {
 			help = "Removing…"
 		case m.worktreeForcePrompt:
 			help = "Press f to force  •  Esc cancel"
+		case m.destroyPlan != nil:
+			help = "y destroy  •  Esc cancel"
 		default:
 			if m.closeRow.section == "wt-item" {
 				help = "y remove  •  f force  •  Esc cancel"
@@ -3497,25 +3492,30 @@ func (m model) popupView(width int) string {
 		Render(body)
 }
 
+// destroyPrompt renders the layer list for a unified Destroy confirmation,
+// showing only the layers that apply to the plan.
+func destroyPrompt(plan destroyPlan) string {
+	lines := []string{fmt.Sprintf("Destroy %q?", plan.entryName)}
+	if plan.closeSession {
+		lines = append(lines, "  • Close kitty session ("+strconv.Itoa(plan.tabCount)+" tab"+plural(plan.tabCount)+")")
+	}
+	if plan.worktreePath != "" {
+		lines = append(lines, "  • Remove worktree  "+displayPath(plan.worktreePath, os.Getenv("HOME")))
+	}
+	if plan.branch != "" {
+		lines = append(lines, "  • Delete branch  "+plan.branch)
+	}
+	if plan.saved {
+		lines = append(lines, "  • Delete saved record")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m model) closePrompt() string {
 	selected := m.closeRow
 	entry := m.entries[selected.entryIndex]
-	if len(m.closedWorktrees) > 0 {
-		lines := []string{
-			fmt.Sprintf("Delete %d closed-PR worktree%s and local branch reference%s?", len(m.closedWorktrees), plural(len(m.closedWorktrees)), plural(len(m.closedWorktrees))),
-			"",
-			"This permanently removes the worktree directories and local branch references.",
-			"Remote branches are unchanged.",
-			"",
-		}
-		for i, worktree := range m.closedWorktrees {
-			if i == 4 {
-				lines = append(lines, fmt.Sprintf("  …and %d more", len(m.closedWorktrees)-i))
-				break
-			}
-			lines = append(lines, "  "+worktree.branch)
-		}
-		return strings.Join(lines, "\n")
+	if m.destroyPlan != nil {
+		return destroyPrompt(*m.destroyPlan)
 	}
 	if len(m.mergedWorktrees) > 0 {
 		lines := []string{fmt.Sprintf("Delete %d merged worktree%s?", len(m.mergedWorktrees), plural(len(m.mergedWorktrees)))}
@@ -5452,84 +5452,6 @@ func (m *model) applyPRStatuses(repoKey string, pullRequests map[string]prInfo) 
 	}
 }
 
-// findClosedWorktrees finds linked worktrees whose exact branch HEAD belongs to
-// a live-confirmed closed, unmerged pull request. D removes both each clean
-// worktree and its local branch; remote branches are deliberately untouched.
-func (m *model) findClosedWorktrees() tea.Cmd {
-	if len(m.rows) == 0 {
-		return nil
-	}
-	selected := m.rows[m.cursor]
-	dir := m.worktreeDirectory(selected)
-	if dir == "" {
-		m.err = fmt.Errorf("place the cursor on a window or closed project")
-		return nil
-	}
-	m.closedWorktreeBusy = true
-	m.err = nil
-	return func() tea.Msg {
-		worktreeOutput, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
-		if err != nil {
-			return closedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git worktree list", worktreeOutput, err)}
-		}
-		currentOutput, err := exec.Command("git", "-C", dir, "branch", "--show-current").CombinedOutput()
-		if err != nil {
-			return closedWorktreeListMsg{selected: selected, dir: dir, err: commandError("git branch --show-current", currentOutput, err)}
-		}
-		_, pullRequests, err := queryPRStatuses(dir)
-		if err != nil {
-			return closedWorktreeListMsg{selected: selected, dir: dir, err: fmt.Errorf("revalidate closed PRs: %w", err)}
-		}
-		return closedWorktreeListMsg{
-			selected: selected,
-			dir:      dir,
-			worktrees: closedPRWorktreeItems(
-				parseWorktreePorcelain(string(worktreeOutput)),
-				strings.TrimSpace(string(currentOutput)),
-				pullRequests,
-			),
-		}
-	}
-}
-
-func closedPRWorktreeItems(worktrees []worktreeItem, currentBranch string, pullRequests map[string]prInfo) []worktreeItem {
-	var result []worktreeItem
-	for index, worktree := range worktrees {
-		if index == 0 || worktree.branch == "" || worktree.branch == "(detached)" || worktree.branch == currentBranch {
-			continue
-		}
-		if pullRequests[prStatusKey(worktree.branch, worktree.head)].Status != "closed" {
-			continue
-		}
-		result = append(result, worktree)
-	}
-	return result
-}
-
-func (m *model) runDeleteClosedWorktrees() tea.Cmd {
-	selected := m.closeRow
-	dir := m.worktreeDirectory(selected)
-	targets := append([]worktreeItem(nil), m.closedWorktrees...)
-	return func() tea.Msg {
-		var failures []string
-		for _, target := range targets {
-			output, err := exec.Command("git", "-C", dir, "worktree", "remove", target.path).CombinedOutput()
-			if err != nil {
-				failures = append(failures, commandError(target.branch+" worktree", output, err).Error())
-				continue
-			}
-			output, err = exec.Command("git", "-C", dir, "branch", "-D", "--", target.branch).CombinedOutput()
-			if err != nil {
-				failures = append(failures, commandError(target.branch+" local branch", output, err).Error())
-			}
-		}
-		if len(failures) > 0 {
-			return closedWorktreeRemoveMsg{selected: selected, dir: dir, err: fmt.Errorf("some closed-PR worktrees were not deleted: %s", strings.Join(failures, "; "))}
-		}
-		return closedWorktreeRemoveMsg{selected: selected, dir: dir}
-	}
-}
-
 // findMergedWorktrees finds non-current worktrees whose branches are either
 // ancestors of the repository's current HEAD or are the exact head of a merged
 // GitHub pull request. Capital X confirms once; dirty worktrees are never forced.
@@ -5696,6 +5618,117 @@ func worktreeWindowIDs(kitty, target string) ([]int, error) {
 		}
 	}
 	return ids, nil
+}
+
+// destroyPlan describes the layers a unified Destroy (D) removes for one
+// focused entry. Only non-empty/true layers are touched.
+type destroyPlan struct {
+	entryName    string
+	closeSession bool // close the kitty session tabs
+	tabCount     int
+	worktreePath string // linked worktree dir to remove; "" leaves the folder alone
+	branch       string // local branch to delete; "" deletes none
+	saved        bool   // delete the saved-session record + snapshot
+}
+
+type destroyMsg struct {
+	entries []entry
+	err     error
+}
+
+// linkedWorktreeBranch reports whether dir is a git linked worktree (its .git
+// is a file, not a directory) and returns the checked-out branch. The main
+// checkout and plain directories return ok=false so Destroy never deletes them.
+func linkedWorktreeBranch(dir string) (branch string, ok bool) {
+	info, err := os.Stat(filepath.Join(dir, ".git"))
+	if err != nil || info.IsDir() {
+		return "", false
+	}
+	output, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "", true // linked worktree whose branch can't be resolved: drop dir, skip branch
+	}
+	branch = strings.TrimSpace(string(output))
+	if branch == "" || branch == "HEAD" {
+		return "", true // detached HEAD: remove dir, skip branch
+	}
+	return branch, true
+}
+
+// worktreeMainPath returns the main worktree path for the repo containing dir,
+// so a worktree is never removed from within itself. It falls back to dir.
+func worktreeMainPath(dir string) string {
+	output, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return dir
+	}
+	for _, raw := range strings.Split(string(output), "\n") {
+		line := strings.TrimSpace(raw)
+		if strings.HasPrefix(line, "worktree ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "worktree "))
+		}
+	}
+	return dir
+}
+
+// detectDestroyPlan builds the destroy plan for an entry. Folder and branch
+// removal are restricted to single project entries that resolve to a linked
+// worktree; composed workspaces and plain directories only close/release.
+func detectDestroyPlan(e entry) destroyPlan {
+	plan := destroyPlan{entryName: e.name, saved: e.saved}
+	if e.open {
+		plan.closeSession = len(e.tabs) > 0
+		plan.tabCount = len(e.tabs)
+	}
+	if e.kind == "project" && e.path != "" {
+		if branch, ok := linkedWorktreeBranch(e.path); ok {
+			plan.worktreePath = e.path
+			plan.branch = branch
+		}
+	}
+	return plan
+}
+
+// runDestroy cascades a destroy plan: close the kitty session, close any
+// windows still inside the worktree, remove the worktree, delete the local
+// branch, and delete the saved record. Worktree removal runs from the repo's
+// main worktree so a worktree is never removed from within itself.
+func runDestroy(kitty, zoxide string, e entry, plan destroyPlan) tea.Cmd {
+	return func() tea.Msg {
+		if plan.closeSession {
+			if args, err := closeArgs(e, row{tabIndex: -1, windowIndex: -1}); err == nil {
+				if err := run(kitty, args...); err != nil {
+					return destroyMsg{err: fmt.Errorf("close session: %w", err)}
+				}
+			}
+		}
+		if plan.worktreePath != "" {
+			ids, _ := worktreeWindowIDs(kitty, plan.worktreePath)
+			for _, id := range ids {
+				if err := run(kitty, "@", "close-window", "--match", "id:"+strconv.Itoa(id)); err != nil {
+					return destroyMsg{err: fmt.Errorf("close worktree window %d: %w", id, err)}
+				}
+			}
+			repoDir := worktreeMainPath(plan.worktreePath)
+			remove, rerr := exec.Command("git", "-C", repoDir, "worktree", "remove", plan.worktreePath).CombinedOutput()
+			if rerr != nil {
+				return destroyMsg{err: commandError("git worktree remove", remove, rerr)}
+			}
+			if plan.branch != "" {
+				bout, berr := exec.Command("git", "-C", repoDir, "branch", "-D", "--", plan.branch).CombinedOutput()
+				if berr != nil {
+					return destroyMsg{err: commandError("git branch -D", bout, berr)}
+				}
+			}
+		}
+		if plan.saved {
+			if err := deleteSavedSession(e); err != nil {
+				return destroyMsg{err: err}
+			}
+		}
+		entries, err := loadEntries(kitty, zoxide)
+		return destroyMsg{entries: entries, err: err}
+	}
 }
 
 // runRemoveWorktree deletes the selected worktree via git. It first protects

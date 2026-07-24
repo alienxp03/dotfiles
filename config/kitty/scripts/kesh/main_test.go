@@ -133,84 +133,71 @@ func TestFindMergedWorktreesShowsLoadingState(t *testing.T) {
 	}
 }
 
-func TestFindClosedWorktreesShowsLoadingState(t *testing.T) {
-	m := model{
-		entries: []entry{{name: "repo", kind: "project", path: "/repos/repo"}},
-		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+func TestDestroyPromptListsApplicableLayers(t *testing.T) {
+	got := destroyPrompt(destroyPlan{
+		entryName: "repo", closeSession: true, tabCount: 3,
+		worktreePath: "/home/wt/repo", branch: "feat/x", saved: true,
+	})
+	for _, want := range []string{`Destroy "repo"?`, "Close kitty session (3 tabs)", "Remove worktree", "Delete branch  feat/x", "Delete saved record"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("destroy prompt missing %q:\n%s", want, got)
+		}
 	}
-	if cmd := m.findClosedWorktrees(); cmd == nil {
-		t.Fatal("closed PR worktree query was not started")
-	}
-	if !m.closedWorktreeBusy {
-		t.Fatal("closed PR loading state was not enabled")
-	}
-	if popup := ansi.Strip(m.popupView(100)); !strings.Contains(popup, "Checking closed PRs") {
-		t.Fatalf("loading popup = %q", popup)
-	}
-
-	updatedModel, _ := m.Update(closedWorktreeListMsg{err: fmt.Errorf("query failed")})
-	if updatedModel.(model).closedWorktreeBusy {
-		t.Fatal("closed PR loading state was not cleared")
+	// A plan with only some layers omits the rest.
+	minimal := destroyPrompt(destroyPlan{entryName: "drafts", saved: true})
+	for _, absent := range []string{"worktree", "branch", "session"} {
+		if strings.Contains(minimal, absent) {
+			t.Fatalf("minimal destroy prompt should omit inapplicable layers:\n%s", minimal)
+		}
 	}
 }
 
-func TestClosedPRWorktreeItemsRequireExactHeadAndProtectCurrentTrees(t *testing.T) {
-	worktrees := []worktreeItem{
-		{path: "/repos/main", branch: "main", head: "main-head"},
-		{path: "/worktrees/closed", branch: "fix/closed", head: "closed-head"},
-		{path: "/worktrees/reused", branch: "fix/reused", head: "new-head"},
-		{path: "/worktrees/open", branch: "feat/open", head: "open-head"},
-		{path: "/worktrees/current", branch: "fix/current", head: "current-head"},
+func TestDetectDestroyPlanSkipsNonWorktreeFolders(t *testing.T) {
+	plain := t.TempDir() // no .git at all
+	plan := detectDestroyPlan(entry{name: "plain", kind: "project", path: plain, saved: true, open: true, tabs: []tabItem{{}}})
+	if plan.worktreePath != "" || plan.branch != "" {
+		t.Fatalf("plain dir should not be destroyed as a worktree: %#v", plan)
 	}
-	pullRequests := map[string]prInfo{
-		prStatusKey("fix/closed", "closed-head"):   {Status: "closed"},
-		prStatusKey("fix/reused", "old-head"):      {Status: "closed"},
-		prStatusKey("feat/open", "open-head"):      {Status: "open"},
-		prStatusKey("fix/current", "current-head"): {Status: "closed"},
+	if !plan.closeSession || !plan.saved {
+		t.Fatalf("closeSession/saved should pass through: %#v", plan)
 	}
-	got := closedPRWorktreeItems(worktrees, "fix/current", pullRequests)
-	want := []worktreeItem{worktrees[1]}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("closed PR worktrees = %#v, want %#v", got, want)
+
+	mainRepo := t.TempDir() // .git is a directory → main checkout, not a linked worktree
+	if err := os.Mkdir(filepath.Join(mainRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plan = detectDestroyPlan(entry{name: "main", kind: "project", path: mainRepo})
+	if plan.worktreePath != "" || plan.branch != "" {
+		t.Fatalf("main repo should not be destroyed as a worktree: %#v", plan)
+	}
+
+	// Composed workspaces never remove folders/branches, only close/release.
+	plan = detectDestroyPlan(entry{name: "ws", kind: "workspace", path: plain, saved: true})
+	if plan.worktreePath != "" || plan.branch != "" {
+		t.Fatalf("composed workspace should not target a worktree: %#v", plan)
 	}
 }
 
-func TestDeleteClosedWorktreesDeletesBranchOnlyAfterWorktreeRemoval(t *testing.T) {
-	directory := t.TempDir()
-	capture := filepath.Join(directory, "commands")
-	t.Setenv("COMMAND_CAPTURE", capture)
-	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
-	git := `#!/bin/sh
-printf '%s\n' "$*" >> "$COMMAND_CAPTURE"
+func TestDetectDestroyPlanTargetsLinkedWorktree(t *testing.T) {
+	bin := t.TempDir()
+	shim := `#!/bin/sh
 case "$*" in
-  *"worktree remove /worktrees/dirty"*) printf '%s\n' 'dirty worktree' >&2; exit 1 ;;
+  *"rev-parse --abbrev-ref HEAD"*) echo "feat/destroy" ;;
 esac
 `
-	if err := os.WriteFile(filepath.Join(directory, "git"), []byte(git), 0o700); err != nil {
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(shim), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	m := model{
-		entries:  []entry{{path: "/repos/repo"}},
-		closeRow: row{entryIndex: 0, tabIndex: -1, windowIndex: -1},
-		closedWorktrees: []worktreeItem{
-			{path: "/worktrees/safe", branch: "fix/safe"},
-			{path: "/worktrees/dirty", branch: "fix/dirty"},
-		},
-	}
-	message := m.runDeleteClosedWorktrees()().(closedWorktreeRemoveMsg)
-	if message.err == nil {
-		t.Fatal("dirty worktree removal unexpectedly succeeded")
-	}
-	content, err := os.ReadFile(capture)
-	if err != nil {
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	wt := t.TempDir()
+	// A linked worktree's .git is a file pointing at the main repo metadata.
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /fake/main/.git/worktrees/wt"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	commands := string(content)
-	if !strings.Contains(commands, "worktree remove /worktrees/safe") || !strings.Contains(commands, "branch -D -- fix/safe") {
-		t.Fatalf("safe branch was not deleted after its worktree:\n%s", commands)
-	}
-	if strings.Contains(commands, "branch -D -- fix/dirty") || strings.Contains(commands, "--force") {
-		t.Fatalf("dirty branch was deleted or force was used:\n%s", commands)
+	plan := detectDestroyPlan(entry{name: "wt", kind: "project", path: wt})
+	if plan.worktreePath != wt || plan.branch != "feat/destroy" {
+		t.Fatalf("linked worktree plan = %#v, want worktreePath=%s branch=feat/destroy", plan, wt)
 	}
 }
 
