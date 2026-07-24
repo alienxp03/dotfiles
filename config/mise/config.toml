@@ -19,7 +19,7 @@ pnpm = "11.9.0"
 
 # AI agents
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.218", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "0.81.1"
+"npm:@earendil-works/pi-coding-agent" = "0.82.0"
 "npm:@openai/codex"                   = "0.145.0"
 "npm:happy"                           = { version = "1.1.10", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.18.4", npm_args = "--ignore-scripts=false" }
