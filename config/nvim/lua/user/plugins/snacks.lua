@@ -85,6 +85,7 @@ return {
           exclude = { "**/.DS_Store", "**/node_modules/**" },
         },
         explorer = {
+          layout = { preview = true },
           ignored = true,
           hidden = true,
           exclude = { "**/.DS_Store" },
