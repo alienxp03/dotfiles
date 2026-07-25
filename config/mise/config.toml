@@ -150,12 +150,23 @@ run = [
   "zsh -n ~/.dotfiles/home/.zshrc ~/.dotfiles/config/zsh/*.zsh",
   "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads((Path.home() / '.dotfiles/config/mise/config.toml').read_text())\nPY",
   "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.octo\") end); if not ok then error(err) end' -c 'qa!'",
+  "cd ~/.dotfiles/apps/kesh && go test ./... && go vet ./...",
   "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 
 [tasks.kesh]
-description = "Rebuild Kitty Kesh"
-run         = "cd \"$HOME/.config/kitty/scripts/kesh\" && go build -o kesh ."
+description = "Build Kesh atomically"
+run         = '''
+set -eu
+cd "$HOME/.dotfiles/apps/kesh"
+mkdir -p "$HOME/.local/bin"
+tmp="$(mktemp "$HOME/.local/bin/.kesh.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+go build -o "$tmp" ./cmd/kesh
+chmod 0755 "$tmp"
+mv "$tmp" "$HOME/.local/bin/kesh"
+trap - EXIT HUP INT TERM
+'''
 
 [tasks.bump-all]
 description = "Update development environment"

@@ -4,11 +4,47 @@ Bubble Tea picker for browsing zoxide projects, Kitty workspaces, tabs, windows,
 
 A single-project Kitty session and its zoxide source are one logical folder row, shown with ``. Multi-project sessions created by Kesh remain separate `` session rows so their individual folder sources stay available for composing another session with `n`. SSH locations use ``. Green means an entry is currently open; the icon does not change for saved or closed state.
 
-Build the binary used directly by `kitty.conf`:
+## Build and install
+
+Kesh source lives in `apps/kesh`; Kitty always launches the installed artifact
+at `~/.local/bin/kesh` rather than code in the Kitty configuration tree.
 
 ```sh
-go build -o kesh .
+cd ~/.dotfiles
+mise run kesh
 ```
+
+The task builds to a temporary file and atomically replaces the installed
+binary only after a successful build. For development-only builds:
+
+```sh
+cd ~/.dotfiles/apps/kesh
+go build ./cmd/kesh
+```
+
+## Architecture
+
+- `cmd/kesh` owns process startup and exit codes.
+- `internal/app` owns the Bubble Tea model, input routing, and rendering. Its single explicit mode state makes search, forms, pinning, save confirmation, close confirmation, and worktree creation mutually exclusive.
+- `internal/system` owns process execution behind a testable runner boundary.
+
+User configuration remains in `~/.config/kesh`; state, sessions, and caches
+remain under the XDG paths described below. The Kitty watcher at
+`config/kitty/scripts/kesh_clear_pins_on_quit.py` is intentionally a thin
+adapter that invokes the installed binary.
+
+## Validation
+
+```sh
+cd ~/.dotfiles/apps/kesh
+test -z "$(gofmt -l $(find . -name '*.go' -type f))"
+go test -race ./...
+go vet ./...
+go build ./cmd/kesh
+```
+
+See `docs/manual-smoke.md` for the real-Kitty checks that automated tests
+cannot perform.
 
 Keys:
 

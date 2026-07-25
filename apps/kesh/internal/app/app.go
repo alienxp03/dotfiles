@@ -1,11 +1,10 @@
-package main
+package app
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -16,12 +15,21 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/alienxp03/dotfiles/apps/kesh/internal/config"
+	"github.com/alienxp03/dotfiles/apps/kesh/internal/system"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 	"gopkg.in/yaml.v3"
 )
+
+// exec is a temporary compatibility shim while command-oriented integrations
+// are extracted from app. It keeps all process execution behind system.Runner.
+var exec = struct {
+	Command  func(string, ...string) *system.Process
+	LookPath func(string) (string, error)
+}{system.Command, system.LookPath}
 
 type kittyState []struct {
 	Tabs []struct {
@@ -337,20 +345,15 @@ type model struct {
 	rows                     []row
 	cursor                   int
 	query                    string
-	searching                bool
-	renaming                 bool
+	mode                     modeKind
 	renameValue              string
-	creating                 bool
 	createValue              string
-	cloning                  bool
 	cloneBusy                bool
-	prCheckout               bool
 	prCheckoutBusy           bool
 	prCheckoutValue          string
 	prCheckoutBranch         string
 	checkoutRoot             string
 	saving                   bool
-	saveConfirming           bool
 	saveForeground           bool
 	saveEntry                int
 	cloneDestinationFocus    bool
@@ -361,10 +364,8 @@ type model struct {
 	selected                 map[string]bool
 	wtBulkSelected           map[string]bool // Worktree-tab bulk selection, keyed by worktree path
 	bulkWorktrees            []worktreeItem  // selected worktrees targeted by a bulk remove
-	pinning                  bool
 	pinEntry                 int
 	confirmSlot              string
-	closing                  bool
 	closeBusy                bool
 	closeRow                 row
 	destroyPlan              *destroyPlan
@@ -386,7 +387,6 @@ type model struct {
 	previewID                int
 	previewBusy              bool
 	showPreview              bool
-	worktreeMode             bool
 	worktreeBranch           string
 	worktreePaths            []string
 	worktreeBusy             bool
@@ -406,6 +406,23 @@ type model struct {
 	pathPRChecked            map[string]bool
 	startupCmd               tea.Cmd
 }
+
+// modeKind makes modal combinations unrepresentable. Background busy state
+// remains on the feature that owns it (for example cloneBusy).
+type modeKind uint8
+
+const (
+	modeNormal modeKind = iota
+	modeSearch
+	modeRename
+	modeCreateSession
+	modeClone
+	modeCheckoutPR
+	modePin
+	modeSaveConfirm
+	modeCloseConfirm
+	modeWorktreeCreate
+)
 
 const (
 	filterAll = iota
@@ -442,39 +459,24 @@ var (
 	backgroundSGR     = regexp.MustCompile(`\x1b\[(48(:[0-9]*)+|48(;[0-9]*)+|49)m`)
 )
 
-func main() {
+// Run starts Kesh with the supplied command-line arguments. The command package
+// owns process exit codes; the application returns errors so it remains testable.
+func Run(args []string) error {
 	kitty, zoxide := commands()
-	filter, switchSlot, pinCommand, err := parseArgs(os.Args[1:])
+	filter, switchSlot, pinCommand, err := parseArgs(args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		return err
 	}
 	switch pinCommand {
 	case "begin-run":
-		if err := beginKittyRun(kitty, currentKittyPID()); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		return beginKittyRun(kitty, currentKittyPID())
 	case "clear-pins":
-		if err := clearAllPins(kitty, true); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		return clearAllPins(kitty, true)
 	case "end-run":
-		if err := endKittyRun(kitty); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		return endKittyRun(kitty)
 	}
 	if switchSlot != "" {
-		if err := switchPin(kitty, zoxide, switchSlot); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
+		return switchPin(kitty, zoxide, switchSlot)
 	}
 
 	fmt.Print("\033]2;kesh\007")
@@ -508,11 +510,14 @@ func main() {
 	}
 	m.rebuildRows()
 	m.startupCmd = m.queuePreview()
-	if _, err := tea.NewProgram(m, tea.WithAltScreen()).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+	return err
 }
+
+// UsageError reports invalid command-line input without coupling app to a process exit code.
+type UsageError struct{ message string }
+
+func (e *UsageError) Error() string { return e.message }
 
 func parseArgs(args []string) (filter int, switchSlot, pinCommand string, err error) {
 	switch {
@@ -529,7 +534,7 @@ func parseArgs(args []string) (filter int, switchSlot, pinCommand string, err er
 	case len(args) == 2 && args[0] == "switch" && validSlot(args[1]):
 		return filterAll, args[1], "", nil
 	default:
-		return 0, "", "", fmt.Errorf("usage: kesh [agents | clear-pins | switch SLOT] (SLOT must be 0-9)")
+		return 0, "", "", &UsageError{message: "usage: kesh [agents | clear-pins | switch SLOT] (SLOT must be 0-9)"}
 	}
 }
 
@@ -559,45 +564,14 @@ func validSlot(slot string) bool {
 	return len(slot) == 1 && slot[0] >= '0' && slot[0] <= '9'
 }
 
-func pinsPath() string {
-	stateHome := os.Getenv("XDG_STATE_HOME")
-	if stateHome == "" {
-		stateHome = filepath.Join(os.Getenv("HOME"), ".local", "state")
-	}
-	return filepath.Join(stateHome, "kesh", "pins.json")
-}
-
-func savedSessionsPath() string {
-	return filepath.Join(filepath.Dir(pinsPath()), "saved-sessions.json")
-}
-
-func savedSessionDirectory() string {
-	return filepath.Join(filepath.Dir(pinsPath()), "sessions")
-}
-
-func pinShortcutsPath() string {
-	return filepath.Join(filepath.Dir(pinsPath()), "kitty-pins.conf")
-}
-
-func kittyRunPath() string {
-	return filepath.Join(filepath.Dir(pinsPath()), "kitty-run")
-}
-
-func configDirectory() string {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		configHome = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-	return filepath.Join(configHome, "kesh")
-}
-
-func configPath() string {
-	return filepath.Join(configDirectory(), "config.toml")
-}
-
-func namesPath() string {
-	return filepath.Join(configDirectory(), "names.json")
-}
+func pinsPath() string              { return config.FromEnvironment().Pins() }
+func savedSessionsPath() string     { return config.FromEnvironment().SavedSessions() }
+func savedSessionDirectory() string { return config.FromEnvironment().Sessions() }
+func pinShortcutsPath() string      { return config.FromEnvironment().PinShortcuts() }
+func kittyRunPath() string          { return config.FromEnvironment().KittyRun() }
+func configDirectory() string       { return config.FromEnvironment().ConfigDirectory }
+func configPath() string            { return config.FromEnvironment().File() }
+func namesPath() string             { return config.FromEnvironment().Names() }
 
 func loadCloneRoot() (string, error) {
 	home := os.Getenv("HOME")
@@ -1349,7 +1323,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
 		applyPins(m.entries, m.pins)
-		m.closing = false
+		m.mode = modeNormal
 		m.err = nil
 		m.previewID = 0
 		m.preview = ""
@@ -1376,7 +1350,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
 		applyPins(m.entries, m.pins)
-		m.closing = false
+		m.mode = modeNormal
 		m.err = nil
 		m.previewID = 0
 		m.preview = ""
@@ -1430,7 +1404,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.rebuildRows()
 		}
-		m.renaming = false
+		m.mode = modeNormal
 		m.renameValue = ""
 		m.err = nil
 	case createMsg:
@@ -1455,7 +1429,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case prPreviewMsg:
 		// A lookup may finish after the input changed; never show its stale path.
-		if m.prCheckout && msg.value == m.prCheckoutValue {
+		if m.mode == modeCheckoutPR && msg.value == m.prCheckoutValue {
 			m.prCheckoutBranch = msg.branch
 		}
 		return m, nil
@@ -1463,7 +1437,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.worktreeBusy {
 			// Creation completed.
 			m.worktreeBusy = false
-			m.worktreeMode = false
+			m.mode = modeNormal
 			if msg.err != nil {
 				m.err = msg.err
 				return m, nil
@@ -1598,14 +1572,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.closeRow = msg.selected
 		m.mergedWorktrees = msg.worktrees
-		m.closing = true
+		m.mode = modeCloseConfirm
 		m.closeBusy = false
 		m.worktreeForcePrompt = false
 		m.err = nil
 		return m, nil
 	case mergedWorktreeRemoveMsg:
 		m.closeBusy = false
-		m.closing = false
+		m.mode = modeNormal
 		m.mergedWorktrees = nil
 		m.worktreeForcePrompt = false
 		if msg.err != nil {
@@ -1618,7 +1592,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
 	case bulkWorktreeRemoveMsg:
 		m.closeBusy = false
-		m.closing = false
+		m.mode = modeNormal
 		m.bulkWorktrees = nil
 		m.worktreeForcePrompt = false
 		m.wtBulkSelected = nil
@@ -1642,13 +1616,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// Force failed too: surface the error and leave the form.
-			m.closing = false
+			m.mode = modeNormal
 			m.worktreeForcePrompt = false
 			m.err = msg.err
 			return m, nil
 		}
 		// Removed: refresh that window's worktree list and close the popup.
-		m.closing = false
+		m.mode = modeNormal
 		m.worktreeForcePrompt = false
 		m.err = nil
 		// In the Worktree tab the removal targets the tab's project; windowAt
@@ -1666,7 +1640,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case saveSessionMsg:
 		m.saving = false
-		m.saveConfirming = false
+		m.mode = modeNormal
 		m.saveForeground = false
 		if msg.err != nil {
 			m.err = msg.err
@@ -1703,14 +1677,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.saving || m.mergedWorktreeBusy {
 			return m, nil
 		}
-		if m.saveConfirming {
+		if m.mode == modeSaveConfirm {
 			switch key {
 			case "esc":
-				m.saveConfirming = false
+				m.mode = modeNormal
 				m.saveForeground = false
 				m.err = nil
 			case "y":
-				m.saveConfirming = false
+				m.mode = modeNormal
 				m.saving = true
 				m.err = nil
 				entry := m.entries[m.saveEntry]
@@ -1720,10 +1694,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.pinning {
+		if m.mode == modePin {
 			switch {
 			case key == "esc":
-				m.pinning = false
+				m.mode = modeNormal
 				m.confirmSlot = ""
 				m.err = nil
 			case key == "x":
@@ -1735,14 +1709,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.closing {
+		if m.mode == modeCloseConfirm {
 			if m.closeBusy {
 				return m, nil
 			}
 			isWorktreeRow := m.closeRow.section == "wt-item"
 			switch key {
 			case "esc":
-				m.closing = false
+				m.mode = modeNormal
 				m.worktreeForcePrompt = false
 				m.mergedWorktrees = nil
 				m.destroyPlan = nil
@@ -1789,7 +1763,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.cloning {
+		if m.mode == modeClone {
 			if m.cloneBusy {
 				return m, nil
 			}
@@ -1844,10 +1818,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.creating {
+		if m.mode == modeCreateSession {
 			switch key {
 			case "esc":
-				m.creating = false
+				m.mode = modeNormal
 				m.createValue = ""
 				m.err = nil
 			case "enter":
@@ -1871,10 +1845,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.renaming {
+		if m.mode == modeRename {
 			switch key {
 			case "esc":
-				m.renaming = false
+				m.mode = modeNormal
 				m.renameValue = ""
 			case "enter":
 				if len(m.rows) > 0 {
@@ -1895,10 +1869,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.worktreeMode {
+		if m.mode == modeWorktreeCreate {
 			switch key {
 			case "esc":
-				m.worktreeMode = false
+				m.mode = modeNormal
 				m.worktreeBranch = ""
 				m.worktreePaths = nil
 				m.err = nil
@@ -1995,14 +1969,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.prCheckout {
+		if m.mode == modeCheckoutPR {
 			if m.prCheckoutBusy {
 				return m, nil
 			}
 			previousValue := m.prCheckoutValue
 			switch key {
 			case "esc":
-				m.prCheckout = false
+				m.mode = modeNormal
 				m.prCheckoutValue = ""
 				m.prCheckoutBranch = ""
 				m.checkoutRoot = ""
@@ -2052,10 +2026,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if m.searching {
+		if m.mode == modeSearch {
 			switch key {
 			case "esc", "enter":
-				m.searching = false
+				m.mode = modeNormal
 			case "up", "ctrl+k":
 				if m.cursor > 0 {
 					m.cursor--
@@ -2105,7 +2079,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "/":
-			m.searching = true
+			m.mode = modeSearch
 		case "up", "ctrl+k", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -2174,7 +2148,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = fmt.Errorf("select at least one project or SSH host first")
 				return m, nil
 			}
-			m.creating = true
+			m.mode = modeCreateSession
 			m.createValue = ""
 			m.err = nil
 			return m, nil
@@ -2184,7 +2158,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, nil
 			}
-			m.cloning = true
+			m.mode = modeClone
 			m.cloneRoot = root
 			m.cloneRepository = ""
 			m.cloneDestination = displayPath(root, os.Getenv("HOME"))
@@ -2203,7 +2177,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = err
 				return m, nil
 			}
-			m.prCheckout = true
+			m.mode = modeCheckoutPR
 			m.prCheckoutValue = ""
 			m.prCheckoutBranch = ""
 			m.cloneRoot = cloneRoot
@@ -2229,7 +2203,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = fmt.Errorf("unnamed workspaces cannot be saved yet")
 				return m, nil
 			}
-			m.saveConfirming = true
+			m.mode = modeSaveConfirm
 			m.saveForeground = key == "S"
 			m.saveEntry = selected.entryIndex
 			m.err = nil
@@ -2268,7 +2242,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					windowIndex: -1,
 					section:     "wt-bulk",
 				}
-				m.closing = true
+				m.mode = modeCloseConfirm
 				m.closeBusy = false
 				m.worktreeForcePrompt = false
 				m.mergedWorktrees = nil
@@ -2288,7 +2262,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					section:      "wt-item",
 					worktreePath: wt.path,
 				}
-				m.closing = true
+				m.mode = modeCloseConfirm
 				m.closeBusy = false
 				m.worktreeForcePrompt = false
 				m.mergedWorktrees = nil
@@ -2317,7 +2291,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					worktreePath: wt.path,
 				}
 				m.destroyPlan = &plan
-				m.closing = true
+				m.mode = modeCloseConfirm
 				m.closeBusy = false
 				m.worktreeForcePrompt = false
 				m.mergedWorktrees = nil
@@ -2341,7 +2315,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.closeRow = selected
 			m.destroyPlan = &plan
-			m.closing = true
+			m.mode = modeCloseConfirm
 			m.closeBusy = false
 			m.worktreeForcePrompt = false
 			m.mergedWorktrees = nil
@@ -2515,7 +2489,7 @@ func (m *model) beginClose() {
 		return
 	}
 	m.closeRow = selected
-	m.closing = true
+	m.mode = modeCloseConfirm
 	m.closeBusy = false
 	m.worktreeForcePrompt = false
 	m.mergedWorktrees = nil
@@ -2533,7 +2507,7 @@ func (m *model) refreshCloneDestination() {
 }
 
 func (m *model) resetClone() {
-	m.cloning = false
+	m.mode = modeNormal
 	m.cloneBusy = false
 	m.cloneDestinationFocus = false
 	m.cloneDestinationEdited = false
@@ -2549,7 +2523,7 @@ func (m *model) beginPin() {
 	}
 	selected := m.rows[m.cursor]
 	m.pinEntry = selected.entryIndex
-	m.pinning = true
+	m.mode = modePin
 	m.confirmSlot = ""
 	m.err = nil
 }
@@ -2583,7 +2557,7 @@ func (m *model) assignPin(slot string) {
 	}
 	m.pins = updated
 	applyPins(m.entries, m.pins)
-	m.pinning = false
+	m.mode = modeNormal
 	m.confirmSlot = ""
 	m.err = nil
 }
@@ -2610,7 +2584,7 @@ func (m *model) unpinSelected() {
 	}
 	m.pins = updated
 	applyPins(m.entries, m.pins)
-	m.pinning = false
+	m.mode = modeNormal
 	m.confirmSlot = ""
 	m.err = nil
 }
@@ -2623,13 +2597,13 @@ func (m *model) beginRename() {
 	entry := &m.entries[selected.entryIndex]
 	if selected.windowIndex >= 0 {
 		m.renameValue = entry.tabs[selected.tabIndex].windows[selected.windowIndex].title
-		m.renaming = true
+		m.mode = modeRename
 		m.err = nil
 		return
 	}
 	if selected.tabIndex >= 0 {
 		m.renameValue = entry.tabs[selected.tabIndex].title
-		m.renaming = true
+		m.mode = modeRename
 		m.err = nil
 		return
 	}
@@ -2638,7 +2612,7 @@ func (m *model) beginRename() {
 		return
 	}
 	m.renameValue = entry.name
-	m.renaming = true
+	m.mode = modeRename
 	m.err = nil
 }
 
@@ -3186,7 +3160,7 @@ func (m model) View() string {
 	if m.query != "" {
 		promptValue = m.query
 	}
-	if m.searching {
+	if m.mode == modeSearch {
 		promptValue = accentStyle.Render(m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
 	header := accentStyle.Render("Kesh") + "  " + strings.Join(tabs, " ")
@@ -3274,16 +3248,16 @@ func (m model) View() string {
 			footer = "j/k move  enter open  g PR  q quit"
 		}
 	}
-	if m.searching {
+	if m.mode == modeSearch {
 		footer = "type to filter  ctrl+j/k move  backspace delete  ctrl+u clear  enter/esc normal mode"
 	}
 	if m.saving {
 		footer = "Saving workspace…"
 	}
-	if m.zoxidePending && !m.searching {
+	if m.zoxidePending && m.mode != modeSearch {
 		footer += "  · loading projects…"
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.mergedWorktreeBusy && !m.worktreePullBusy {
+	if m.err != nil && m.mode != modeRename && m.mode != modeCreateSession && m.mode != modeClone && m.mode != modeSaveConfirm && m.mode != modePin && m.mode != modeCloseConfirm && m.mode != modeWorktreeCreate && !m.mergedWorktreeBusy && !m.worktreePullBusy {
 		footer = errorStyle.Render("Error: " + m.err.Error())
 	} else {
 		footer = dimStyle.Render(footer)
@@ -4010,16 +3984,16 @@ func (m model) worktreeModeMenuView(width int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy && !m.worktreePullBusy {
+	if m.mode != modeRename && m.mode != modeCreateSession && m.mode != modeClone && m.mode != modeSaveConfirm && m.mode != modePin && m.mode != modeCloseConfirm && m.mode != modeWorktreeCreate && m.mode != modeCheckoutPR && !m.mergedWorktreeBusy && !m.worktreePullBusy {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
-	if m.cloning || m.saveForeground || m.worktreeMode || (m.closing && m.closeRow.section == "wt-item") {
+	if m.mode == modeClone || m.saveForeground || m.mode == modeWorktreeCreate || (m.mode == modeCloseConfirm && m.closeRow.section == "wt-item") {
 		popupWidth = min(72, max(36, width-6))
 	}
 	// PR URLs and worktree paths are often long. Let this form use the available
 	// terminal width instead of leaving an artificial empty right-hand column.
-	if m.prCheckout {
+	if m.mode == modeCheckoutPR {
 		popupWidth = min(100, max(36, width-6))
 	}
 	var title, field, help string
@@ -4031,7 +4005,7 @@ func (m model) popupView(width int) string {
 		title = "Checking merged worktrees"
 		field = "Querying GitHub for current PR status…"
 		help = "This always uses live data before removal"
-	} else if m.saveConfirming {
+	} else if m.mode == modeSaveConfirm {
 		entry := m.entries[m.saveEntry]
 		if m.saveForeground {
 			title = "Save with running commands"
@@ -4058,7 +4032,7 @@ func (m model) popupView(width int) string {
 			field = lipgloss.NewStyle().Width(popupWidth - 6).Render(fmt.Sprintf("Save %q for later restoration?", entry.name))
 		}
 		help = "Press y to confirm  •  Esc cancel"
-	} else if m.cloning {
+	} else if m.mode == modeClone {
 		title = "Clone repository"
 		repositoryCursor := ""
 		destinationCursor := ""
@@ -4090,15 +4064,15 @@ func (m model) popupView(width int) string {
 		} else {
 			help = "Tab switch field  •  Enter clone  •  Esc cancel"
 		}
-	} else if m.creating {
+	} else if m.mode == modeCreateSession {
 		title = fmt.Sprintf("Create session (%d tabs)", len(m.selected))
 		field = selectedStyle.Width(popupWidth - 6).Render(m.createValue + "█")
 		help = "Enter create  •  Esc cancel"
-	} else if m.renaming {
+	} else if m.mode == modeRename {
 		title = "Rename"
 		field = selectedStyle.Width(popupWidth - 6).Render(m.renameValue + "█")
 		help = "Enter save  •  Esc cancel"
-	} else if m.worktreeMode {
+	} else if m.mode == modeWorktreeCreate {
 		title = "Create worktree"
 		cursor := "█"
 		if m.worktreeBranch != "" && !m.worktreeBusy {
@@ -4167,7 +4141,7 @@ func (m model) popupView(width int) string {
 		} else {
 			help = "Enter create  •  Esc cancel"
 		}
-	} else if m.prCheckout {
+	} else if m.mode == modeCheckoutPR {
 		title = "Checkout pull request"
 		fieldWidth := popupWidth - 6
 		cursor := "█"
@@ -4194,7 +4168,7 @@ func (m model) popupView(width int) string {
 		} else {
 			help = "Enter checkout  •  Esc cancel"
 		}
-	} else if m.pinning {
+	} else if m.mode == modePin {
 		title = "Pin " + m.entries[m.pinEntry].name
 		slot := "█"
 		if m.confirmSlot != "" {
@@ -5030,7 +5004,7 @@ func isKeshTab(windows []kittyWindow) bool {
 		commands := append([][]string{window.Cmdline}, foregroundCmdlines(window)...)
 		found := false
 		for _, command := range commands {
-			if len(command) > 0 && strings.Contains(command[0], "/kitty/scripts/kesh/kesh") {
+			if len(command) > 0 && filepath.Base(command[0]) == "kesh" {
 				found = true
 				break
 			}
@@ -6216,7 +6190,7 @@ func (m *model) beginWorktreeCreate() tea.Cmd {
 		m.err = fmt.Errorf("no project in this worktree tab")
 		return nil
 	}
-	m.worktreeMode = true
+	m.mode = modeWorktreeCreate
 	m.worktreeBranch = ""
 	m.worktreePaths = m.calculateWorktreePaths()
 	m.worktreeRecipe = nil
@@ -6227,7 +6201,7 @@ func (m *model) beginWorktreeCreate() tea.Cmd {
 	if len(entries) == 1 && entries[0].path != "" {
 		recipe, recipePath, err := loadWktreeRecipe(entries[0].path)
 		if err != nil {
-			m.worktreeMode = false
+			m.mode = modeNormal
 			m.err = err
 			return nil
 		}

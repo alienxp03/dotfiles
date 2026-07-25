@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -871,7 +871,7 @@ func TestClosedEntryWorktreeListRendersInlineHierarchy(t *testing.T) {
 
 			updated.cursor = 2
 			updated.beginClose()
-			if !updated.closing || updated.closeRow.section != "wt-item" {
+			if updated.mode != modeCloseConfirm || updated.closeRow.section != "wt-item" {
 				t.Fatalf("closed entry worktree could not be selected for removal: err=%v", updated.err)
 			}
 		})
@@ -1217,7 +1217,7 @@ func TestZoxideEntriesMergeAsynchronously(t *testing.T) {
 }
 
 func TestIsKeshTab(t *testing.T) {
-	kesh := kittyWindow{Cmdline: []string{"/Users/stan/.config/kitty/scripts/kesh/kesh"}}
+	kesh := kittyWindow{Cmdline: []string{"/Users/stan/.local/bin/kesh"}}
 	if !isKeshTab([]kittyWindow{kesh}) {
 		t.Fatal("expected dedicated Kesh tab to be excluded")
 	}
@@ -1547,7 +1547,7 @@ func TestCloneFormShowsAndUpdatesBothFields(t *testing.T) {
 	t.Setenv("HOME", home)
 	root := filepath.Join(home, "workspace")
 	m := model{
-		cloning:          true,
+		mode:             modeClone,
 		cloneRoot:        root,
 		cloneDestination: "~/workspace",
 	}
@@ -1588,7 +1588,7 @@ func TestPRCheckoutPopupShowsResolvedTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := model{
-		prCheckout:   true,
+		mode:         modeCheckoutPR,
 		checkoutRoot: checkoutRoot,
 		cloneRoot:    cloneRoot,
 		worktreeRoot: worktreeRoot,
@@ -1630,8 +1630,8 @@ func TestSaveOpenProjectRequiresConfirmation(t *testing.T) {
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	m = updated.(model)
-	if !m.saveConfirming || m.saving || cmd != nil {
-		t.Fatalf("save confirmation state = confirming:%t saving:%t cmd:%v", m.saveConfirming, m.saving, cmd)
+	if m.mode != modeSaveConfirm || m.saving || cmd != nil {
+		t.Fatalf("save confirmation state = confirming:%t saving:%t cmd:%v", m.mode == modeSaveConfirm, m.saving, cmd)
 	}
 	popup := ansi.Strip(m.popupView(80))
 	if !strings.Contains(popup, `Save "ksm" for later restoration?`) || !strings.Contains(popup, "Press y to confirm") {
@@ -1639,7 +1639,7 @@ func TestSaveOpenProjectRequiresConfirmation(t *testing.T) {
 	}
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(model)
-	if m.saveConfirming || m.saving || cmd != nil {
+	if m.mode == modeSaveConfirm || m.saving || cmd != nil {
 		t.Fatalf("escape did not cancel save confirmation: %#v, cmd:%v", m, cmd)
 	}
 }
@@ -1658,8 +1658,8 @@ func TestSaveWithForegroundCommandsShowsStrongConfirmation(t *testing.T) {
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'S'}})
 	m = updated.(model)
-	if !m.saveConfirming || !m.saveForeground || cmd != nil {
-		t.Fatalf("foreground save confirmation = confirming:%t foreground:%t cmd:%v", m.saveConfirming, m.saveForeground, cmd)
+	if m.mode != modeSaveConfirm || !m.saveForeground || cmd != nil {
+		t.Fatalf("foreground save confirmation = confirming:%t foreground:%t cmd:%v", m.mode == modeSaveConfirm, m.saveForeground, cmd)
 	}
 	popup := ansi.Strip(m.popupView(100))
 	if !strings.Contains(popup, "Save with running commands") || !strings.Contains(popup, "pnpm run dev") || strings.Contains(popup, "-zsh") {
@@ -1667,8 +1667,8 @@ func TestSaveWithForegroundCommandsShowsStrongConfirmation(t *testing.T) {
 	}
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updated.(model)
-	if m.saveConfirming || !m.saving || cmd == nil {
-		t.Fatalf("foreground save was not confirmed: confirming:%t saving:%t cmd:%v", m.saveConfirming, m.saving, cmd)
+	if m.mode == modeSaveConfirm || !m.saving || cmd == nil {
+		t.Fatalf("foreground save was not confirmed: confirming:%t saving:%t cmd:%v", m.mode == modeSaveConfirm, m.saving, cmd)
 	}
 }
 
@@ -2352,16 +2352,16 @@ func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updated.(model)
-	if m.searching || m.cursor != 1 {
-		t.Fatalf("j should navigate in command mode: searching=%v cursor=%d", m.searching, m.cursor)
+	if m.mode == modeSearch || m.cursor != 1 {
+		t.Fatalf("j should navigate in command mode: searching=%v cursor=%d", m.mode == modeSearch, m.cursor)
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = updated.(model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m = updated.(model)
-	if !m.searching || m.query != "j" || len(m.rows) != 2 {
-		t.Fatalf("slash search state: searching=%v query=%q rows=%d", m.searching, m.query, len(m.rows))
+	if m.mode != modeSearch || m.query != "j" || len(m.rows) != 2 {
+		t.Fatalf("slash search state: searching=%v query=%q rows=%d", m.mode == modeSearch, m.query, len(m.rows))
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
@@ -2371,8 +2371,8 @@ func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(model)
-	if m.searching || m.query != "j" {
-		t.Fatalf("esc did not retain the filter in command mode: searching=%v query=%q", m.searching, m.query)
+	if m.mode == modeSearch || m.query != "j" {
+		t.Fatalf("esc did not retain the filter in command mode: searching=%v query=%q", m.mode == modeSearch, m.query)
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = updated.(model)
@@ -2384,8 +2384,8 @@ func TestSlashSearchReturnsToCommandsForSelectionAndCreation(t *testing.T) {
 	m = updated.(model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	m = updated.(model)
-	if len(m.selected) != 1 || !m.creating {
-		t.Fatalf("command mode actions failed after search: selected=%#v creating=%v", m.selected, m.creating)
+	if len(m.selected) != 1 || m.mode != modeCreateSession {
+		t.Fatalf("command mode actions failed after search: selected=%#v creating=%v", m.selected, m.mode == modeCreateSession)
 	}
 }
 
@@ -2423,10 +2423,10 @@ func TestSpaceTogglesTopLevelSelection(t *testing.T) {
 	}
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	m = updated.(model)
-	if !m.creating {
+	if m.mode != modeCreateSession {
 		t.Fatal("n did not open the create-session prompt")
 	}
-	m.creating = false
+	m.mode = modeNormal
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = updated.(model)
 	if len(m.selected) != 0 {
@@ -2442,23 +2442,23 @@ func TestCloseRequiresConfirmationAndRejectsInactiveWorkspace(t *testing.T) {
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	m = updated.(model)
-	if !m.closing || m.closeBusy || cmd != nil {
-		t.Fatalf("first x should open confirmation: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
+	if m.mode != modeCloseConfirm || m.closeBusy || cmd != nil {
+		t.Fatalf("first x should open confirmation: closing=%v busy=%v cmd=%v", m.mode == modeCloseConfirm, m.closeBusy, cmd)
 	}
 	if popup := m.popupView(80); !strings.Contains(popup, `Close workspace "Payments"`) || !strings.Contains(popup, "Press y to confirm") {
 		t.Fatalf("close popup is missing confirmation details:\n%s", popup)
 	}
 	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	m = updated.(model)
-	if !m.closing || !m.closeBusy || cmd == nil {
-		t.Fatalf("y should start closing: closing=%v busy=%v cmd=%v", m.closing, m.closeBusy, cmd)
+	if m.mode != modeCloseConfirm || !m.closeBusy || cmd == nil {
+		t.Fatalf("y should start closing: closing=%v busy=%v cmd=%v", m.mode == modeCloseConfirm, m.closeBusy, cmd)
 	}
 
 	inactive := model{entries: []entry{{name: "Payments"}}, rows: []row{selected}}
 	updated, _ = inactive.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	inactive = updated.(model)
-	if inactive.closing || inactive.err == nil || !strings.Contains(inactive.err.Error(), "not open") {
-		t.Fatalf("inactive close state: closing=%v err=%v", inactive.closing, inactive.err)
+	if inactive.mode == modeCloseConfirm || inactive.err == nil || !strings.Contains(inactive.err.Error(), "not open") {
+		t.Fatalf("inactive close state: mode=%v err=%v", inactive.mode, inactive.err)
 	}
 }
 
@@ -2481,7 +2481,7 @@ func worktreeSelectedTestRecipe(t *testing.T) *wktreeRecipe {
 
 func TestWorktreeTabCyclesNativeTemplateAndWorkspaces(t *testing.T) {
 	recipe := worktreeSelectedTestRecipe(t)
-	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "none"}
+	m := model{mode: modeWorktreeCreate, worktreeRecipe: recipe, worktreeRecipeMode: "none"}
 	m.ensureWorktreeSelection()
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab}) // native -> template
@@ -2516,7 +2516,7 @@ func TestWorktreeTabCyclesNativeTemplateAndWorkspaces(t *testing.T) {
 
 func TestWorktreeSelectedSpaceAndEnterGuard(t *testing.T) {
 	recipe := worktreeSelectedTestRecipe(t)
-	m := model{worktreeMode: true, worktreeRecipe: recipe, worktreeRecipeMode: "selected", worktreeCustomWorkspaces: true, worktreeBranch: "feat/x"}
+	m := model{mode: modeWorktreeCreate, worktreeRecipe: recipe, worktreeRecipeMode: "selected", worktreeCustomWorkspaces: true, worktreeBranch: "feat/x"}
 	m.ensureWorktreeSelection()
 	// Defaults: [backend on, frontend off, worker on]. Cursor at backend; toggle it off.
 	if !reflect.DeepEqual(m.selectedWorkspaceNames(), []string{"backend", "worker"}) {
@@ -2633,7 +2633,7 @@ esac
 	if cmd != nil {
 		t.Fatalf("x should open the confirm popup, not remove immediately")
 	}
-	if !tab.closing {
+	if tab.mode != modeCloseConfirm {
 		t.Fatal("x in the Worktree tab should open the confirm popup")
 	}
 	if tab.closeRow.section != "wt-item" || tab.closeRow.worktreePath != "/wt/feat" {
