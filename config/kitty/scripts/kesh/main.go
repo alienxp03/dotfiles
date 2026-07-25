@@ -81,6 +81,9 @@ type worktreeItem struct {
 	prNumber  int
 	prExact   bool
 	prRepoKey string
+	dirty     bool
+	behind    int
+	ahead     int
 }
 
 type worktreeFilterRow struct {
@@ -2010,18 +2013,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				windowIDs, err := worktreeWindowIDs(m.kitty, wt.path)
 				if err == nil && len(windowIDs) > 0 {
 					// Focus the existing window
-					return m, func() tea.Msg { return actionMsg{err: run(m.kitty, "@", "focus-window", "--match", "id:"+strconv.Itoa(windowIDs[0]))} }
+					return m, func() tea.Msg {
+						return actionMsg{err: run(m.kitty, "@", "focus-window", "--match", "id:"+strconv.Itoa(windowIDs[0]))}
+					}
 				}
 				// No window found, open a new tab with the worktree
 				return m, runAction(m.kitty, m.zoxide, entry, row{
-					entryIndex: m.worktreeFilterEntryIndex,
-					tabIndex:   -1,
-					windowIndex: -1,
+					entryIndex:   m.worktreeFilterEntryIndex,
+					tabIndex:     -1,
+					windowIndex:  -1,
 					worktreePath: wt.path,
 				})
 			}
 			return m, runAction(m.kitty, m.zoxide, m.entries[r.entryIndex], r)
 		case "n":
+			if m.filter == filterWorktrees {
+				return m, m.beginWorktreeCreate()
+			}
 			if len(m.selected) == 0 {
 				m.err = fmt.Errorf("select at least one project or SSH host first")
 				return m, nil
@@ -2063,6 +2071,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			return m, nil
 		case "r":
+			if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
+				return m, m.refreshPRStatuses(m.entries[m.worktreeFilterEntryIndex].path, true)
+			}
 			m.beginRename()
 		case "s", "S":
 			if len(m.rows) == 0 {
@@ -2136,35 +2147,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			return m, nil
 		case "w":
-			if len(m.worktreeEntries()) == 0 {
-				m.err = fmt.Errorf("place the cursor on a project, or select multiple")
-				return m, nil
-			}
-			m.worktreeMode = true
-			m.worktreeBranch = ""
-			m.worktreePaths = m.calculateWorktreePaths()
-			m.worktreeRecipe = nil
-			m.worktreeRecipePath = ""
-			m.worktreeRecipeMode = ""
-			m.worktreeCustomWorkspaces = false
-			entries := m.worktreeEntries()
-			if len(entries) == 1 && entries[0].path != "" {
-				recipe, recipePath, err := loadWktreeRecipe(entries[0].path)
-				if err != nil {
-					m.worktreeMode = false
-					m.err = err
-					return m, nil
-				}
-				m.worktreeRecipe, m.worktreeRecipePath = recipe, recipePath
-				if recipe != nil {
-					m.worktreeRecipeMode = recipe.WorkspaceMode
-					m.ensureWorktreeSelection()
-				}
-			}
-			m.err = nil
-			return m, nil
-		case "W":
-			// Enter worktree filter mode
+			// Open the Worktree tab for the project under the cursor.
 			if len(m.rows) == 0 {
 				m.err = fmt.Errorf("no entry selected")
 				return m, nil
@@ -2187,8 +2170,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.rebuildWorktreeRows()
 			return m, nil
-		case "e":
-			return m, m.toggleWorktrees()
 		case "p":
 			if m.hasSelectedAgentWindow() {
 				m.showPreview = !m.showPreview
@@ -2241,10 +2222,16 @@ func (m model) selectedEntries() []entry {
 	return entries
 }
 
-// worktreeEntries resolves the projects a worktree action targets. Selection
-// drives multi-project worktrees; with nothing selected, the project under the
+// worktreeEntries resolves the projects a worktree action targets. In the
+// Worktree tab it is the project whose tab is open; otherwise selection drives
+// multi-project worktrees, and with nothing selected the project under the
 // cursor is used so a single worktree needs no explicit selection.
 func (m *model) worktreeEntries() []entry {
+	if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
+		if e := m.entries[m.worktreeFilterEntryIndex]; e.kind == "project" && e.path != "" {
+			return []entry{e}
+		}
+	}
 	if len(m.selected) > 0 {
 		return m.selectedEntries()
 	}
@@ -2792,10 +2779,11 @@ func (m *model) rebuildWorktreeRows() {
 
 	m.worktreeFilterRows = rows
 
-	// Build regular rows for cursor tracking
+	// Build regular rows for cursor tracking. wt indexes worktreeFilterRows so
+	// each rendered row maps to its own worktree, not the focused one.
 	m.rows = make([]row, len(rows))
 	for i := range rows {
-		m.rows[i] = row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-filter"}
+		m.rows[i] = row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: i}
 	}
 	m.cursor = 0
 	if len(m.rows) == 0 {
@@ -2917,17 +2905,17 @@ func (m model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
-	footer := "j/k move  space select  n new  c clone  w worktree  W worktrees  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	} else if m.filter == filterWorktrees {
-		footer = "j/k move  enter focus  o PR  c create  x remove  X merged  esc back  / search  tab filter  q quit"
+		footer = "j/k move  enter focus  n create  r refresh  o PR  x remove  X merged  esc back  / search  tab filter  q quit"
 	} else if hasSelectedWorktree {
 		footer = "j/k move  enter open  o PR  x remove  X merged  D closed  q quit"
 	} else if workspaceWidth < 100 {
-		footer = "j/k move  enter open  e worktrees  h/l expand  x close  / search  q quit"
+		footer = "j/k move  enter open  h/l expand  x close  / search  q quit"
 		if hasSelectedPR {
-			footer = "j/k move  enter open  o PR  e worktrees  x close  / search  q quit"
+			footer = "j/k move  enter open  o PR  h/l expand  x close  / search  q quit"
 		}
 	}
 	if workspaceWidth < 64 {
@@ -3035,6 +3023,44 @@ type detailField struct {
 	label  string
 	value  string
 	middle bool
+}
+
+// worktreeSyncBadge renders a worktree's divergence from its upstream and any
+// uncommitted changes as a compact inline marker: ↑N ahead, ↓M behind, ✱ dirty.
+func worktreeSyncBadge(worktree worktreeItem) string {
+	dirtyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true)
+	var segments []string
+	if worktree.ahead > 0 {
+		segments = append(segments, dimStyle.Render("↑"+strconv.Itoa(worktree.ahead)))
+	}
+	if worktree.behind > 0 {
+		segments = append(segments, dimStyle.Render("↓"+strconv.Itoa(worktree.behind)))
+	}
+	if worktree.dirty {
+		segments = append(segments, dirtyStyle.Render("✱"))
+	}
+	return strings.Join(segments, " ")
+}
+
+// worktreeSyncDetail renders a worktree's working-tree and upstream state for
+// the detail panel (e.g. "clean · ↑2 ahead · ↓1 behind").
+func worktreeSyncDetail(worktree worktreeItem) string {
+	var parts []string
+	if worktree.dirty {
+		parts = append(parts, "uncommitted changes")
+	} else {
+		parts = append(parts, "clean")
+	}
+	if worktree.ahead > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d ahead", worktree.ahead))
+	}
+	if worktree.behind > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d behind", worktree.behind))
+	}
+	if worktree.ahead == 0 && worktree.behind == 0 {
+		parts = append(parts, "up to date")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func worktreePRSummary(worktree worktreeItem) string {
@@ -3227,6 +3253,7 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			{label: "Path", value: displayPath(wt.path, os.Getenv("HOME")), middle: true},
 			{label: "PR", value: worktreePRSummary(wt)},
 			{label: "Commit", value: wt.head},
+			{label: "Sync", value: worktreeSyncDetail(wt)},
 		}
 
 		if wt.current {
@@ -3984,12 +4011,11 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		}
 		return ansi.Truncate(left, width, "…")
 	case "wt-filter":
-		// Worktree filter mode - flat list
-		if m.cursor < 0 || m.cursor >= len(m.worktreeFilterRows) {
+		// Worktree tab — flat list of the open project's worktrees.
+		if r.wt < 0 || r.wt >= len(m.worktreeFilterRows) {
 			return ""
 		}
-		wtRow := m.worktreeFilterRows[m.cursor]
-		wt := wtRow.worktree
+		wt := m.worktreeFilterRows[r.wt].worktree
 
 		current := "  "
 		if wt.current {
@@ -4000,6 +4026,7 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		if wt.prNumber > 0 {
 			prStatus = prStatusIcon(wt.prStatus) + " " + dimStyle.Render("#"+strconv.Itoa(wt.prNumber))
 		}
+		sync := worktreeSyncBadge(wt)
 
 		branchWidth := max(12, width*40/100)
 		branchPart := current + " " + truncate(wt.branch, branchWidth-lipgloss.Width(current)-1)
@@ -4007,7 +4034,18 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		statusWidth := max(8, width*20/100)
 		statusPart := ""
 		if prStatus != "" {
-			statusPart = " " + ansi.Truncate(prStatus, statusWidth, "…")
+			segment := ansi.Truncate(prStatus, statusWidth, "…")
+			if focused {
+				segment = focusStyle.Render(ansi.Strip(segment))
+			}
+			statusPart += " " + segment
+		}
+		if sync != "" {
+			segment := sync
+			if focused {
+				segment = focusStyle.Render(ansi.Strip(segment))
+			}
+			statusPart += " " + segment
 		}
 
 		pathPart := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
@@ -4016,9 +4054,6 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		}
 		if focused {
 			branchPart = focusStyle.Render(ansi.Strip(branchPart))
-			if prStatus != "" {
-				statusPart = " " + focusStyle.Render(ansi.Strip(prStatus))
-			}
 		}
 		left := branchPart + statusPart
 		right := pathPart
@@ -5630,63 +5665,38 @@ func (m *model) openWorktreePR() tea.Cmd {
 	}
 }
 
-// toggleWorktrees reveals or hides the git worktrees of the repo under the
-// cursor. Open entries remain window-scoped because their tabs may span several
-// repositories. A closed project or saved session instead uses its stored path,
-// so its worktrees can be inspected without first opening a Kitty session.
-func (m *model) toggleWorktrees() tea.Cmd {
-	if len(m.rows) == 0 {
+// beginWorktreeCreate opens the create-worktree form for the project whose
+// Worktree tab is open. While the tab is active, worktreeEntries() resolves
+// that project, so the paths, recipe, and validation pipeline target it
+// unchanged. The form overlays the tab; cancelling returns there because the
+// filter is left on filterWorktrees.
+func (m *model) beginWorktreeCreate() tea.Cmd {
+	if len(m.worktreeEntries()) == 0 {
+		m.err = fmt.Errorf("no project in this worktree tab")
 		return nil
 	}
-	r := m.rows[m.cursor]
-	e := &m.entries[r.entryIndex]
-
-	// Try worktrees first (for git repos)
-	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil && w.cwd != "" {
-		if w.worktreesOpen {
-			w.worktreesOpen = false
-			m.rebuildRows()
+	m.worktreeMode = true
+	m.worktreeBranch = ""
+	m.worktreePaths = m.calculateWorktreePaths()
+	m.worktreeRecipe = nil
+	m.worktreeRecipePath = ""
+	m.worktreeRecipeMode = ""
+	m.worktreeCustomWorkspaces = false
+	entries := m.worktreeEntries()
+	if len(entries) == 1 && entries[0].path != "" {
+		recipe, recipePath, err := loadWktreeRecipe(entries[0].path)
+		if err != nil {
+			m.worktreeMode = false
+			m.err = err
 			return nil
 		}
-		if w.worktreesLoaded {
-			w.worktreesOpen = true
-			m.rebuildRows()
-			return m.refreshPRStatuses(w.cwd, false)
+		m.worktreeRecipe, m.worktreeRecipePath = recipe, recipePath
+		if recipe != nil {
+			m.worktreeRecipeMode = recipe.WorkspaceMode
+			m.ensureWorktreeSelection()
 		}
-		w.worktreesPending = true
-		return fetchWorktrees(w.cwd, r.entryIndex, r.tabIndex, r.windowIndex)
 	}
-
-	closedEntry := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex)
-	if closedEntry != nil && closedEntry.path != "" {
-		if closedEntry.worktreesOpen {
-			closedEntry.worktreesOpen = false
-			m.rebuildRows()
-			return nil
-		}
-		if closedEntry.worktreesLoaded {
-			closedEntry.worktreesOpen = true
-			m.rebuildRows()
-			return m.refreshPRStatuses(closedEntry.path, false)
-		}
-		closedEntry.worktreesPending = true
-		return fetchWorktrees(closedEntry.path, r.entryIndex, -1, -1)
-	}
-
-	// No worktrees available, fall back to expand/collapse toggle
-	if r.tabIndex >= 0 {
-		tab := &e.tabs[r.tabIndex]
-		tab.expanded = !tab.expanded
-		m.rebuildRows()
-		return nil
-	}
-	if len(e.tabs) > 0 {
-		e.expanded = !e.expanded
-		m.rebuildRows()
-		return nil
-	}
-
-	// Nothing to expand
+	m.err = nil
 	return nil
 }
 
@@ -6413,6 +6423,7 @@ func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 			worktrees[i].prURL = pullRequest.URL
 			worktrees[i].prNumber = pullRequest.Number
 			worktrees[i].prExact = exact
+			worktrees[i].dirty, worktrees[i].ahead, worktrees[i].behind = worktreeSyncStatus(worktrees[i].path)
 		}
 		sortWorktreeItems(worktrees)
 		return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, worktrees: worktrees}
@@ -6450,4 +6461,50 @@ func parseWorktreePorcelain(output string) []worktreeItem {
 	}
 	flush()
 	return items
+}
+
+// worktreeSyncStatus reports whether a worktree has uncommitted changes and how
+// far its branch has diverged from its upstream. A single `git status -sb
+// --porcelain` call yields both: the tracking header carries ahead/behind, and
+// any following line is an uncommitted change.
+func worktreeSyncStatus(path string) (dirty bool, ahead, behind int) {
+	output, err := exec.Command("git", "-C", path, "status", "-sb", "--porcelain").Output()
+	if err != nil {
+		return false, 0, 0
+	}
+	lines := strings.Split(string(output), "\n")
+	if len(lines) == 0 {
+		return false, 0, 0
+	}
+	if header := strings.TrimSpace(lines[0]); strings.HasPrefix(header, "## ") {
+		if start := strings.Index(header, "["); start >= 0 {
+			ahead, behind = parseAheadBehind(header[start:])
+		}
+	}
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) != "" {
+			dirty = true
+			break
+		}
+	}
+	return dirty, ahead, behind
+}
+
+// parseAheadBehind decodes a "[ahead N, behind M]" tracking segment.
+func parseAheadBehind(segment string) (ahead, behind int) {
+	segment = strings.Trim(segment, "[]")
+	for _, part := range strings.Split(segment, ",") {
+		fields := strings.Fields(part)
+		if len(fields) != 2 {
+			continue
+		}
+		n, _ := strconv.Atoi(fields[1])
+		switch fields[0] {
+		case "ahead":
+			ahead = n
+		case "behind":
+			behind = n
+		}
+	}
+	return ahead, behind
 }

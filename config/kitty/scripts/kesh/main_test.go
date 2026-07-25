@@ -670,7 +670,7 @@ func TestOpenWorktreePROpensExactCachedURL(t *testing.T) {
 	}
 }
 
-func TestToggleWorktreesRefreshesPRStatusesInBackground(t *testing.T) {
+func TestFetchWorktreesRefreshesPRStatusesInBackground(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(directory, "cache"))
 	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -701,7 +701,7 @@ printf '%s\n' '[{"headRefName":"feat/open","headRefOid":"bbb","state":"OPEN","me
 		entries: []entry{{name: "repo", kind: "project", path: filepath.Join(directory, "repo")}},
 		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
 	}
-	listCommand := m.toggleWorktrees()
+	listCommand := fetchWorktrees(m.entries[0].path, 0, -1, -1)
 	if listCommand == nil {
 		t.Fatal("worktree query was not started")
 	}
@@ -720,20 +720,13 @@ printf '%s\n' '[{"headRefName":"feat/open","headRefOid":"bbb","state":"OPEN","me
 	}
 }
 
-func TestToggleWorktreesForClosedEntries(t *testing.T) {
+func TestClosedEntryWorktreeListRendersInlineHierarchy(t *testing.T) {
 	for _, kind := range []string{"project", "workspace"} {
 		t.Run(kind, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), kind)
 			m := model{
 				entries: []entry{{name: kind, kind: kind, path: path}},
 				rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
-			}
-
-			if cmd := m.toggleWorktrees(); cmd == nil {
-				t.Fatal("closed entry did not start a worktree query")
-			}
-			if !m.entries[0].worktreesPending {
-				t.Fatal("closed entry was not marked pending")
 			}
 
 			updatedModel, _ := m.Update(worktreeListMsg{
@@ -758,27 +751,64 @@ func TestToggleWorktreesForClosedEntries(t *testing.T) {
 			if !updated.closing || updated.closeRow.section != "wt-item" {
 				t.Fatalf("closed entry worktree could not be selected for removal: err=%v", updated.err)
 			}
-			updated.closing = false
-			if cmd := updated.toggleWorktrees(); cmd != nil {
-				t.Fatal("collapsing loaded worktrees unexpectedly started a query")
-			}
-			if updated.entries[0].worktreesOpen || len(updated.rows) != 1 {
-				t.Fatalf("worktrees did not collapse: entry=%#v rows=%#v", updated.entries[0], updated.rows)
-			}
 		})
 	}
 }
 
-func TestToggleWorktreesRequiresWindowForOpenEntry(t *testing.T) {
+func TestParseAheadBehind(t *testing.T) {
+	cases := []struct {
+		segment       string
+		ahead, behind int
+	}{
+		{"[ahead 2, behind 1]", 2, 1},
+		{"[behind 3]", 0, 3},
+		{"[ahead 5]", 5, 0},
+		{"", 0, 0},
+		{"[gone]", 0, 0},
+	}
+	for _, c := range cases {
+		ahead, behind := parseAheadBehind(c.segment)
+		if ahead != c.ahead || behind != c.behind {
+			t.Fatalf("parseAheadBehind(%q) = ahead %d behind %d, want %d %d", c.segment, ahead, behind, c.ahead, c.behind)
+		}
+	}
+}
+
+func TestWorktreeTabRendersEachRowWithSyncBadge(t *testing.T) {
 	m := model{
-		entries: []entry{{name: "project", kind: "project", path: "/projects/project", open: true}},
-		rows:    []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1}},
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries: []entry{{
+			name:            "repo",
+			kind:            "project",
+			path:            "/projects/repo",
+			worktreesLoaded: true,
+			worktrees: []worktreeItem{
+				{path: "/wt/main", branch: "main", current: true},
+				{path: "/wt/feat", branch: "feat/x", ahead: 2, behind: 1, dirty: true},
+			},
+		}},
 	}
-	if cmd := m.toggleWorktrees(); cmd != nil {
-		t.Fatal("open entry row should remain window-scoped")
+	// In the Worktree tab, worktreeEntries resolves the open project.
+	if got := m.worktreeEntries(); len(got) != 1 || got[0].path != "/projects/repo" {
+		t.Fatalf("worktreeEntries = %#v", got)
 	}
-	if m.entries[0].worktreesPending {
-		t.Fatal("open entry row was marked pending")
+	m.rebuildRows()
+	if len(m.rows) != 2 || m.rows[0].section != "wt-filter" || m.rows[1].section != "wt-filter" {
+		t.Fatalf("rows = %#v", m.rows)
+	}
+	if m.rows[0].wt != 0 || m.rows[1].wt != 1 {
+		t.Fatalf("per-row wt index not stored: %#v", m.rows)
+	}
+	// Each row renders its own worktree (not the focused one) with its sync badge.
+	first := ansi.Strip(m.renderRow(m.rows[0], 100, false))
+	second := ansi.Strip(m.renderRow(m.rows[1], 100, false))
+	if !strings.Contains(second, "feat/x") || !strings.Contains(second, "↑2") ||
+		!strings.Contains(second, "↓1") || !strings.Contains(second, "✱") {
+		t.Fatalf("dirty/ahead/behind badge missing from row:\n%s", second)
+	}
+	if strings.Contains(first, "↑2") {
+		t.Fatalf("first row should not show the second worktree's badge:\n%s", first)
 	}
 }
 
