@@ -252,6 +252,12 @@ type mergedWorktreeRemoveMsg struct {
 	err      error
 }
 
+type bulkWorktreeRemoveMsg struct {
+	entryIndex int
+	dir        string
+	err        error
+}
+
 type prInfo struct {
 	Status string
 	URL    string
@@ -353,6 +359,8 @@ type model struct {
 	cloneDestination         string
 	cloneRoot                string
 	selected                 map[string]bool
+	wtBulkSelected           map[string]bool // Worktree-tab bulk selection, keyed by worktree path
+	bulkWorktrees            []worktreeItem  // selected worktrees targeted by a bulk remove
 	pinning                  bool
 	pinEntry                 int
 	confirmSlot              string
@@ -493,7 +501,7 @@ func main() {
 	m := model{
 		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
 		filter: filter, showPreview: true, selected: map[string]bool{},
-		worktreeRoot: worktreeRoot,
+		worktreeRoot: worktreeRoot, worktreeFilterEntryIndex: -1,
 	}
 	m.rebuildRows()
 	m.startupCmd = m.queuePreview()
@@ -1507,8 +1515,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case worktreePullMsg:
 		m.worktreePullBusy = false
 		if msg.err != nil {
+			// Bulk pull may partially succeed, so surface the error but still
+			// reload — the worktrees that did pull have new ahead/behind state.
 			m.err = msg.err
-			return m, nil
+			return m, fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)
 		}
 		m.err = nil
 		return m, fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)
@@ -1583,6 +1593,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = nil
 		return m, fetchWorktrees(msg.dir, msg.selected.entryIndex, msg.selected.tabIndex, msg.selected.windowIndex)
+	case bulkWorktreeRemoveMsg:
+		m.closeBusy = false
+		m.closing = false
+		m.bulkWorktrees = nil
+		m.worktreeForcePrompt = false
+		m.wtBulkSelected = nil
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.err = nil
+		}
+		if msg.entryIndex >= 0 && msg.entryIndex < len(m.entries) {
+			return m, fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)
+		}
+		m.rebuildRows()
+		return m, nil
 	case worktreeRemoveMsg:
 		m.closeBusy = false
 		if msg.err != nil {
@@ -1709,6 +1735,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.closeBusy = true
 					m.err = nil
 					return m, m.runRemoveMergedWorktrees()
+				}
+				if m.closeRow.section == "wt-bulk" {
+					m.closeBusy = true
+					m.err = nil
+					return m, m.runRemoveWorktrees()
 				}
 				if isWorktreeRow {
 					if m.worktreeForcePrompt {
@@ -2040,6 +2071,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Worktree rows are not selectable; discard any main-list selection
 				// before returning so it cannot affect subsequent bulk actions.
 				m.selected = map[string]bool{}
+				m.wtBulkSelected = nil
 				// Return to previous filter
 				m.filter = m.previousFilter
 				m.worktreeFilterEntryIndex = -1
@@ -2059,10 +2091,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor+1 < len(m.rows) {
 				m.cursor++
 			}
+		case "ctrl+d", "pgdown":
+			m.cursor = min(m.cursor+m.listPageSize(), max(0, len(m.rows)-1))
+		case "ctrl+u", "pgup":
+			m.cursor = max(0, m.cursor-m.listPageSize())
+		case "home":
+			m.cursor = 0
+		case "end", "G":
+			m.cursor = max(0, len(m.rows)-1)
 		case "right", "l":
 			m.expandOrDescend()
 		case "left", "h":
 			m.ascendOrCollapse()
+		case "e":
+			// Toggle the selected node's subtree (session or tab).
+			m.toggleExpandAtCursor()
 		case " ":
 			m.toggleSelected()
 		case "enter":
@@ -2180,8 +2223,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = fmt.Errorf("no PR associated with this worktree")
 				return m, nil
 			}
-			return m, m.openWorktreePR()
+			if m.filter == filterWorktrees {
+				return m, m.openWorktreePR()
+			}
+			// vim-style: jump to the top of the list.
+			m.cursor = 0
 		case "x":
+			if m.filter == filterWorktrees && len(m.wtBulkSelected) > 0 {
+				// Bulk remove every selected worktree. The tab list can be a
+				// filtered subset, so resolve targets from worktreeFilterRows by
+				// path. Route through the confirm popup like the single x.
+				targets := m.selectedWorktreeItems()
+				if len(targets) == 0 {
+					m.err = fmt.Errorf("no matching worktrees to remove")
+					return m, nil
+				}
+				m.bulkWorktrees = targets
+				m.closeRow = row{
+					entryIndex:  m.worktreeFilterEntryIndex,
+					tabIndex:    -1,
+					windowIndex: -1,
+					section:     "wt-bulk",
+				}
+				m.closing = true
+				m.closeBusy = false
+				m.worktreeForcePrompt = false
+				m.mergedWorktrees = nil
+				m.destroyPlan = nil
+				m.err = nil
+				return m, nil
+			}
 			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
 				// Route through the confirm popup (like main-mode x) instead of
 				// force-removing immediately. The tab list can be a filtered
@@ -2278,6 +2349,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildWorktreeRows()
 			return m, nil
 		case "p":
+			if m.filter == filterWorktrees && len(m.wtBulkSelected) > 0 {
+				if m.worktreePullBusy {
+					return m, nil
+				}
+				targets := m.selectedWorktreeItems()
+				if len(targets) == 0 {
+					m.err = fmt.Errorf("no matching worktrees to pull")
+					return m, nil
+				}
+				entry := m.entries[m.worktreeFilterEntryIndex]
+				m.worktreePullBusy = true
+				m.err = nil
+				return m, pullWorktrees(targets, entry.path, m.worktreeFilterEntryIndex)
+			}
 			if m.filter == filterWorktrees && m.cursor >= 0 && m.cursor < len(m.worktreeFilterRows) {
 				if m.worktreePullBusy {
 					return m, nil
@@ -2298,9 +2383,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			m.filter = (m.filter + 1) % 7
+			m.resetWorktreeTab()
 			m.rebuildRows()
 		case "shift+tab":
 			m.filter = (m.filter + 6) % 7
+			m.resetWorktreeTab()
 			m.rebuildRows()
 		}
 		return m, m.queuePreview()
@@ -2310,6 +2397,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) toggleSelected() {
 	if len(m.rows) == 0 {
+		return
+	}
+	// In the Worktree tab, space bulk-selects worktree paths for x (remove)
+	// and p (pull) instead of toggling project selection.
+	if m.filter == filterWorktrees && m.cursor >= 0 && m.cursor < len(m.worktreeFilterRows) {
+		wt := m.worktreeFilterRows[m.cursor].worktree
+		if wt.path == "" {
+			return
+		}
+		if m.wtBulkSelected == nil {
+			m.wtBulkSelected = map[string]bool{}
+		}
+		if m.wtBulkSelected[wt.path] {
+			delete(m.wtBulkSelected, wt.path)
+		} else {
+			m.wtBulkSelected[wt.path] = true
+		}
+		m.err = nil
 		return
 	}
 	r := m.rows[m.cursor]
@@ -2337,6 +2442,16 @@ func (m model) selectedEntries() []entry {
 		}
 	}
 	return entries
+}
+
+// resetWorktreeTab clears the Worktree tab's project context and selection. The
+// tab is only meaningful when a project is chosen with w; arriving by cycling
+// Tab/Shift+tab carries no selection, so it must render empty with no folder
+// name rather than reusing a stale (or default 0) entry index.
+func (m *model) resetWorktreeTab() {
+	m.worktreeFilterEntryIndex = -1
+	m.worktreeFilterRows = nil
+	m.wtBulkSelected = nil
 }
 
 // worktreeEntries resolves the projects a worktree action targets. In the
@@ -2574,6 +2689,56 @@ func (m *model) ascendOrCollapse() {
 		e.expanded = false
 		m.rebuildRows()
 	}
+}
+
+// toggleExpandAtCursor expands or collapses the cursor's node in one keystroke,
+// so the user does not have to walk the tree node by node:
+//
+//   - session row → toggle that session's whole subtree (the entry plus all its
+//     tabs). Other sessions are not touched.
+//   - tab or window row → toggle only that tab's windows.
+//
+// For the session scope, if the entry or any of its tabs is collapsed, expand
+// the entry and all its tabs; otherwise collapse the entry. Entries without
+// tabs (closed/saved projects, SSH hosts) are untouched.
+func (m *model) toggleExpandAtCursor() {
+	if len(m.rows) == 0 {
+		return
+	}
+	r := m.rows[m.cursor]
+	if r.entryIndex < 0 || r.entryIndex >= len(m.entries) {
+		return
+	}
+	e := &m.entries[r.entryIndex]
+	if r.tabIndex >= 0 {
+		// On a tab/window row: toggle only that tab's windows. The session is
+		// already expanded (otherwise the tab would not be visible).
+		if r.tabIndex >= len(e.tabs) {
+			return
+		}
+		e.tabs[r.tabIndex].expanded = !e.tabs[r.tabIndex].expanded
+		m.rebuildRows()
+		return
+	}
+	// Session row: toggle only this session's subtree.
+	if len(e.tabs) == 0 {
+		return
+	}
+	anyCollapsed := !e.expanded
+	for t := range e.tabs {
+		if !e.tabs[t].expanded {
+			anyCollapsed = true
+		}
+	}
+	if anyCollapsed {
+		e.expanded = true
+		for t := range e.tabs {
+			e.tabs[t].expanded = true
+		}
+	} else {
+		e.expanded = false
+	}
+	m.rebuildRows()
 }
 
 // preserveExpandedState keeps hierarchy navigation stable when an operation
@@ -2897,6 +3062,23 @@ func (m *model) rebuildWorktreeRows() {
 
 	m.worktreeFilterRows = rows
 
+	// Drop bulk selections for worktrees that no longer exist (removed or
+	// pruned since selection) so the header count and bulk actions stay honest.
+	if len(m.wtBulkSelected) > 0 {
+		live := map[string]bool{}
+		for _, wt := range m.entries[entryIndex].worktrees {
+			live[wt.path] = true
+		}
+		for path := range m.wtBulkSelected {
+			if !live[path] {
+				delete(m.wtBulkSelected, path)
+			}
+		}
+		if len(m.wtBulkSelected) == 0 {
+			m.wtBulkSelected = nil
+		}
+	}
+
 	// Build regular rows for cursor tracking. wt indexes worktreeFilterRows so
 	// each rendered row maps to its own worktree, not the focused one.
 	m.rows = make([]row, len(rows))
@@ -2908,6 +3090,13 @@ func (m *model) rebuildWorktreeRows() {
 	} else if m.cursor >= len(m.rows) {
 		m.cursor = max(0, len(m.rows)-1)
 	}
+}
+
+// listPageSize mirrors the visible-row count computed in View() so jump/page
+// keys move by roughly what is on screen.
+func (m model) listPageSize() int {
+	available := max(1, max(5, m.height-6)-3)
+	return max(1, available/2)
 }
 
 func (m model) matchesFilter(e entry) bool {
@@ -2978,6 +3167,18 @@ func (m model) View() string {
 		promptValue = accentStyle.Render(m.query+"█") + "  " + dimStyle.Render("SEARCH")
 	}
 	header := accentStyle.Render("Kesh") + "  " + strings.Join(tabs, " ")
+	if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
+		entry := m.entries[m.worktreeFilterEntryIndex]
+		name := truncate(entry.name, max(12, workspaceWidth-lipgloss.Width(header)-2))
+		label := projectStyle.Render("󰉋 " + name)
+		if owner, repo := m.getRepoOwner(entry.path); repo != "" && repo != filepath.Base(entry.path) {
+			label += "  " + dimStyle.Render(owner+"/"+repo)
+		}
+		header += "  " + label
+		if n := len(m.wtBulkSelected); n > 0 {
+			header += "  " + accentStyle.Render(fmt.Sprintf("Selected (%d)", n))
+		}
+	}
 	if len(m.selected) > 0 {
 		names := make([]string, 0, len(m.selected))
 		for _, entry := range m.entries {
@@ -3012,7 +3213,14 @@ func (m model) View() string {
 		listLines = append(listLines, line)
 	}
 	if len(m.rows) == 0 {
-		listLines = append(listLines, dimStyle.Render("  No matching sessions"))
+		empty := "  No matching sessions"
+		if m.filter == filterWorktrees {
+			// The Worktree tab is empty when no project is selected (e.g. arrived
+			// by cycling Tab). Tell the user how to populate it rather than
+			// implying their search matched nothing.
+			empty = "  No project selected — open a project and press w"
+		}
+		listLines = append(listLines, dimStyle.Render(empty))
 	}
 	listPanel := renderListPanel(listLines, listWidth, listHeight)
 	detailPanel := m.detailPanelView(detailWidth, detailHeight, compactDetail)
@@ -3024,11 +3232,11 @@ func (m model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
-	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  g PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  g PR  h/l expand  e expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  ctrl+d/u g/G  q quit"
 	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	} else if m.filter == filterWorktrees {
-		footer = "j/k move  enter focus  n create  p pull  r refresh  g PR  x remove  X merged  esc back  / search  q quit"
+		footer = "j/k move  space select  enter focus  n create  p pull  r refresh  g PR  x remove  X merged  G end  esc back  / search  q quit"
 	} else if hasSelectedWorktree {
 		footer = "j/k move  enter open  g PR  x remove  X merged  D closed  q quit"
 	} else if workspaceWidth < 100 {
@@ -3978,6 +4186,8 @@ func (m model) popupView(width int) string {
 			title = "Destroy"
 		} else if len(m.mergedWorktrees) > 0 {
 			title = "Remove merged worktrees"
+		} else if m.closeRow.section == "wt-bulk" {
+			title = fmt.Sprintf("Remove %d worktree%s", len(m.bulkWorktrees), plural(len(m.bulkWorktrees)))
 		}
 		field = lipgloss.NewStyle().Width(popupWidth - 6).Render(m.closePrompt())
 		switch {
@@ -4037,6 +4247,18 @@ func (m model) closePrompt() string {
 		for i, worktree := range m.mergedWorktrees {
 			if i == 4 {
 				lines = append(lines, fmt.Sprintf("  …and %d more", len(m.mergedWorktrees)-i))
+				break
+			}
+			lines = append(lines, "  "+worktree.branch)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if selected.section == "wt-bulk" {
+		targets := m.bulkWorktrees
+		lines := []string{fmt.Sprintf("Delete %d worktree%s?", len(targets), plural(len(targets)))}
+		for i, worktree := range targets {
+			if i == 4 {
+				lines = append(lines, fmt.Sprintf("  …and %d more", len(targets)-i))
 				break
 			}
 			lines = append(lines, "  "+worktree.branch)
@@ -4146,7 +4368,11 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		}
 		wt := m.worktreeFilterRows[r.wt].worktree
 
-		current := "  "
+		selected := " "
+		if m.wtBulkSelected[wt.path] {
+			selected = accentStyle.Render("✓")
+		}
+		current := " "
 		if wt.current {
 			current = accentStyle.Render("★")
 		}
@@ -4158,7 +4384,7 @@ func (m model) renderRow(r row, width int, focused bool) string {
 		sync := worktreeSyncBadge(wt)
 
 		branchWidth := max(12, width*40/100)
-		branchPart := current + " " + truncate(wt.branch, branchWidth-lipgloss.Width(current)-1)
+		branchPart := selected + current + " " + truncate(wt.branch, branchWidth-lipgloss.Width(selected)-lipgloss.Width(current)-1)
 
 		statusWidth := max(8, width*20/100)
 		statusPart := ""
@@ -5621,6 +5847,28 @@ func pullWorktree(path, dir string, entryIndex int) tea.Cmd {
 	}
 }
 
+// pullWorktrees pulls every target worktree in one command, collecting per-
+// target failures so one bad branch does not abort the rest. Returns a single
+// summary that the worktreePullMsg handler surfaces and then reloads.
+func pullWorktrees(targets []worktreeItem, dir string, entryIndex int) tea.Cmd {
+	return func() tea.Msg {
+		var failures []string
+		for _, target := range targets {
+			if target.path == "" {
+				continue
+			}
+			output, err := exec.Command("git", "-C", target.path, "pull", "--rebase").CombinedOutput()
+			if err != nil {
+				failures = append(failures, commandError(target.branch, output, err).Error())
+			}
+		}
+		if len(failures) > 0 {
+			return worktreePullMsg{dir: dir, entryIndex: entryIndex, err: fmt.Errorf("some worktrees did not pull: %s", strings.Join(failures, "; "))}
+		}
+		return worktreePullMsg{dir: dir, entryIndex: entryIndex}
+	}
+}
+
 func run(name string, args ...string) error {
 	if name == "" {
 		return fmt.Errorf("required command was not found")
@@ -6265,6 +6513,30 @@ func (m *model) runRemoveMergedWorktrees() tea.Cmd {
 	}
 }
 
+// runRemoveWorktrees removes every bulk-selected worktree in the Worktree tab,
+// mirroring runRemoveMergedWorktrees. Non-force: a target with open Kitty
+// windows or uncommitted changes fails for that one and is named in the
+// summary; the rest are still removed.
+func (m *model) runRemoveWorktrees() tea.Cmd {
+	selected := m.closeRow
+	dir := m.worktreeDirectory(selected)
+	targets := append([]worktreeItem(nil), m.bulkWorktrees...)
+	entryIndex := selected.entryIndex
+	return func() tea.Msg {
+		var failures []string
+		for _, target := range targets {
+			output, err := exec.Command("git", "-C", dir, "worktree", "remove", target.path).CombinedOutput()
+			if err != nil {
+				failures = append(failures, commandError(target.branch, output, err).Error())
+			}
+		}
+		if len(failures) > 0 {
+			return bulkWorktreeRemoveMsg{entryIndex: entryIndex, dir: dir, err: fmt.Errorf("some worktrees were not removed: %s", strings.Join(failures, "; "))}
+		}
+		return bulkWorktreeRemoveMsg{entryIndex: entryIndex, dir: dir}
+	}
+}
+
 func (m *model) worktreeDirectory(r row) string {
 	if m.filter == filterWorktrees && r.entryIndex >= 0 && r.entryIndex < len(m.entries) {
 		// The tab lists one project's worktrees regardless of whether it is
@@ -6537,6 +6809,26 @@ func (m model) selectedWorktree() (worktreeItem, bool) {
 		return worktreeItem{}, false
 	}
 	return worktrees[selected.wt], true
+}
+
+// selectedWorktreeItems resolves the bulk-selected worktree paths to their
+// worktreeItems via the tab project's full worktree list, so a search filter
+// does not silently drop selections from a bulk action. Stale paths (worktrees
+// removed since selection) are skipped.
+func (m model) selectedWorktreeItems() []worktreeItem {
+	if len(m.wtBulkSelected) == 0 {
+		return nil
+	}
+	if m.worktreeFilterEntryIndex < 0 || m.worktreeFilterEntryIndex >= len(m.entries) {
+		return nil
+	}
+	var items []worktreeItem
+	for _, wt := range m.entries[m.worktreeFilterEntryIndex].worktrees {
+		if m.wtBulkSelected[wt.path] {
+			items = append(items, wt)
+		}
+	}
+	return items
 }
 
 func (m model) focusedWorktreePath() string {

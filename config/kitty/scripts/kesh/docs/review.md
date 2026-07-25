@@ -92,19 +92,36 @@ or mis-target work; fix before anything else.
 
 ## 🟢 UX / feature opportunities
 
-- [ ] **Paging / jump keys** — `ctrl+d/u`, `pgup/dn`, `g`/`G`, `home/end`.
+- [x] **Paging / jump keys** — `ctrl+d/u`, `pgup/dn`, `g`/`G`, `home/end`.
   Lists are line-scroll only today; biggest single navigation win.
   Touches `View()` window calc (~2912) + main `Update()` switch (~1995).
-- [ ] **Show the project/repo name in the Worktree tab** —
+  Done — added `listPageSize()` (mirrors the `View()` window calc) and
+  `ctrl+d`/`pgdown` (half-page down), `ctrl+u`/`pgup` (half-page up),
+  `home`, `end`/`G`, and `g` (top) to the main key switch. `g` keeps its
+  PR-open meaning in the Worktree tab (and the worktree tab gets `G`/`end`
+  for jump-to-bottom since `g` is taken there).
+- [x] **Show the project/repo name in the Worktree tab** —
   `worktreeFilterRow.entryName`/`entryPath` are populated (~2789) but
   never rendered; the tab is context-blind once entered. Put it in the
   header (~2900) or detail-panel title (~3282).
+  Done — the header now renders the tab project's name (and `owner/repo`
+  when the origin differs) plus a `Selected (N)` count when worktrees are
+  bulk-selected.
 - [ ] **Create worktree from a branch/PR picker** instead of typing a name
   (`n` → `beginWorktreeCreate` ~5746; `validateWorktreeBranch` ~5591).
-  Browse `git branch -r` / `gh pr list`; eliminates typos.
-- [ ] **Bulk select in the Worktree tab** — `space` + bulk `x`/`p` for
+  Browse `git branch -r` / `gh pr list`; eliminates typos. The PR data it
+  needs is already fetched per-repo via `queryPRStatuses` (`gh pr list`) and
+  cached, so a future picker can reuse it. Deferred pending UX decision.
+- [x] **Bulk select in the Worktree tab** — `space` + bulk `x`/`p` for
   fast stale-worktree cleanup. `toggleSelected` (~2233) currently rejects
   non-project rows; mirror main's selection machinery.
+  Done — `space` toggles a path-keyed `wtBulkSelected` map (rendered as a
+  leading `✓`); `x` routes a bulk remove through the confirm popup via the
+  new `wt-bulk` row section (`runRemoveWorktrees` mirrors the merged-
+  worktree flow), and `p` runs a batched `pullWorktrees`. Selections
+  resolve from the project's full worktree list (so a search filter does
+  not silently drop them) and stale paths are pruned on rebuild. Cleared
+  on `esc` and on `tab`/`shift+tab`.
 - [ ] **Worktree recency / last-modified + sort** — surface stale
   worktrees (the point of `X`). Add an mtime field to `worktreeItem`
   (~73), populate in `fetchWorktrees` (~6468), sort in

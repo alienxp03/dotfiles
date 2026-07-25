@@ -2901,3 +2901,215 @@ func TestOpenURLPlatformAware(t *testing.T) {
 		}
 	})
 }
+
+func TestWorktreeTabSpaceTogglesBulkSelection(t *testing.T) {
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries:                  []entry{{name: "repo", kind: "project", path: "/p/repo", worktrees: []worktreeItem{{path: "/wt/a", branch: "a"}, {path: "/wt/b", branch: "b"}}}},
+		worktreeFilterRows: []worktreeFilterRow{
+			{worktree: worktreeItem{path: "/wt/a", branch: "a"}},
+			{worktree: worktreeItem{path: "/wt/b", branch: "b"}},
+		},
+	}
+	m.rows = []row{
+		{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0},
+		{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 1},
+	}
+
+	// space on the first row selects it.
+	m.toggleSelected()
+	if !m.wtBulkSelected["/wt/a"] || len(m.wtBulkSelected) != 1 {
+		t.Fatalf("expected /wt/a selected, got %v", m.wtBulkSelected)
+	}
+	// space again deselects.
+	m.toggleSelected()
+	if len(m.wtBulkSelected) != 0 {
+		t.Fatalf("expected selection cleared, got %v", m.wtBulkSelected)
+	}
+}
+
+func TestSelectedWorktreeItemsResolvesFromFullWorktreeList(t *testing.T) {
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries: []entry{{name: "repo", kind: "project", path: "/p/repo", worktrees: []worktreeItem{
+			{path: "/wt/a", branch: "a"},
+			{path: "/wt/b", branch: "b"},
+			{path: "/wt/c", branch: "c"},
+		}}},
+		// The visible/filtered rows are a subset; selection should still resolve
+		// every selected worktree from the project's full list.
+		worktreeFilterRows: []worktreeFilterRow{{worktree: worktreeItem{path: "/wt/a", branch: "a"}}},
+		wtBulkSelected:     map[string]bool{"/wt/a": true, "/wt/c": true, "/wt/gone": true},
+	}
+	items := m.selectedWorktreeItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 live items, got %d: %+v", len(items), items)
+	}
+	got := map[string]bool{}
+	for _, item := range items {
+		got[item.path] = true
+	}
+	if !got["/wt/a"] || !got["/wt/c"] {
+		t.Fatalf("expected /wt/a and /wt/c, got %v", got)
+	}
+}
+
+func TestRebuildWorktreeRowsPrunesStaleBulkSelections(t *testing.T) {
+	m := &model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries: []entry{{name: "repo", kind: "project", path: "/p/repo", worktreesLoaded: true, worktrees: []worktreeItem{
+			{path: "/wt/a", branch: "a"},
+			{path: "/wt/b", branch: "b"},
+		}}},
+		wtBulkSelected: map[string]bool{"/wt/a": true, "/wt/removed": true},
+	}
+	m.rebuildWorktreeRows()
+	if m.wtBulkSelected["/wt/removed"] {
+		t.Fatalf("stale selection should have been pruned, got %v", m.wtBulkSelected)
+	}
+	if !m.wtBulkSelected["/wt/a"] {
+		t.Fatalf("live selection should have been kept, got %v", m.wtBulkSelected)
+	}
+}
+
+func TestListPageSizeIsPositiveAndBoundedByHeight(t *testing.T) {
+	m := model{height: 24}
+	if size := m.listPageSize(); size < 1 {
+		t.Fatalf("listPageSize = %d, want >= 1", size)
+	}
+	// Tiny terminal must still return at least 1.
+	m.height = 4
+	if size := m.listPageSize(); size < 1 {
+		t.Fatalf("listPageSize at height 4 = %d, want >= 1", size)
+	}
+}
+
+func TestToggleExpandFromSessionRowTogglesOnlyThatSession(t *testing.T) {
+	m := &model{
+		filter: filterAll,
+		entries: []entry{
+			{name: "a", tabs: []tabItem{{title: "t1", windows: []windowItem{{title: "w"}}}}},
+			{name: "b", tabs: []tabItem{{title: "t2", windows: []windowItem{{title: "w"}}}}},
+		},
+	}
+	m.rebuildRows()
+	// Cursor on session "a" (the first row). It starts collapsed → expand its subtree.
+	m.cursor = 0
+	m.toggleExpandAtCursor()
+	if !m.entries[0].expanded || !m.entries[0].tabs[0].expanded {
+		t.Fatalf("expected session a subtree expanded, got entry=%v tab=%v", m.entries[0].expanded, m.entries[0].tabs[0].expanded)
+	}
+	// Session b is untouched.
+	if m.entries[1].expanded {
+		t.Fatal("session b should not have been affected by a toggle on session a")
+	}
+	// Press again on session a: now fully expanded → collapse it.
+	m.toggleExpandAtCursor()
+	if m.entries[0].expanded {
+		t.Fatal("expected session a collapsed after second toggle")
+	}
+	// Session b still untouched.
+	if m.entries[1].expanded {
+		t.Fatal("session b should still be untouched")
+	}
+}
+
+func TestToggleExpandAllFromTabRowTogglesOnlyThatTab(t *testing.T) {
+	m := &model{
+		filter: filterAll,
+		entries: []entry{
+			{name: "a", expanded: true, tabs: []tabItem{
+				{title: "t1", windows: []windowItem{{title: "w"}}},
+				{title: "t2", windows: []windowItem{{title: "w"}}},
+			}},
+			{name: "b", expanded: false, tabs: []tabItem{{title: "t3", windows: []windowItem{{title: "w"}}}}},
+		},
+	}
+	m.rebuildRows()
+	// Put the cursor on session "a"'s first tab row.
+	cursorOnTab := -1
+	for i, r := range m.rows {
+		if r.entryIndex == 0 && r.tabIndex == 0 && r.windowIndex < 0 {
+			cursorOnTab = i
+			break
+		}
+	}
+	if cursorOnTab < 0 {
+		t.Fatal("could not find tab row for entry 0")
+	}
+	m.cursor = cursorOnTab
+	// From a tab row: toggle only that tab's windows. t1 collapsed → expand.
+	m.toggleExpandAtCursor()
+	if !m.entries[0].tabs[0].expanded {
+		t.Fatal("expected tab t1 expanded")
+	}
+	// The sibling tab and the other session are untouched.
+	if m.entries[0].tabs[1].expanded {
+		t.Fatal("sibling tab t2 should not have been toggled")
+	}
+	if m.entries[1].expanded {
+		t.Fatal("session b should not have been affected by a tab-row toggle in session a")
+	}
+	// Press again from the same tab row: t1 now expanded → collapse.
+	m.toggleExpandAtCursor()
+	if m.entries[0].tabs[0].expanded {
+		t.Fatal("expected tab t1 collapsed after second toggle")
+	}
+	// The session itself stays expanded so the tabs remain visible.
+	if !m.entries[0].expanded {
+		t.Fatal("session a should remain expanded after a tab-row toggle")
+	}
+}
+
+func TestTabIntoWorktreesWithoutSelectionIsEmpty(t *testing.T) {
+	m := model{
+		filter: filterAll,
+		entries: []entry{
+			{name: "first", kind: "project", path: "/p/first"},
+			{name: "second", kind: "project", path: "/p/second"},
+		},
+		selected:                 map[string]bool{},
+		worktreeFilterEntryIndex: -1,
+	}
+	m.rebuildRows()
+	// Cycle Tab until we land on the Worktrees tab.
+	for i := 0; i < 7 && m.filter != filterWorktrees; i++ {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = updated.(model)
+	}
+	if m.filter != filterWorktrees {
+		t.Fatalf("expected to cycle into Worktrees, filter=%d", m.filter)
+	}
+	// Arriving by Tab carries no project: no folder name index and an empty list.
+	if m.worktreeFilterEntryIndex != -1 {
+		t.Fatalf("expected worktreeFilterEntryIndex=-1, got %d", m.worktreeFilterEntryIndex)
+	}
+	if len(m.rows) != 0 {
+		t.Fatalf("expected empty worktree list, got %d rows", len(m.rows))
+	}
+	// The header must not leak the top session's name as the folder.
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, "first") && strings.Contains(view, "󰉋") {
+		t.Fatalf("header should not show a project folder for an unselected Worktrees tab:\n%s", view)
+	}
+}
+
+func TestWOpensWorktreesWithSelectedProject(t *testing.T) {
+	m := model{
+		filter:   filterAll,
+		entries:  []entry{{name: "repo", kind: "project", path: "/p/repo", worktreesLoaded: true}},
+		selected: map[string]bool{},
+	}
+	m.rebuildRows()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	m = updated.(model)
+	if m.filter != filterWorktrees {
+		t.Fatalf("expected Worktrees filter, got %d", m.filter)
+	}
+	if m.worktreeFilterEntryIndex != 0 {
+		t.Fatalf("expected worktreeFilterEntryIndex=0, got %d", m.worktreeFilterEntryIndex)
+	}
+}
