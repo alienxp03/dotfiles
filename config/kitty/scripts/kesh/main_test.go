@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -2547,4 +2548,314 @@ func TestWktreeLayoutPreviewModes(t *testing.T) {
 			t.Fatalf("all preview missing %s: %q", name, all)
 		}
 	}
+}
+
+// writeBin writes an executable shell script into dir. The body is appended to
+// "#!/bin/sh\n" so callers can focus on the script logic.
+func writeBin(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body), 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestWorktreeTabXConfirmsAndTargetsSelectedWorktree locks in the fix for the
+// critical bug where `x` in the Worktree tab force-removed entries[0]'s first
+// worktree with no confirmation. It must now open the confirm popup and remove
+// the worktree under the cursor — even when the tab list is a reordered subset
+// that does not start at the entry's first worktree.
+func TestWorktreeTabXConfirmsAndTargetsSelectedWorktree(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMPDIR", directory)
+	removeCapture := filepath.Join(directory, "removed")
+	t.Setenv("REMOVE_CAPTURE", removeCapture)
+	writeBin(t, directory, "git", `case "$*" in
+  *"worktree remove"*) printf '%s\n' "$*" >> "$REMOVE_CAPTURE"; exit 0 ;;
+  *"worktree list --porcelain"*) printf 'worktree %s/repo\nHEAD aaa\nbranch refs/heads/main\n' "$TMPDIR" ;;
+  *) exit 0 ;;
+esac
+`)
+	writeBin(t, directory, "kitty", `case "$*" in
+  *"@ ls"*) printf '[]\n' ;;
+  *) exit 0 ;;
+esac
+`)
+
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		kitty:                    filepath.Join(directory, "kitty"),
+		entries: []entry{{
+			name:            "repo",
+			kind:            "project",
+			path:            "/projects/repo",
+			worktreesLoaded: true,
+			worktrees: []worktreeItem{
+				{path: "/wt/main", branch: "main"},
+				{path: "/wt/feat", branch: "feat/x"},
+			},
+		}},
+		// Reordered subset: the cursor lands on feat/x, which is NOT the
+		// entry's first worktree (main). Pre-fix, removal targeted main.
+		worktreeFilterRows: []worktreeFilterRow{
+			{worktree: worktreeItem{path: "/wt/feat", branch: "feat/x"}},
+			{worktree: worktreeItem{path: "/wt/main", branch: "main"}},
+		},
+		cursor: 0,
+	}
+	m.rows = []row{
+		{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0},
+		{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 1},
+	}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	tab := updated.(model)
+	if cmd != nil {
+		t.Fatalf("x should open the confirm popup, not remove immediately")
+	}
+	if !tab.closing {
+		t.Fatal("x in the Worktree tab should open the confirm popup")
+	}
+	if tab.closeRow.section != "wt-item" || tab.closeRow.worktreePath != "/wt/feat" {
+		t.Fatalf("closeRow should target the selected worktree by path, got %#v", tab.closeRow)
+	}
+	// The popup must describe the selected worktree, not the entry's first one.
+	if prompt := tab.closePrompt(); !strings.Contains(prompt, "feat/x") || strings.Contains(prompt, "main") {
+		t.Fatalf("close prompt should name feat/x only:\n%s", prompt)
+	}
+
+	// Confirming runs the removal; the recorded git invocation must target feat/x.
+	_, confirmCmd := tab.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if confirmCmd == nil {
+		t.Fatal("confirming should start the removal")
+	}
+	if msg := confirmCmd().(worktreeRemoveMsg); msg.err != nil {
+		t.Fatalf("removal failed: %v", msg.err)
+	}
+	content, err := os.ReadFile(removeCapture)
+	if err != nil {
+		t.Fatalf("worktree remove was not invoked: %v", err)
+	}
+	if !strings.Contains(string(content), "/wt/feat") {
+		t.Fatalf("removed the wrong worktree:\n%s", content)
+	}
+	if strings.Contains(string(content), "/wt/main") {
+		t.Fatalf("removed the entry's first worktree instead of the selected one:\n%s", content)
+	}
+}
+
+// TestWorktreeTabEnterOpensWorktreeNotProject locks in the fix for the critical
+// bug where `enter` in the Worktree tab opened the project's main checkout
+// because runAction ignored the row's worktreePath.
+func TestWorktreeTabEnterOpensWorktreeNotProject(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMPDIR", directory)
+	writeBin(t, directory, "kitty", `case "$*" in
+  *"@ ls"*) printf '[]\n' ;;
+  *) exit 0 ;;
+esac
+`)
+	writeBin(t, directory, "zoxide", "exit 0\n")
+
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		kitty:                    filepath.Join(directory, "kitty"),
+		zoxide:                   filepath.Join(directory, "zoxide"),
+		entries: []entry{{
+			name: "repo", kind: "project", path: "/projects/repo", key: "/projects/repo",
+			worktreesLoaded: true,
+			worktrees:       []worktreeItem{{path: "/wt/feat", branch: "feat/x"}},
+		}},
+		worktreeFilterRows: []worktreeFilterRow{{worktree: worktreeItem{path: "/wt/feat", branch: "feat/x"}}},
+		cursor:             0,
+	}
+	m.rows = []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0}}
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should open the worktree")
+	}
+	if msg := cmd().(actionMsg); msg.err != nil {
+		t.Fatalf("enter failed: %v", msg.err)
+	}
+
+	sessionFile := filepath.Join(directory, "kitty-zoxide-sessions", "feat.kitty-session")
+	content, err := os.ReadFile(sessionFile)
+	if err != nil {
+		t.Fatalf("worktree session was not written: %v", err)
+	}
+	if !strings.Contains(string(content), "cd /wt/feat") {
+		t.Fatalf("enter should cd into the worktree, got:\n%s", content)
+	}
+	if strings.Contains(string(content), "/projects/repo") {
+		t.Fatalf("enter opened the project checkout instead of the worktree:\n%s", content)
+	}
+}
+
+// TestWorktreeTabDTargetsSelectedWorktreeNotProject locks in the fix for the
+// critical bug where `D` in the Worktree tab planned full entry destruction
+// because the wt-filter section was not handled.
+func TestWorktreeTabDTargetsSelectedWorktreeNotProject(t *testing.T) {
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries: []entry{{
+			name:            "repo",
+			kind:            "project",
+			path:            "/projects/repo",
+			open:            true,
+			tabs:            []tabItem{{}}, // an open session: full-entry destroy would close it
+			worktreesLoaded: true,
+			worktrees: []worktreeItem{
+				{path: "/wt/main", branch: "main"},
+				{path: "/wt/feat", branch: "feat/x"},
+			},
+		}},
+		worktreeFilterRows: []worktreeFilterRow{
+			{worktree: worktreeItem{path: "/wt/feat", branch: "feat/x"}},
+		},
+		cursor: 0,
+	}
+	m.rows = []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0}}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	tab := updated.(model)
+	if tab.destroyPlan == nil {
+		t.Fatal("D should build a destroy plan")
+	}
+	if tab.destroyPlan.closeSession {
+		t.Fatalf("D in the Worktree tab must not destroy the whole project session: %#v", tab.destroyPlan)
+	}
+	if tab.destroyPlan.worktreePath != "/wt/feat" {
+		t.Fatalf("D should target the selected worktree, got %q", tab.destroyPlan.worktreePath)
+	}
+	if tab.destroyPlan.branch != "feat/x" {
+		t.Fatalf("D should target the feat/x branch, got %q", tab.destroyPlan.branch)
+	}
+	if tab.closeRow.worktreePath != "/wt/feat" || tab.closeRow.section != "wt-item" {
+		t.Fatalf("closeRow should address the worktree: %#v", tab.closeRow)
+	}
+}
+
+// TestWorktreeTabFindMergedForOpenProject locks in the fix for the critical bug
+// where `X` (remove merged) errored for open projects in the Worktree tab
+// because worktreeDirectory could not resolve an open entry.
+func TestWorktreeTabFindMergedForOpenProject(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMPDIR", directory)
+	repo := filepath.Join(directory, "repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	removeCapture := filepath.Join(directory, "removed")
+	t.Setenv("REMOVE_CAPTURE", removeCapture)
+	writeBin(t, directory, "git", `case "$*" in
+  *"worktree remove"*) printf '%s\n' "$*" >> "$REMOVE_CAPTURE"; exit 0 ;;
+  *"worktree list --porcelain"*) printf 'worktree /repo\nHEAD aaa\nbranch refs/heads/main\n\nworktree /feat\nHEAD bbb\nbranch refs/heads/feat/x\n' ;;
+  *"branch --merged"*) printf 'main\nfeat/x\n' ;;
+  *"branch --show-current"*) printf 'main\n' ;;
+  *) exit 0 ;;
+esac
+`)
+	writeBin(t, directory, "gh", "printf '[]\\n'\n")
+
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries: []entry{{
+			name: "repo", kind: "project", path: repo, open: true,
+		}},
+		worktreeFilterRows: []worktreeFilterRow{{worktree: worktreeItem{path: filepath.Join(directory, "feat"), branch: "feat/x"}}},
+		cursor:             0,
+	}
+	m.rows = []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0}}
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'X'}})
+	tab := updated.(model)
+	if tab.err != nil {
+		t.Fatalf("X should not error for an open project in the tab: %v", tab.err)
+	}
+	if !tab.mergedWorktreeBusy {
+		t.Fatal("X should start the merged-worktree scan")
+	}
+	if cmd == nil {
+		t.Fatal("X should return a scan command")
+	}
+	msg := cmd().(mergedWorktreeListMsg)
+	if msg.err != nil {
+		t.Fatalf("merged scan failed: %v", msg.err)
+	}
+	if len(msg.worktrees) != 1 || msg.worktrees[0].branch != "feat/x" {
+		t.Fatalf("merged worktrees = %#v, want [feat/x]", msg.worktrees)
+	}
+
+	// The scan opens the confirm popup; confirming must remove the merged
+	// worktree from the tab's project (worktreeDirectory resolves the open
+	// entry's repo), not fail with an empty -C dir.
+	popupModel, _ := tab.Update(msg)
+	_, removeCmd := popupModel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	if removeCmd == nil {
+		t.Fatal("confirming merged removal should start the removal")
+	}
+	if removeMsg := removeCmd().(mergedWorktreeRemoveMsg); removeMsg.err != nil {
+		t.Fatalf("merged removal failed: %v", removeMsg.err)
+	}
+	content, err := os.ReadFile(removeCapture)
+	if err != nil {
+		t.Fatalf("merged worktree remove was not invoked: %v", err)
+	}
+	if !strings.Contains(string(content), "/feat") {
+		t.Fatalf("merged removal did not target the feat/x worktree:\n%s", content)
+	}
+}
+
+// TestOpenURLPlatformAware locks in the fix for the critical bug where the PR
+// opener was platform-wrong: the Worktree tab hardcoded xdg-open (broken on
+// macOS) and main mode hardcoded open (missing on Linux).
+func TestOpenURLPlatformAware(t *testing.T) {
+	t.Run("errors when no opener is installed", func(t *testing.T) {
+		directory := t.TempDir()
+		t.Setenv("PATH", directory) // no openers present
+		if err := openURL("https://example.com"); err == nil {
+			t.Fatal("openURL should error when no opener is on PATH")
+		}
+	})
+
+	t.Run("opens via the available opener", func(t *testing.T) {
+		directory := t.TempDir()
+		t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+		capture := filepath.Join(directory, "opened")
+		for _, name := range []string{"open", "xdg-open"} {
+			writeBin(t, directory, name, fmt.Sprintf("printf '%%s' \"$1\" >> %q\n", capture))
+		}
+		if err := openURL("https://example.com/pr/1"); err != nil {
+			t.Fatal(err)
+		}
+		content, err := os.ReadFile(capture)
+		if err != nil {
+			t.Fatalf("no opener was invoked: %v", err)
+		}
+		if got := strings.TrimSpace(string(content)); got != "https://example.com/pr/1" {
+			t.Fatalf("opened URL = %q", got)
+		}
+	})
+
+	t.Run("prefers the platform default", func(t *testing.T) {
+		directory := t.TempDir()
+		t.Setenv("PATH", directory)
+		for _, name := range []string{"open", "xdg-open"} {
+			writeBin(t, directory, name, "exit 0\n")
+		}
+		preferred := "xdg-open"
+		if runtime.GOOS == "darwin" {
+			preferred = "open"
+		}
+		if got := filepath.Base(openerCommand()); got != preferred {
+			t.Fatalf("openerCommand = %q, want %s", got, preferred)
+		}
+	})
 }

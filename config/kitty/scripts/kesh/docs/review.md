@@ -15,36 +15,51 @@ Status legend: `[ ]` open · `[x]` done · `[~]` won't-do / deferred.
 These were verified against the code at review time. Several can destroy
 or mis-target work; fix before anything else.
 
-- [ ] **`x` in the Worktree tab removes the wrong worktree, force, no confirm**
+- [x] **`x` in the Worktree tab removes the wrong worktree, force, no confirm**
   `case "x"` (~2142) calls `runRemoveWorktree(true)` without setting
   `m.closeRow`; `runRemoveWorktree` (~6328) reads `m.closeRow`, not the
   cursor. First use removes `entries[0].worktrees[0]` (possibly another
   repo's worktree) with `--force` (closes kitty windows) and skips the
   confirm popup. **Data loss.** Fix: set `closeRow` from the cursor row
   before calling, and route through the confirm popup like main-mode `x`.
+  Done — the tab `x` now addresses the worktree by path (the tab list can
+  be a filtered/reordered subset, so a wt index would mis-target) and
+  routes through the `y`/`f` confirm popup; `runRemoveWorktree` and
+  `closePrompt` resolve via the new `worktreeForRow` helper.
 
-- [ ] **`enter` opens the project, not the worktree** — `enter` in the tab
+- [x] **`enter` opens the project, not the worktree** — `enter` in the tab
   (~2049) → `runAction` (~5448). The row carries `worktreePath` (written
   ~2054) but it is **never read** anywhere; `runAction` only opens a
   worktree for `section == "wt-item"`, so it falls through to
   `openProjectSession` and opens the main checkout. Fix: honor
   `worktreePath` in `runAction` (or branch in the `enter` handler).
+  Done — `runAction` opens `selected.worktreePath` before any other branch.
 
-- [ ] **`D` destroys the whole project, not the selected worktree** — the
+- [x] **`D` destroys the whole project, not the selected worktree** — the
   worktree-specific `destroyPlan` only builds for `section == "wt-item"`
   (~2160); in the tab the section is `"wt-filter"`, so `D` plans full
   entry destruction. Fix: include `"wt-filter"` and resolve the worktree
   via `m.worktreeFilterRows[m.cursor]`.
+  Done — the tab `D` builds a worktree-scoped plan from
+  `worktreeFilterRows[cursor]` (no `closeSession`); the post-destroy reload
+  re-resolves the tab's project by path and refetches.
 
-- [ ] **`X` (remove merged) errors for open projects in the tab** —
+- [x] **`X` (remove merged) errors for open projects in the tab** —
   `findMergedWorktrees` → `worktreeDirectory` → `closedEntryAt` returns
   nil for open entries. Fix: fall back to
   `m.entries[m.worktreeFilterEntryIndex].path` in worktree-tab mode.
+  Done — `worktreeDirectory` resolves the repo from the tab's project path
+  when in `filterWorktrees` mode, so both `findMergedWorktrees` (the scan)
+  and `runRemoveMergedWorktrees` (the confirmed removal) target the right
+  repository for open projects.
 
-- [ ] **PR opener is platform-wrong** — tab `g` shells out to `xdg-open`
+- [x] **PR opener is platform-wrong** — tab `g` shells out to `xdg-open`
   (~2127); main `openWorktreePR` uses `run("open", …)` (~5725). On Linux
   main-mode PR open is broken (`open` missing); on macOS tab `g` breaks.
   Fix: route both through one platform-aware opener (mirror `commands()`).
+  Done — both paths route through `openURL`/`openerCommand` (macOS `open`,
+  Linux `xdg-open`, via `LookPath`); the tab `g` also stopped quitting
+  kesh on success (it now returns `openPRMsg`, not `actionMsg`).
 
 ## 🟠 Notable bugs (annoying, recoverable)
 

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1331,6 +1332,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 			return m, nil
 		}
+		// runDestroy reloads every entry, so the Worktree tab's entry index may
+		// have shifted and its worktrees are no longer loaded. Capture the
+		// project path before the swap, re-resolve it by path, and refetch its
+		// worktree list so the tab reflects the removal.
+		var tabPath string
+		if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
+			tabPath = m.entries[m.worktreeFilterEntryIndex].path
+		}
 		preserveExpandedState(m.entries, msg.entries)
 		m.entries = msg.entries
 		applyNames(m.entries, m.names)
@@ -1341,6 +1350,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.preview = ""
 		m.previewErr = nil
 		m.previewBusy = false
+		if m.filter == filterWorktrees && tabPath != "" {
+			for i := range m.entries {
+				if m.entries[i].path == tabPath {
+					m.worktreeFilterEntryIndex = i
+					return m, fetchWorktrees(tabPath, i, -1, -1)
+				}
+			}
+			// The project itself was destroyed; leave the tab.
+			m.filter = m.previousFilter
+			if m.filter == filterWorktrees {
+				m.filter = filterAll
+			}
+			m.worktreeFilterEntryIndex = -1
+			m.worktreeFilterRows = nil
+		}
 		m.rebuildRows()
 		return m, m.queuePreview()
 	case previewMsg:
@@ -1570,6 +1594,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closing = false
 		m.worktreeForcePrompt = false
 		m.err = nil
+		// In the Worktree tab the removal targets the tab's project; windowAt
+		// and closedEntryAt do not resolve it (open entries, tabIndex -1), so
+		// refetch the tab's worktree list directly.
+		if m.filter == filterWorktrees && msg.entryIndex >= 0 && msg.entryIndex < len(m.entries) && msg.entryIndex == m.worktreeFilterEntryIndex {
+			return m, fetchWorktrees(m.entries[msg.entryIndex].path, msg.entryIndex, -1, -1)
+		}
 		if w := m.windowAt(msg.entryIndex, msg.tabIndex, msg.windowIndex); w != nil {
 			return m, fetchWorktrees(w.cwd, msg.entryIndex, msg.tabIndex, msg.windowIndex)
 		}
@@ -2127,12 +2157,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
 				wt := m.worktreeFilterRows[m.cursor].worktree
 				if wt.prURL != "" {
+					prURL := wt.prURL
 					return m, func() tea.Msg {
-						cmd := exec.Command("xdg-open", wt.prURL)
-						if err := cmd.Run(); err != nil {
-							return actionMsg{err: fmt.Errorf("open PR: %w", err)}
-						}
-						return actionMsg{}
+						return openPRMsg{err: openURL(prURL)}
 					}
 				}
 				m.err = fmt.Errorf("no PR associated with this worktree")
@@ -2141,16 +2168,53 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.openWorktreePR()
 		case "x":
 			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
-				// Remove the selected worktree
-				return m, m.runRemoveWorktree(true)
+				// Route through the confirm popup (like main-mode x) instead of
+				// force-removing immediately. The tab list can be a filtered
+				// subset, so address the worktree by path, not by wt index.
+				wt := m.worktreeFilterRows[m.cursor].worktree
+				m.closeRow = row{
+					entryIndex:   m.worktreeFilterEntryIndex,
+					tabIndex:     -1,
+					windowIndex:  -1,
+					section:      "wt-item",
+					worktreePath: wt.path,
+				}
+				m.closing = true
+				m.closeBusy = false
+				m.worktreeForcePrompt = false
+				m.mergedWorktrees = nil
+				m.err = nil
+				return m, nil
 			}
 			m.beginClose()
 		case "X":
-			if m.filter == filterWorktrees {
-				return m, m.findMergedWorktrees()
-			}
 			return m, m.findMergedWorktrees()
 		case "D":
+			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor >= 0 && m.cursor < len(m.worktreeFilterRows) {
+				// In the Worktree tab, destroy the selected worktree only — not
+				// the whole project. The tab list can be a filtered subset, so
+				// resolve the worktree from worktreeFilterRows, not by index.
+				wt := m.worktreeFilterRows[m.cursor].worktree
+				branch := wt.branch
+				if branch == "" || branch == "(detached)" {
+					branch = ""
+				}
+				plan := destroyPlan{entryName: wt.branch, worktreePath: wt.path, branch: branch}
+				m.closeRow = row{
+					entryIndex:   m.worktreeFilterEntryIndex,
+					tabIndex:     -1,
+					windowIndex:  -1,
+					section:      "wt-item",
+					worktreePath: wt.path,
+				}
+				m.destroyPlan = &plan
+				m.closing = true
+				m.closeBusy = false
+				m.worktreeForcePrompt = false
+				m.mergedWorktrees = nil
+				m.err = nil
+				return m, nil
+			}
 			if len(m.rows) == 0 {
 				return m, nil
 			}
@@ -2158,8 +2222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			entry := m.entries[selected.entryIndex]
 			plan := detectDestroyPlan(entry)
 			if selected.section == "wt-item" {
-				if worktrees := m.worktreesForRow(selected); selected.wt >= 0 && selected.wt < len(worktrees) {
-					wt := worktrees[selected.wt]
+				if wt, ok := m.worktreeForRow(selected); ok {
 					branch := wt.branch
 					if branch == "" || branch == "(detached)" {
 						branch = ""
@@ -3964,11 +4027,10 @@ func (m model) closePrompt() string {
 		return strings.Join(lines, "\n")
 	}
 	if selected.section == "wt-item" {
-		worktrees := m.worktreesForRow(selected)
-		if selected.wt < 0 || selected.wt >= len(worktrees) {
+		wt, ok := m.worktreeForRow(selected)
+		if !ok {
 			return "Worktree is no longer available"
 		}
-		wt := worktrees[selected.wt]
 		prefix := "Delete"
 		if m.worktreeForcePrompt {
 			prefix = "Force-delete"
@@ -5445,6 +5507,13 @@ func runCreateSession(kitty string, entries []entry, name string) tea.Cmd {
 
 func runAction(kitty, zoxide string, e entry, selected row) tea.Cmd {
 	return func() tea.Msg {
+		// The Worktree tab addresses a worktree by path (the tab list is a
+		// filtered, re-sorted subset of the entry's worktrees, so a wt index
+		// would target the wrong tree). Open it directly instead of falling
+		// through to the project's main checkout.
+		if selected.worktreePath != "" {
+			return actionMsg{err: openProjectSession(kitty, zoxide, selected.worktreePath, false)}
+		}
 		if selected.section == "wt-item" && selected.wt >= 0 {
 			if selected.tabIndex < 0 && selected.wt < len(e.worktrees) {
 				return actionMsg{err: openProjectSession(kitty, zoxide, e.worktrees[selected.wt].path, false)}
@@ -5545,6 +5614,34 @@ func run(name string, args ...string) error {
 		}
 	}
 	return err
+}
+
+// openerCommand resolves the platform's default URL opener so PR links open in
+// the browser on every OS: macOS uses "open", Linux/BSDs use "xdg-open". It
+// scans PATH so a missing opener is reported cleanly instead of shelling out to
+// a binary that does not exist. Returns "" when no opener is installed.
+func openerCommand() string {
+	candidates := []string{"xdg-open", "open"}
+	if runtime.GOOS == "darwin" {
+		candidates = []string{"open", "xdg-open"}
+	}
+	for _, name := range candidates {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+// openURL opens target in the user's default browser via the platform opener.
+// Both the Worktree tab and the main-mode PR opener route through here so the
+// platform choice lives in one place.
+func openURL(target string) error {
+	opener := openerCommand()
+	if opener == "" {
+		return fmt.Errorf("no URL opener found (install xdg-open or open)")
+	}
+	return run(opener, target)
 }
 
 func safeName(value string) string {
@@ -5734,7 +5831,7 @@ func (m *model) openWorktreePR() tea.Cmd {
 	}
 	m.err = nil
 	return func() tea.Msg {
-		return openPRMsg{err: run("open", pullRequestURL)}
+		return openPRMsg{err: openURL(pullRequestURL)}
 	}
 }
 
@@ -6150,6 +6247,12 @@ func (m *model) runRemoveMergedWorktrees() tea.Cmd {
 }
 
 func (m *model) worktreeDirectory(r row) string {
+	if m.filter == filterWorktrees && r.entryIndex >= 0 && r.entryIndex < len(m.entries) {
+		// The tab lists one project's worktrees regardless of whether it is
+		// open; closedEntryAt skips open entries, so resolve the repo from the
+		// tab's project directly.
+		return m.entries[r.entryIndex].path
+	}
 	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil {
 		return w.cwd
 	}
@@ -6327,20 +6430,20 @@ func runDestroy(kitty, zoxide string, e entry, plan destroyPlan) tea.Cmd {
 // removal closes those windows, then removes the worktree.
 func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 	r := m.closeRow
-	worktrees := m.worktreesForRow(r)
-	if r.wt < 0 || r.wt >= len(worktrees) {
+	target, ok := m.worktreeForRow(r)
+	if !ok {
 		return func() tea.Msg {
 			return worktreeRemoveMsg{forceTried: force, err: fmt.Errorf("worktree is no longer available")}
 		}
 	}
-	target := worktrees[r.wt].path
+	targetPath := target.path
 	// The parent entry can be a stale saved or pruned worktree. Resolve the
 	// repository from the worktree being removed instead of running Git from
 	// that parent path.
-	repoDir := worktreeMainPath(target)
+	repoDir := worktreeMainPath(targetPath)
 	entryIndex, tabIndex, windowIndex := r.entryIndex, r.tabIndex, r.windowIndex
 	return func() tea.Msg {
-		windowIDs, windowErr := worktreeWindowIDs(m.kitty, target)
+		windowIDs, windowErr := worktreeWindowIDs(m.kitty, targetPath)
 		if windowErr != nil {
 			return worktreeRemoveMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, forceTried: force, err: windowErr}
 		}
@@ -6358,7 +6461,7 @@ func (m *model) runRemoveWorktree(force bool) tea.Cmd {
 		if force {
 			args = append(args, "--force")
 		}
-		args = append(args, target)
+		args = append(args, targetPath)
 		output, err := exec.Command("git", args...).CombinedOutput()
 		if err != nil {
 			message := strings.TrimSpace(string(output))
@@ -6463,6 +6566,29 @@ func (m model) worktreesForRow(r row) []worktreeItem {
 		return nil
 	}
 	return windows[r.windowIndex].worktrees
+}
+
+// worktreeForRow resolves the single worktree addressed by r. Rows built for the
+// Worktree tab carry worktreePath directly: the tab list can be a filtered,
+// re-sorted subset of the entry's worktrees, so indexing e.worktrees by r.wt
+// would target the wrong tree. Inline wt-item rows resolve by index into the
+// entry or window worktree list instead.
+func (m model) worktreeForRow(r row) (worktreeItem, bool) {
+	if r.worktreePath != "" {
+		for _, wt := range m.worktreesForRow(r) {
+			if wt.path == r.worktreePath {
+				return wt, true
+			}
+		}
+		// The list may have been refetched between the keypress and this call;
+		// the path is still valid for removal, so synthesize a minimal item.
+		return worktreeItem{path: r.worktreePath, branch: filepath.Base(r.worktreePath)}, true
+	}
+	worktrees := m.worktreesForRow(r)
+	if r.wt < 0 || r.wt >= len(worktrees) {
+		return worktreeItem{}, false
+	}
+	return worktrees[r.wt], true
 }
 
 func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
