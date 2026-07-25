@@ -419,6 +419,33 @@ func TestWorktreeInfoPanelIsResponsiveAndOmitsFullPRURL(t *testing.T) {
 	}
 }
 
+func TestWorktreeDetailPanelShowsChangedFilesWhenDirty(t *testing.T) {
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries:                  []entry{{name: "repo", kind: "project", path: "/projects/repo"}},
+		worktreeFilterRows: []worktreeFilterRow{{worktree: worktreeItem{
+			path:    "/wt/feat",
+			branch:  "feat/x",
+			dirty:   true,
+			changes: []string{" M main.go", "?? new.txt"},
+		}}},
+	}
+	m.rows = []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0}}
+	panel := ansi.Strip(m.detailPanelView(80, 20, false))
+	for _, want := range []string{"Changes", "M main.go", "new.txt"} {
+		if !strings.Contains(panel, want) {
+			t.Fatalf("detail panel missing %q:\n%s", want, panel)
+		}
+	}
+	// A clean worktree omits the Changes section entirely.
+	m.worktreeFilterRows[0].worktree.dirty = false
+	m.worktreeFilterRows[0].worktree.changes = nil
+	if clean := ansi.Strip(m.detailPanelView(80, 20, false)); strings.Contains(clean, "Changes") {
+		t.Fatalf("clean worktree should not show Changes:\n%s", clean)
+	}
+}
+
 func TestDetailPanelSupportsEveryRowType(t *testing.T) {
 	m := model{entries: []entry{{
 		name: "repo", kind: "project", path: "/workspace/repo", open: false,
@@ -866,6 +893,28 @@ func TestParseAheadBehind(t *testing.T) {
 		if ahead != c.ahead || behind != c.behind {
 			t.Fatalf("parseAheadBehind(%q) = ahead %d behind %d, want %d %d", c.segment, ahead, behind, c.ahead, c.behind)
 		}
+	}
+}
+
+func TestParseWorktreeStatus(t *testing.T) {
+	dirty, ahead, behind, changes := parseWorktreeStatus("## main...origin/main [ahead 2, behind 1]\n M main.go\n?? new.txt\nA  staged.go\n")
+	if !dirty || ahead != 2 || behind != 1 {
+		t.Fatalf("dirty=%v ahead=%d behind=%d", dirty, ahead, behind)
+	}
+	want := []string{" M main.go", "?? new.txt", "A  staged.go"}
+	if len(changes) != len(want) {
+		t.Fatalf("changes=%#v want %#v", changes, want)
+	}
+	for i := range want {
+		if changes[i] != want[i] {
+			t.Fatalf("changes[%d]=%q want %q (full: %#v)", i, changes[i], want[i], changes)
+		}
+	}
+
+	// A clean worktree with no upstream reports no changes and no divergence.
+	dirty, ahead, behind, changes = parseWorktreeStatus("## main\n")
+	if dirty || ahead != 0 || behind != 0 || len(changes) != 0 {
+		t.Fatalf("clean parse: dirty=%v ahead=%d behind=%d changes=%#v", dirty, ahead, behind, changes)
 	}
 }
 

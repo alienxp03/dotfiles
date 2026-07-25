@@ -84,6 +84,7 @@ type worktreeItem struct {
 	dirty     bool
 	behind    int
 	ahead     int
+	changes   []string
 }
 
 type worktreeFilterRow struct {
@@ -3293,6 +3294,13 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			{label: "Commit", value: wt.head},
 			{label: "Sync", value: worktreeSyncDetail(wt)},
 		}
+		if wt.dirty && len(wt.changes) > 0 {
+			shown := wt.changes
+			if len(shown) > 6 {
+				shown = append(append([]string{}, shown[:6]...), fmt.Sprintf("…and %d more", len(wt.changes)-6))
+			}
+			fields = append(fields, detailField{label: "Changes", value: strings.Join(shown, "\n")})
+		}
 
 		if wt.current {
 			fields = append([]detailField{{label: "Status", value: accentStyle.Render("★ Current worktree")}}, fields...)
@@ -6488,7 +6496,7 @@ func fetchWorktrees(dir string, entryIndex, tabIndex, windowIndex int) tea.Cmd {
 			worktrees[i].prURL = pullRequest.URL
 			worktrees[i].prNumber = pullRequest.Number
 			worktrees[i].prExact = exact
-			worktrees[i].dirty, worktrees[i].ahead, worktrees[i].behind = worktreeSyncStatus(worktrees[i].path)
+			worktrees[i].dirty, worktrees[i].ahead, worktrees[i].behind, worktrees[i].changes = worktreeSyncStatus(worktrees[i].path)
 		}
 		sortWorktreeItems(worktrees)
 		return worktreeListMsg{entryIndex: entryIndex, tabIndex: tabIndex, windowIndex: windowIndex, dir: dir, worktrees: worktrees}
@@ -6532,14 +6540,21 @@ func parseWorktreePorcelain(output string) []worktreeItem {
 // far its branch has diverged from its upstream. A single `git status -sb
 // --porcelain` call yields both: the tracking header carries ahead/behind, and
 // any following line is an uncommitted change.
-func worktreeSyncStatus(path string) (dirty bool, ahead, behind int) {
+func worktreeSyncStatus(path string) (dirty bool, ahead, behind int, changes []string) {
 	output, err := exec.Command("git", "-C", path, "status", "-sb", "--porcelain").Output()
 	if err != nil {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
-	lines := strings.Split(string(output), "\n")
+	return parseWorktreeStatus(string(output))
+}
+
+// parseWorktreeStatus decodes `git status -sb --porcelain` output: the tracking
+// header yields ahead/behind, and every following line is an uncommitted change
+// (kept verbatim so its status column survives for the detail panel).
+func parseWorktreeStatus(output string) (dirty bool, ahead, behind int, changes []string) {
+	lines := strings.Split(output, "\n")
 	if len(lines) == 0 {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 	if header := strings.TrimSpace(lines[0]); strings.HasPrefix(header, "## ") {
 		if start := strings.Index(header, "["); start >= 0 {
@@ -6547,12 +6562,13 @@ func worktreeSyncStatus(path string) (dirty bool, ahead, behind int) {
 		}
 	}
 	for _, line := range lines[1:] {
-		if strings.TrimSpace(line) != "" {
-			dirty = true
-			break
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
+		dirty = true
+		changes = append(changes, strings.TrimRight(line, "\r"))
 	}
-	return dirty, ahead, behind
+	return dirty, ahead, behind, changes
 }
 
 // parseAheadBehind decodes a "[ahead N, behind M]" tracking segment.
