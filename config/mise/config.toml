@@ -79,7 +79,7 @@ yamlfmt     = "0.21.0"
 # CLI utilities
 bat                                  = "0.26.1"
 cmake                                = "4.3.4"
-"cargo:eza"                          = "0.23.5"
+eza                                  = "0.23.5"
 fd                                   = "10.4.2"
 ffmpeg                               = "8.1.2"
 glow                                 = "2.1.2"
