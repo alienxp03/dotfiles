@@ -25,12 +25,26 @@ setopt hist_save_no_dups
 setopt hist_ignore_dups
 setopt hist_find_no_dups
 
+# Auto-cd: typing a bare directory name changes into it
+# (e.g. `.config` == `cd .config`).
+setopt autocd
+
 # Completion
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z} r:|[._-]=* l:|=*'
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' menu no
 zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
+
+# --- Keybindings ---
+# Alt-F: accept one word of the autosuggestion (partial accept). Standard
+# forward-word key; pairs with Alt-B (backward-word). Bound through zvm's
+# after-init hook (runs at source time, after zvm's own keymap setup) so
+# zsh-vi-mode doesn't clobber it. (Ctrl-L was kitty's window-nav key.)
+function _zsh_bind_partial_accept() {
+	(( $+functions[zvm_bindkey] )) && zvm_bindkey viins '^[f' forward-word
+}
+zvm_after_init_commands+=(_zsh_bind_partial_accept)
 
 # Keep Kitty shell integration active after reloading with `exec zsh`.
 if [[ -n "$KITTY_INSTALLATION_DIR" ]]; then
