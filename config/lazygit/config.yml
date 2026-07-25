@@ -4,7 +4,6 @@ keybinding:
   universal:
     quit: q
     quit-alt1: <esc>
-    return: <backspace>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
   pagers:

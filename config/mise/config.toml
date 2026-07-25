@@ -4,6 +4,7 @@
 "brew:ranger"      = "latest"
 "brew:witr"        = "latest"
 "brew:viu"         = "latest"
+"brew-cask:kitty"  = "latest"
 
 [tools]
 # Languages / runtimes
