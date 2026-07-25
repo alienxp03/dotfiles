@@ -5639,6 +5639,9 @@ func (m *model) toggleWorktrees() tea.Cmd {
 		return nil
 	}
 	r := m.rows[m.cursor]
+	e := &m.entries[r.entryIndex]
+
+	// Try worktrees first (for git repos)
 	if w := m.windowAt(r.entryIndex, r.tabIndex, r.windowIndex); w != nil && w.cwd != "" {
 		if w.worktreesOpen {
 			w.worktreesOpen = false
@@ -5654,22 +5657,37 @@ func (m *model) toggleWorktrees() tea.Cmd {
 		return fetchWorktrees(w.cwd, r.entryIndex, r.tabIndex, r.windowIndex)
 	}
 
-	e := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex)
-	if e == nil || e.path == "" {
-		return nil
+	closedEntry := m.closedEntryAt(r.entryIndex, r.tabIndex, r.windowIndex)
+	if closedEntry != nil && closedEntry.path != "" {
+		if closedEntry.worktreesOpen {
+			closedEntry.worktreesOpen = false
+			m.rebuildRows()
+			return nil
+		}
+		if closedEntry.worktreesLoaded {
+			closedEntry.worktreesOpen = true
+			m.rebuildRows()
+			return m.refreshPRStatuses(closedEntry.path, false)
+		}
+		closedEntry.worktreesPending = true
+		return fetchWorktrees(closedEntry.path, r.entryIndex, -1, -1)
 	}
-	if e.worktreesOpen {
-		e.worktreesOpen = false
+
+	// No worktrees available, fall back to expand/collapse toggle
+	if r.tabIndex >= 0 {
+		tab := &e.tabs[r.tabIndex]
+		tab.expanded = !tab.expanded
 		m.rebuildRows()
 		return nil
 	}
-	if e.worktreesLoaded {
-		e.worktreesOpen = true
+	if len(e.tabs) > 0 {
+		e.expanded = !e.expanded
 		m.rebuildRows()
-		return m.refreshPRStatuses(e.path, false)
+		return nil
 	}
-	e.worktreesPending = true
-	return fetchWorktrees(e.path, r.entryIndex, -1, -1)
+
+	// Nothing to expand
+	return nil
 }
 
 func prStatusCachePath() string {
