@@ -374,6 +374,8 @@ type model struct {
 	previousFilter           int
 	worktreeFilterEntryIndex int
 	worktreeFilterRows       []worktreeFilterRow
+	zoxideCtx                zoxideMergeContext
+	zoxidePending            bool
 	width                    int
 	height                   int
 	err                      error
@@ -476,7 +478,7 @@ func main() {
 	}
 
 	fmt.Print("\033]2;kesh\007")
-	entries, loadErr := loadEntries(kitty, zoxide)
+	entries, zoxideCtx, loadErr := loadEntriesFast(kitty)
 	pins, pinErr := loadPins()
 	names, nameErr := loadNames()
 	if loadErr == nil && pinErr != nil {
@@ -502,6 +504,7 @@ func main() {
 		entries: entries, err: loadErr, kitty: kitty, zoxide: zoxide, pins: pins, names: names,
 		filter: filter, showPreview: true, selected: map[string]bool{},
 		worktreeRoot: worktreeRoot, worktreeFilterEntryIndex: -1,
+		zoxideCtx: zoxideCtx, zoxidePending: zoxide != "",
 	}
 	m.rebuildRows()
 	m.startupCmd = m.queuePreview()
@@ -1281,6 +1284,9 @@ func switchPin(kitty, zoxide, slot string) error {
 }
 
 func (m model) Init() tea.Cmd {
+	if m.zoxidePending {
+		return tea.Batch(m.startupCmd, fetchZoxideEntries(m.zoxide, m.zoxideCtx))
+	}
 	return m.startupCmd
 }
 
@@ -1288,6 +1294,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+	case zoxideEntriesMsg:
+		// Zoxide source projects arrive after first paint so the slow query
+		// never blocks the UI. Merge, re-apply aliases/pins, and refresh.
+		m.zoxidePending = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		if len(msg.entries) > 0 {
+			m.entries = append(m.entries, msg.entries...)
+			sortEntries(m.entries)
+			applyNames(m.entries, m.names)
+			applyPins(m.entries, m.pins)
+			m.rebuildRows()
+		}
+		return m, nil
 	case actionMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -3257,6 +3280,9 @@ func (m model) View() string {
 	if m.saving {
 		footer = "Saving workspace…"
 	}
+	if m.zoxidePending && !m.searching {
+		footer += "  · loading projects…"
+	}
 	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.mergedWorktreeBusy && !m.worktreePullBusy {
 		footer = errorStyle.Render("Error: " + m.err.Error())
 	} else {
@@ -4653,30 +4679,102 @@ func commandOutput(name string, args ...string) <-chan commandResult {
 	return result
 }
 
-func loadEntries(kitty, zoxide string) ([]entry, error) {
-	if kitty == "" {
-		return nil, fmt.Errorf("kitty was not found")
+// zoxideMergeContext carries what fetchZoxideEntries needs to dedup and name
+// zoxide-sourced projects against the entries already built from live Kitty
+// state, saved sessions, and SSH hosts.
+type zoxideMergeContext struct {
+	livePaths    map[string]bool
+	merged       map[string]bool
+	sessionNames map[string]bool
+	home         string
+}
+
+// entryCategoryRank fixes the ordering of non-open entries: saved sessions,
+// then source projects (zoxide), then SSH hosts. It lets zoxide projects —
+// which now arrive asynchronously — slot into their original position relative
+// to SSH hosts without depending on a global discovery counter.
+func entryCategoryRank(e entry) int {
+	if e.saved {
+		return 0
 	}
-	if zoxide == "" {
-		return nil, fmt.Errorf("zoxide was not found")
+	if e.kind == "ssh" {
+		return 2
+	}
+	return 1
+}
+
+// sortEntries orders entries: open sessions first (most recently focused), then
+// by category (saved → source projects → SSH), stable within each group by
+// discovery order. Used after the initial load and again when zoxide projects
+// arrive asynchronously.
+func sortEntries(entries []entry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if a.open != b.open {
+			return a.open
+		}
+		if a.open && a.lastFocused != b.lastFocused {
+			return a.lastFocused > b.lastFocused
+		}
+		if !a.open {
+			ra, rb := entryCategoryRank(a), entryCategoryRank(b)
+			if ra != rb {
+				return ra < rb
+			}
+		}
+		return a.order < b.order
+	})
+}
+
+// buildZoxideEntries turns `zoxide query -l` output into source-project entries,
+// skipping paths already represented (open/saved session) and including live
+// window paths zoxide does not track. Order mirrors zoxide's frecency ranking.
+func buildZoxideEntries(output []byte, ctx zoxideMergeContext) []entry {
+	paths := strings.FieldsFunc(string(output), func(r rune) bool { return r == '\n' || r == '\r' })
+	known := map[string]bool{}
+	for _, path := range paths {
+		known[path] = true
+	}
+	for path := range ctx.livePaths {
+		if !known[path] {
+			paths = append(paths, path)
+		}
+	}
+	var entries []entry
+	order := 0
+	for _, path := range paths {
+		if path == "" || path == "/" || ctx.merged[path] {
+			continue
+		}
+		name := filepath.Base(path)
+		entries = append(entries, entry{
+			key: path, name: name, originalName: name, detail: displayPath(path, ctx.home),
+			kind: "project", path: path, nameTaken: ctx.sessionNames[safeName(name)], order: order,
+		})
+		order++
+	}
+	return entries
+}
+
+// loadEntriesFast builds entries from live Kitty state, saved sessions, and SSH
+// hosts only — everything obtainable without the (sometimes slow) zoxide query.
+// Zoxide-sourced source projects are returned separately via the async
+// fetchZoxideEntries command so the picker can paint before they arrive.
+func loadEntriesFast(kitty string) ([]entry, zoxideMergeContext, error) {
+	if kitty == "" {
+		return nil, zoxideMergeContext{}, fmt.Errorf("kitty was not found")
 	}
 	savedStore, err := loadSavedSessions()
 	if err != nil {
-		return nil, err
+		return nil, zoxideMergeContext{}, err
 	}
-	kittyResult := commandOutput(kitty, "@", "ls")
-	zoxideResult := commandOutput(zoxide, "query", "-l")
-	kittyOutput := <-kittyResult
-	zoxideOutput := <-zoxideResult
+	kittyOutput := <-commandOutput(kitty, "@", "ls")
 	if kittyOutput.err != nil {
-		return nil, fmt.Errorf("kitty @ ls: %w", kittyOutput.err)
-	}
-	if zoxideOutput.err != nil {
-		return nil, fmt.Errorf("zoxide query: %w", zoxideOutput.err)
+		return nil, zoxideMergeContext{}, fmt.Errorf("kitty @ ls: %w", kittyOutput.err)
 	}
 	var state kittyState
 	if err := json.Unmarshal(kittyOutput.output, &state); err != nil {
-		return nil, fmt.Errorf("decode kitty state: %w", err)
+		return nil, zoxideMergeContext{}, fmt.Errorf("decode kitty state: %w", err)
 	}
 	selfID, _ := strconv.Atoi(os.Getenv("KITTY_WINDOW_ID"))
 	type openSession struct {
@@ -4755,24 +4853,10 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		}
 	}
 
-	paths := strings.FieldsFunc(string(zoxideOutput.output), func(r rune) bool { return r == '\n' || r == '\r' })
-	known := map[string]bool{}
-	for _, path := range paths {
-		known[path] = true
-	}
-	for path := range livePaths {
-		if !known[path] {
-			paths = append(paths, path)
-		}
-	}
-
 	var entries []entry
 	order := 0
 	home := os.Getenv("HOME")
 
-	// A Kitty session rooted in one project is the open state of that project,
-	// not a second workspace row. Sessions composed by Kesh remain separate so
-	// their individual project sources can still be selected independently.
 	mergedProjects := map[string]bool{}
 	namedWorkspaces := make([]string, 0, len(sessions))
 	for name := range sessions {
@@ -4876,17 +4960,6 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		order++
 	}
 
-	for _, path := range paths {
-		if path == "" || path == "/" || mergedProjects[path] {
-			continue
-		}
-		name := filepath.Base(path)
-		entries = append(entries, entry{
-			key: path, name: name, originalName: name, detail: displayPath(path, home), kind: "project", path: path,
-			nameTaken: sessionNames[safeName(name)], order: order,
-		})
-		order++
-	}
 	for _, host := range readSSHHosts(filepath.Join(home, ".ssh", "config")) {
 		var tabs []tabItem
 		session := ""
@@ -4903,19 +4976,50 @@ func loadEntries(kitty, zoxide string) ([]entry, error) {
 		})
 		order++
 	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if a.open != b.open {
-			return a.open
+	sortEntries(entries)
+	return entries, zoxideMergeContext{
+		livePaths: livePaths, merged: mergedProjects, sessionNames: sessionNames, home: home,
+	}, nil
+}
+
+// loadEntries is the synchronous full load (live Kitty + saved + SSH + zoxide),
+// used by one-shot CLI paths such as pin switching where blocking on zoxide is
+// acceptable. The interactive picker uses loadEntriesFast + fetchZoxideEntries
+// instead so first paint is not gated on zoxide.
+func loadEntries(kitty, zoxide string) ([]entry, error) {
+	entries, ctx, err := loadEntriesFast(kitty)
+	if err != nil {
+		return nil, err
+	}
+	if zoxide != "" {
+		output, zerr := exec.Command(zoxide, "query", "-l").Output()
+		if zerr != nil {
+			return nil, fmt.Errorf("zoxide query: %w", zerr)
 		}
-		if a.open && a.lastFocused != b.lastFocused {
-			return a.lastFocused > b.lastFocused
-		}
-		// Keep unopened entries in their discovery order (zoxide projects,
-		// followed by SSH hosts), rather than promoting SSH above projects.
-		return a.order < b.order
-	})
+		entries = append(entries, buildZoxideEntries(output, ctx)...)
+		sortEntries(entries)
+	}
 	return entries, nil
+}
+
+// fetchZoxideEntries runs `zoxide query -l` off the main startup path and
+// returns the zoxide-sourced source-project entries to merge once they arrive.
+type zoxideEntriesMsg struct {
+	entries []entry
+	err     error
+}
+
+func fetchZoxideEntries(zoxide string, ctx zoxideMergeContext) tea.Cmd {
+	return func() tea.Msg {
+		if zoxide == "" {
+			return zoxideEntriesMsg{err: fmt.Errorf("zoxide was not found")}
+		}
+		output, err := exec.Command(zoxide, "query", "-l").Output()
+		if err != nil {
+			return zoxideEntriesMsg{err: fmt.Errorf("zoxide query: %w", err)}
+		}
+		return zoxideEntriesMsg{entries: buildZoxideEntries(output, ctx)}
+	}
 }
 
 func isKeshTab(windows []kittyWindow) bool {

@@ -1154,46 +1154,65 @@ func TestLoadEntriesIncludesClosedSavedWorkspace(t *testing.T) {
 	}
 }
 
-func TestLoadEntriesQueriesKittyAndZoxideConcurrently(t *testing.T) {
+func TestLoadEntriesFastDoesNotBlockOnZoxide(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("HOME", directory)
 	t.Setenv("XDG_STATE_HOME", directory)
 	t.Setenv("KESH_CONCURRENCY_DIR", directory)
 	kitty := filepath.Join(directory, "kitty")
-	kittyScript := `#!/bin/sh
-touch "$KESH_CONCURRENCY_DIR/kitty.started"
-attempt=0
-while [ ! -e "$KESH_CONCURRENCY_DIR/zoxide.started" ] && [ "$attempt" -lt 100 ]; do
-  sleep 0.01
-  attempt=$((attempt + 1))
-done
-[ -e "$KESH_CONCURRENCY_DIR/zoxide.started" ] || exit 1
-printf '%s\n' '[{"tabs":[]}]'
-`
-	if err := os.WriteFile(kitty, []byte(kittyScript), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	zoxide := filepath.Join(directory, "zoxide")
-	zoxideScript := `#!/bin/sh
-touch "$KESH_CONCURRENCY_DIR/zoxide.started"
-attempt=0
-while [ ! -e "$KESH_CONCURRENCY_DIR/kitty.started" ] && [ "$attempt" -lt 100 ]; do
-  sleep 0.01
-  attempt=$((attempt + 1))
-done
-[ -e "$KESH_CONCURRENCY_DIR/kitty.started" ] || exit 1
-printf '%s\n' '/projects/parallel'
-`
-	if err := os.WriteFile(zoxide, []byte(zoxideScript), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	writeBin(t, directory, "kitty", `printf '%s\n' '[{"tabs":[]}]'`)
+	// A zoxide stub that records if it ever runs. loadEntriesFast must NOT call
+	// it — calling it would gate first paint on the (sometimes slow) query.
+	writeBin(t, directory, "zoxide", `touch "$KESH_CONCURRENCY_DIR/zoxide.ran"
+printf '%s\n' '/projects/parallel'`)
 
-	entries, err := loadEntries(kitty, zoxide)
+	entries, _, err := loadEntriesFast(kitty)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].key != "/projects/parallel" {
-		t.Fatalf("entries = %#v, want concurrent zoxide project", entries)
+	if len(entries) != 0 {
+		t.Fatalf("loadEntriesFast should return no source projects without zoxide, got %#v", entries)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "zoxide.ran")); err == nil {
+		t.Fatal("loadEntriesFast must not invoke zoxide — it would block first paint")
+	}
+}
+
+func TestZoxideEntriesMergeAsynchronously(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	t.Setenv("XDG_STATE_HOME", directory)
+	t.Setenv("KESH_CONCURRENCY_DIR", directory)
+	kitty := filepath.Join(directory, "kitty")
+	writeBin(t, directory, "kitty", `printf '%s\n' '[{"tabs":[]}]'`)
+	zoxide := filepath.Join(directory, "zoxide")
+	writeBin(t, directory, "zoxide", `printf '%s\n' '/projects/parallel'`)
+
+	entries, ctx, err := loadEntriesFast(kitty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := model{entries: entries, zoxide: zoxide, zoxideCtx: ctx, zoxidePending: true, selected: map[string]bool{}}
+	m.rebuildRows()
+	if len(m.entries) != 0 {
+		t.Fatalf("expected no entries before zoxide arrives, got %d", len(m.entries))
+	}
+
+	// Fire the async fetch and feed the resulting message back through Update.
+	msg := fetchZoxideEntries(m.zoxide, m.zoxideCtx)()
+	updated, _ := m.Update(msg)
+	m = updated.(model)
+	if m.zoxidePending {
+		t.Fatal("expected zoxidePending cleared after merge")
+	}
+	var found bool
+	for _, e := range m.entries {
+		if e.key == "/projects/parallel" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("zoxide project was not merged into entries")
 	}
 }
 
