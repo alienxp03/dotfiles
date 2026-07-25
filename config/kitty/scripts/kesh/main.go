@@ -225,6 +225,17 @@ type worktreeRemoveMsg struct {
 	err         error
 }
 
+type worktreeFetchedMsg struct {
+	dir        string
+	entryIndex int
+}
+
+type worktreePullMsg struct {
+	dir        string
+	entryIndex int
+	err        error
+}
+
 type mergedWorktreeListMsg struct {
 	selected  row
 	dir       string
@@ -376,6 +387,7 @@ type model struct {
 	worktreeForcePrompt      bool
 	mergedWorktrees          []worktreeItem
 	mergedWorktreeBusy       bool
+	worktreePullBusy         bool
 	prStatusPending          map[string]bool
 	prStatusLastFetch        map[string]time.Time
 	pathPRChecked            map[string]bool
@@ -1451,6 +1463,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.refreshPRStatuses(msg.dir, false)
 		}
 		return m, nil
+	case worktreeFetchedMsg:
+		// fetch already ran; reload worktrees (recomputes dirty/ahead/behind
+		// against fresh refs) and force a PR refresh so `r` is authoritative.
+		cmds := []tea.Cmd{fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)}
+		if msg.entryIndex >= 0 && msg.entryIndex < len(m.entries) {
+			cmds = append(cmds, m.refreshPRStatuses(m.entries[msg.entryIndex].path, true))
+		}
+		return m, tea.Batch(cmds...)
+	case worktreePullMsg:
+		m.worktreePullBusy = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		return m, fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)
 	case pathPRMsg:
 		if m.pathPRChecked == nil {
 			m.pathPRChecked = map[string]bool{}
@@ -2072,7 +2100,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "r":
 			if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
-				return m, m.refreshPRStatuses(m.entries[m.worktreeFilterEntryIndex].path, true)
+				return m, fetchOriginThenReload(m.entries[m.worktreeFilterEntryIndex].path, m.worktreeFilterEntryIndex)
 			}
 			m.beginRename()
 		case "s", "S":
@@ -2171,6 +2199,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildWorktreeRows()
 			return m, nil
 		case "p":
+			if m.filter == filterWorktrees && m.cursor >= 0 && m.cursor < len(m.worktreeFilterRows) {
+				if m.worktreePullBusy {
+					return m, nil
+				}
+				wt := m.worktreeFilterRows[m.cursor].worktree
+				entry := m.entries[m.worktreeFilterEntryIndex]
+				m.worktreePullBusy = true
+				m.err = nil
+				return m, pullWorktree(wt.path, entry.path, m.worktreeFilterEntryIndex)
+			}
 			if m.hasSelectedAgentWindow() {
 				m.showPreview = !m.showPreview
 				if m.showPreview {
@@ -2905,23 +2943,23 @@ func (m model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
-	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  g PR h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  g PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	} else if m.filter == filterWorktrees {
-		footer = "j/k move  enter focus  n create  r refresh  g PR x remove  X merged  esc back  / search  tab filter  q quit"
+		footer = "j/k move  enter focus  n create  p pull  r refresh  g PR  x remove  X merged  esc back  / search  q quit"
 	} else if hasSelectedWorktree {
-		footer = "j/k move  enter open  g PR x remove  X merged  D closed  q quit"
+		footer = "j/k move  enter open  g PR  x remove  X merged  D closed  q quit"
 	} else if workspaceWidth < 100 {
 		footer = "j/k move  enter open  h/l expand  x close  / search  q quit"
 		if hasSelectedPR {
-			footer = "j/k move  enter open  g PR h/l expand  x close  / search  q quit"
+			footer = "j/k move  enter open  g PR  h/l expand  x close  / search  q quit"
 		}
 	}
 	if workspaceWidth < 64 {
 		footer = "j/k move  enter open  q quit"
 		if hasSelectedPR {
-			footer = "j/k move  enter open  g PR q quit"
+			footer = "j/k move  enter open  g PR  q quit"
 		}
 	}
 	if m.searching {
@@ -3385,7 +3423,7 @@ func prCheckoutPreview(value, branch, selectedRepoPath, checkoutRoot, cloneRoot,
 		root = cloneRoot
 	}
 	if branch == "" {
-		lines = append(lines, "Worktree path: resolving PR branch…")
+		lines = append(lines, "Worktree path: resolving PRbranch…")
 		return renderPreviewLines(lines, fieldWidth)
 	}
 	worktreePath := displayPath(filepath.Join(root, owner, repo, worktreeDirectoryName(branch)), os.Getenv("HOME"))
@@ -3650,7 +3688,7 @@ func (m model) worktreeModeMenuView(width int) string {
 }
 
 func (m model) popupView(width int) string {
-	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy {
+	if !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.prCheckout && !m.mergedWorktreeBusy && !m.worktreePullBusy {
 		return ""
 	}
 	popupWidth := min(50, max(28, width-10))
@@ -3663,7 +3701,11 @@ func (m model) popupView(width int) string {
 		popupWidth = min(100, max(36, width-6))
 	}
 	var title, field, help string
-	if m.mergedWorktreeBusy {
+	if m.worktreePullBusy {
+		title = "Syncing worktree"
+		field = "Running git pull --rebase…"
+		help = "Updates the worktree's branch from its upstream"
+	} else if m.mergedWorktreeBusy {
 		title = "Checking merged worktrees"
 		field = "Querying GitHub for current PR status…"
 		help = "This always uses live data before removal"
@@ -5458,6 +5500,29 @@ func openProjectSession(kitty, zoxide, project string, nameTaken bool) error {
 		return err
 	}
 	return nil
+}
+
+// fetchOriginThenReload updates remote-tracking refs before reloading a
+// project's worktrees. The fetch is best-effort (offline repos or missing
+// remotes still reload local state), and the returned message drives the
+// reload + PR refresh so the Worktree tab's ahead/behind numbers are current.
+func fetchOriginThenReload(dir string, entryIndex int) tea.Cmd {
+	return func() tea.Msg {
+		_ = exec.Command("git", "-C", dir, "fetch", "--prune").Run()
+		return worktreeFetchedMsg{dir: dir, entryIndex: entryIndex}
+	}
+}
+
+// pullWorktree fast-forwards or rebases a single worktree's branch onto its
+// upstream. The reload afterwards recomputes the worktree's ahead/behind.
+func pullWorktree(path, dir string, entryIndex int) tea.Cmd {
+	return func() tea.Msg {
+		output, err := exec.Command("git", "-C", path, "pull", "--rebase").CombinedOutput()
+		if err != nil {
+			return worktreePullMsg{dir: dir, entryIndex: entryIndex, err: commandError("git pull", output, err)}
+		}
+		return worktreePullMsg{dir: dir, entryIndex: entryIndex}
+	}
 }
 
 func run(name string, args ...string) error {

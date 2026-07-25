@@ -720,6 +720,101 @@ printf '%s\n' '[{"headRefName":"feat/open","headRefOid":"bbb","state":"OPEN","me
 	}
 }
 
+func TestRefreshFetchesBeforeReloading(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(directory, "cache"))
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	git := `#!/bin/sh
+case "$*" in
+  *"fetch --prune"*) touch "$TMPDIR/fetched"; exit 0 ;;
+  *"worktree list --porcelain"*) printf 'worktree %s/repo\nHEAD aaa\nbranch refs/heads/main\n' "$TMPDIR" ;;
+  *"remote get-url origin"*) printf '%s\n' 'git@github.com:example/repo.git' ;;
+  *) exit 1 ;;
+esac
+`
+	gh := `#!/bin/sh
+printf '%s\n' '[]'
+`
+	if err := os.WriteFile(filepath.Join(directory, "git"), []byte(git), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(gh), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", directory)
+	if err := os.Mkdir(filepath.Join(directory, "repo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries:                  []entry{{name: "repo", kind: "project", path: filepath.Join(directory, "repo")}},
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("refresh did not start a fetch")
+	}
+	// Running the command executes `git fetch --prune` in the goroutine.
+	updated.Update(cmd())
+	if _, err := os.Stat(filepath.Join(directory, "fetched")); err != nil {
+		t.Fatalf("refresh did not run git fetch: %v", err)
+	}
+}
+
+func TestPullWorktreeRunsGitPullAndReloads(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(directory, "cache"))
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	repo := filepath.Join(directory, "repo")
+	git := fmt.Sprintf(`#!/bin/sh
+case "$*" in
+  *"pull --rebase"*) touch "$TMPDIR/pulled"; exit 0 ;;
+  *"worktree list --porcelain"*) printf 'worktree %%s\nHEAD aaa\nbranch refs/heads/main\n' "$TMPDIR/repo" ;;
+  *"remote get-url origin"*) printf '%%s\n' 'git@github.com:example/repo.git' ;;
+  *) exit 1 ;;
+esac
+`)
+	gh := `#!/bin/sh
+printf '%s\n' '[]'
+`
+	if err := os.WriteFile(filepath.Join(directory, "git"), []byte(git), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "gh"), []byte(gh), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", directory)
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := model{
+		filter:                   filterWorktrees,
+		worktreeFilterEntryIndex: 0,
+		entries:                  []entry{{name: "repo", kind: "project", path: repo}},
+		worktreeFilterRows:       []worktreeFilterRow{{worktree: worktreeItem{path: repo, branch: "main"}}},
+	}
+	m.rows = []row{{entryIndex: 0, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: 0}}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if !updated.(model).worktreePullBusy {
+		t.Fatal("pull did not mark the worktree busy")
+	}
+	if cmd == nil {
+		t.Fatal("pull did not start")
+	}
+	// Running the command executes `git pull --rebase` in the worktree.
+	msg := cmd()
+	if _, err := os.Stat(filepath.Join(directory, "pulled")); err != nil {
+		t.Fatalf("pull did not run git pull: %v", err)
+	}
+	reloadModel, reloadCmd := updated.Update(msg)
+	if reloadModel.(model).worktreePullBusy {
+		t.Fatal("pull busy flag was not cleared after pull completed")
+	}
+	if reloadCmd == nil {
+		t.Fatal("pull did not trigger a worktree reload")
+	}
+}
+
 func TestClosedEntryWorktreeListRendersInlineHierarchy(t *testing.T) {
 	for _, kind := range []string{"project", "workspace"} {
 		t.Run(kind, func(t *testing.T) {
