@@ -2094,7 +2094,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.saveEntry = selected.entryIndex
 			m.err = nil
 			return m, nil
-		case "o":
+		case "g":
 			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
 				wt := m.worktreeFilterRows[m.cursor].worktree
 				if wt.prURL != "" {
@@ -2905,23 +2905,23 @@ func (m model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
-	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktrees  X remove merged  D delete closed  g PR h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
 	} else if m.filter == filterWorktrees {
-		footer = "j/k move  enter focus  n create  r refresh  o PR  x remove  X merged  esc back  / search  tab filter  q quit"
+		footer = "j/k move  enter focus  n create  r refresh  g PR x remove  X merged  esc back  / search  tab filter  q quit"
 	} else if hasSelectedWorktree {
-		footer = "j/k move  enter open  o PR  x remove  X merged  D closed  q quit"
+		footer = "j/k move  enter open  g PR x remove  X merged  D closed  q quit"
 	} else if workspaceWidth < 100 {
 		footer = "j/k move  enter open  h/l expand  x close  / search  q quit"
 		if hasSelectedPR {
-			footer = "j/k move  enter open  o PR  h/l expand  x close  / search  q quit"
+			footer = "j/k move  enter open  g PR h/l expand  x close  / search  q quit"
 		}
 	}
 	if workspaceWidth < 64 {
 		footer = "j/k move  enter open  q quit"
 		if hasSelectedPR {
-			footer = "j/k move  enter open  o PR  q quit"
+			footer = "j/k move  enter open  g PR q quit"
 		}
 	}
 	if m.searching {
@@ -3163,7 +3163,7 @@ func worktreeInfoView(worktree worktreeItem, width int, compact bool) string {
 	}
 	action := "No matching pull request"
 	if worktree.prURL != "" {
-		action = "o Open PR"
+		action = "g Open PR"
 	}
 	return renderDetailPanel("Worktree", []detailField{
 		{label: "Branch", value: worktree.branch, middle: true},
@@ -3219,7 +3219,7 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			worktree := worktrees[selected.wt]
 			action := "No matching pull request"
 			if worktree.prURL != "" {
-				action = "o Open PR"
+				action = "g Open PR"
 			}
 			return renderDetailPanel("Worktree", []detailField{
 				{label: "Branch", value: worktree.branch, middle: true},
@@ -3245,7 +3245,7 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 
 		action := "No matching pull request"
 		if wt.prURL != "" {
-			action = "o Open PR"
+			action = "g Open PR"
 		}
 
 		fields := []detailField{

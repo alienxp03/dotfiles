@@ -398,7 +398,7 @@ func TestWorktreeInfoPanelIsResponsiveAndOmitsFullPRURL(t *testing.T) {
 	}
 	full := worktreeInfoView(worktree, 80, false)
 	plain := ansi.Strip(full)
-	for _, field := range []string{"Worktree", "Branch", "Path", "PR", "#42", "o Open PR"} {
+	for _, field := range []string{"Worktree", "Branch", "Path", "PR", "#42", "g Open PR"} {
 		if !strings.Contains(plain, field) {
 			t.Fatalf("full info panel missing %q:\n%s", field, plain)
 		}
@@ -414,7 +414,7 @@ func TestWorktreeInfoPanelIsResponsiveAndOmitsFullPRURL(t *testing.T) {
 	if got := lipgloss.Height(compact); got > 5 {
 		t.Fatalf("compact info panel height = %d, want <= 5", got)
 	}
-	if strings.Contains(ansi.Strip(compact), "o Open PR") {
+	if strings.Contains(ansi.Strip(compact), "g Open PR") {
 		t.Fatalf("compact info panel should omit action help:\n%s", ansi.Strip(compact))
 	}
 }
