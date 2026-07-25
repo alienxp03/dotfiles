@@ -83,6 +83,12 @@ type worktreeItem struct {
 	prRepoKey string
 }
 
+type worktreeFilterRow struct {
+	worktree  worktreeItem
+	entryName string
+	entryPath string
+}
+
 type entry struct {
 	key              string
 	name             string
@@ -109,11 +115,12 @@ type entry struct {
 }
 
 type row struct {
-	entryIndex  int
-	tabIndex    int
-	windowIndex int
-	section     string // "", "wt-head", "wt-item", "wt-foot"
-	wt          int    // index into the entry or window worktree list for "wt-item" rows
+	entryIndex   int
+	tabIndex     int
+	windowIndex  int
+	section      string // "", "wt-head", "wt-item", "wt-foot", "wt-filter"
+	wt           int    // index into the entry or window worktree list for "wt-item" rows
+	worktreePath string // for worktree filter mode
 }
 
 type actionMsg struct{ err error }
@@ -339,6 +346,9 @@ type model struct {
 	pins                     pinStore
 	names                    nameStore
 	filter                   int
+	previousFilter           int
+	worktreeFilterEntryIndex int
+	worktreeFilterRows       []worktreeFilterRow
 	width                    int
 	height                   int
 	err                      error
@@ -376,6 +386,7 @@ const (
 	filterProjects
 	filterSSH
 	filterSaved
+	filterWorktrees
 )
 
 const (
@@ -1420,6 +1431,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			e.worktreesOpen = true
 			updated = true
 		}
+		// Handle worktree filter mode
+		if m.filter == filterWorktrees && msg.entryIndex == m.worktreeFilterEntryIndex && msg.err == nil {
+			if msg.entryIndex >= 0 && msg.entryIndex < len(m.entries) {
+				e := &m.entries[msg.entryIndex]
+				e.worktrees = msg.worktrees
+				e.worktreesLoaded = true
+				e.worktreesPending = false
+				m.rebuildWorktreeRows()
+				return m, m.refreshPRStatuses(msg.dir, false)
+			}
+		}
 		if updated {
 			m.err = nil
 			m.rebuildRows()
@@ -1944,6 +1966,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			// Escape returns to command mode from transient modes; once there,
 			// it is intentionally a no-op so a repeated key cannot close Kesh.
+			if m.filter == filterWorktrees {
+				// Return to previous filter
+				m.filter = m.previousFilter
+				m.worktreeFilterEntryIndex = -1
+				m.worktreeFilterRows = nil
+				m.query = ""
+				m.rebuildRows()
+				return m, nil
+			}
 			return m, nil
 		case "/":
 			m.searching = true
@@ -1966,6 +1997,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			r := m.rows[m.cursor]
+			if m.filter == filterWorktrees && r.section == "wt-filter" {
+				// Focus the worktree
+				if m.cursor >= len(m.worktreeFilterRows) {
+					return m, nil
+				}
+				wtRow := m.worktreeFilterRows[m.cursor]
+				wt := wtRow.worktree
+				entry := m.entries[m.worktreeFilterEntryIndex]
+
+				// Find if there's a window with this worktree path
+				windowIDs, err := worktreeWindowIDs(m.kitty, wt.path)
+				if err == nil && len(windowIDs) > 0 {
+					// Focus the existing window
+					return m, func() tea.Msg { return actionMsg{err: run(m.kitty, "@", "focus-window", "--match", "id:"+strconv.Itoa(windowIDs[0]))} }
+				}
+				// No window found, open a new tab with the worktree
+				return m, runAction(m.kitty, m.zoxide, entry, row{
+					entryIndex: m.worktreeFilterEntryIndex,
+					tabIndex:   -1,
+					windowIndex: -1,
+					worktreePath: wt.path,
+				})
+			}
 			return m, runAction(m.kitty, m.zoxide, m.entries[r.entryIndex], r)
 		case "n":
 			if len(m.selected) == 0 {
@@ -2030,10 +2084,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			return m, nil
 		case "o":
+			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
+				wt := m.worktreeFilterRows[m.cursor].worktree
+				if wt.prURL != "" {
+					return m, func() tea.Msg {
+						cmd := exec.Command("xdg-open", wt.prURL)
+						if err := cmd.Run(); err != nil {
+							return actionMsg{err: fmt.Errorf("open PR: %w", err)}
+						}
+						return actionMsg{}
+					}
+				}
+				m.err = fmt.Errorf("no PR associated with this worktree")
+				return m, nil
+			}
 			return m, m.openWorktreePR()
 		case "x":
+			if m.filter == filterWorktrees && len(m.worktreeFilterRows) > 0 && m.cursor < len(m.worktreeFilterRows) {
+				// Remove the selected worktree
+				return m, m.runRemoveWorktree(true)
+			}
 			m.beginClose()
 		case "X":
+			if m.filter == filterWorktrees {
+				return m, m.findMergedWorktrees()
+			}
 			return m, m.findMergedWorktrees()
 		case "D":
 			if len(m.rows) == 0 {
@@ -2088,6 +2163,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.err = nil
 			return m, nil
+		case "W":
+			// Enter worktree filter mode
+			if len(m.rows) == 0 {
+				m.err = fmt.Errorf("no entry selected")
+				return m, nil
+			}
+			selected := m.rows[m.cursor]
+			if selected.section != "" {
+				m.err = fmt.Errorf("select a project entry, not a worktree or window")
+				return m, nil
+			}
+			m.previousFilter = m.filter
+			m.worktreeFilterEntryIndex = selected.entryIndex
+			m.filter = filterWorktrees
+			m.query = ""
+			m.worktreeFilterRows = nil
+
+			// Fetch worktrees if not already loaded
+			entry := m.entries[selected.entryIndex]
+			if !entry.worktreesLoaded {
+				return m, fetchWorktrees(entry.path, selected.entryIndex, -1, -1)
+			}
+			m.rebuildWorktreeRows()
+			return m, nil
 		case "e":
 			return m, m.toggleWorktrees()
 		case "p":
@@ -2100,10 +2199,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.beginPin()
 			}
 		case "tab":
-			m.filter = (m.filter + 1) % 6
+			m.filter = (m.filter + 1) % 7
 			m.rebuildRows()
 		case "shift+tab":
-			m.filter = (m.filter + 5) % 6
+			m.filter = (m.filter + 5) % 7
 			m.rebuildRows()
 		}
 		return m, m.queuePreview()
@@ -2404,6 +2503,10 @@ func (m *model) rebuildRows() {
 		m.rebuildAgentRows()
 		return
 	}
+	if m.filter == filterWorktrees {
+		m.rebuildWorktreeRows()
+		return
+	}
 	entryIndexes := make([]int, 0, len(m.entries))
 	searchValues := make([]string, 0, len(m.entries))
 	for i := range m.entries {
@@ -2641,6 +2744,65 @@ func (m *model) rebuildAgentRows() {
 	}
 }
 
+func (m *model) rebuildWorktreeRows() {
+	entryIndex := m.worktreeFilterEntryIndex
+	if entryIndex < 0 || entryIndex >= len(m.entries) {
+		m.worktreeFilterRows = []worktreeFilterRow{}
+		m.rows = []row{}
+		m.cursor = 0
+		return
+	}
+
+	e := m.entries[entryIndex]
+	rows := []worktreeFilterRow{}
+	searchValues := []string{}
+
+	// Get worktrees from entry level if available
+	if e.worktreesLoaded {
+		for _, wt := range e.worktrees {
+			rows = append(rows, worktreeFilterRow{
+				worktree:  wt,
+				entryName: e.name,
+				entryPath: e.path,
+			})
+			searchValues = append(searchValues, wt.branch+" "+wt.path+" "+wt.head)
+		}
+	} else {
+		// Need to fetch worktrees - return early and let the fetch happen elsewhere
+		return
+	}
+
+	if m.query != "" {
+		matches := fuzzy.Find(m.query, searchValues)
+		filtered := make([]worktreeFilterRow, 0, len(matches))
+		for _, match := range matches {
+			filtered = append(filtered, rows[match.Index])
+		}
+		rows = filtered
+	} else {
+		// Sort: current first, then by branch name
+		sort.SliceStable(rows, func(i, j int) bool {
+			a, b := rows[i].worktree, rows[j].worktree
+			if a.current != b.current {
+				return a.current // current worktree first
+			}
+			return worktreePriority(a) < worktreePriority(b)
+		})
+	}
+
+	m.worktreeFilterRows = rows
+
+	// Build regular rows for cursor tracking
+	m.rows = make([]row, len(rows))
+	for i := range rows {
+		m.rows[i] = row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-filter"}
+	}
+	m.cursor = 0
+	if len(m.rows) == 0 {
+		m.cursor = 0
+	}
+}
+
 func (m model) matchesFilter(e entry) bool {
 	switch m.filter {
 	case filterOpen:
@@ -2693,7 +2855,7 @@ func (m model) View() string {
 		listHeight = max(5, bodyHeight-detailHeight-1)
 	}
 
-	tabs := []string{"All", "Agents", "Open", "Projects", "SSH", "Saved"}
+	tabs := []string{"All", "Agents", "Open", "Projects", "SSH", "Saved", "Worktrees"}
 	for i := range tabs {
 		if i == m.filter {
 			tabs[i] = accentStyle.Render("[" + tabs[i] + "]")
@@ -2755,9 +2917,11 @@ func (m model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listPanel, "  ", detailPanel)
 	}
 
-	footer := "j/k move  space select  n new  c clone  w worktree  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
+	footer := "j/k move  space select  n new  c clone  w worktree  W worktrees  e worktrees  X remove merged  D delete closed  o PR  h/l expand  enter open  s/S save  p pin  r rename  x close  / search  tab filter  q quit"
 	if showAgentPreview || (m.filter == filterAgents && m.hasSelectedAgentWindow()) {
 		footer = "j/k move  enter focus  p preview  r rename  x close  / search  tab filter  q quit"
+	} else if m.filter == filterWorktrees {
+		footer = "j/k move  enter focus  o PR  c create  x remove  X merged  esc back  / search  tab filter  q quit"
 	} else if hasSelectedWorktree {
 		footer = "j/k move  enter open  o PR  x remove  X merged  D closed  q quit"
 	} else if workspaceWidth < 100 {
@@ -3045,6 +3209,31 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			{label: "Path", value: displayPath(m.worktreeDirectory(selected), os.Getenv("HOME")), middle: true},
 			{label: "Count", value: strconv.Itoa(len(worktrees))},
 		}, "Select a branch for actions", nil, width, height, compact)
+	}
+	if selected.section == "wt-filter" && m.filter == filterWorktrees {
+		if m.cursor < 0 || m.cursor >= len(m.worktreeFilterRows) {
+			return renderDetailPanel("Worktree", []detailField{{value: "No worktrees"}}, "", nil, width, height, compact)
+		}
+		wtRow := m.worktreeFilterRows[m.cursor]
+		wt := wtRow.worktree
+
+		action := "No matching pull request"
+		if wt.prURL != "" {
+			action = "o Open PR"
+		}
+
+		fields := []detailField{
+			{label: "Branch", value: wt.branch, middle: true},
+			{label: "Path", value: displayPath(wt.path, os.Getenv("HOME")), middle: true},
+			{label: "PR", value: worktreePRSummary(wt)},
+			{label: "Commit", value: wt.head},
+		}
+
+		if wt.current {
+			fields = append([]detailField{{label: "Status", value: accentStyle.Render("★ Current worktree")}}, fields...)
+		}
+
+		return renderDetailPanel("Worktree", fields, action, nil, width, height, compact)
 	}
 	if selected.windowIndex >= 0 {
 		window := entry.tabs[selected.tabIndex].windows[selected.windowIndex]
@@ -3794,6 +3983,49 @@ func (m model) renderRow(r row, width int, focused bool) string {
 			return padColumns(left, right, width)
 		}
 		return ansi.Truncate(left, width, "…")
+	case "wt-filter":
+		// Worktree filter mode - flat list
+		if m.cursor < 0 || m.cursor >= len(m.worktreeFilterRows) {
+			return ""
+		}
+		wtRow := m.worktreeFilterRows[m.cursor]
+		wt := wtRow.worktree
+
+		current := "  "
+		if wt.current {
+			current = accentStyle.Render("★")
+		}
+
+		prStatus := ""
+		if wt.prNumber > 0 {
+			prStatus = prStatusIcon(wt.prStatus) + " " + dimStyle.Render("#"+strconv.Itoa(wt.prNumber))
+		}
+
+		branchWidth := max(12, width*40/100)
+		branchPart := current + " " + truncate(wt.branch, branchWidth-lipgloss.Width(current)-1)
+
+		statusWidth := max(8, width*20/100)
+		statusPart := ""
+		if prStatus != "" {
+			statusPart = " " + ansi.Truncate(prStatus, statusWidth, "…")
+		}
+
+		pathPart := mutedStyle.Render(displayPath(wt.path, os.Getenv("HOME")))
+		if wt.current {
+			pathPart = dimStyle.Render("← here")
+		}
+		if focused {
+			branchPart = focusStyle.Render(ansi.Strip(branchPart))
+			if prStatus != "" {
+				statusPart = " " + focusStyle.Render(ansi.Strip(prStatus))
+			}
+		}
+		left := branchPart + statusPart
+		right := pathPart
+		if width >= 64 {
+			return padColumns(left, right, width)
+		}
+		return ansi.Truncate(left+"  "+right, width, "…")
 	}
 	if r.windowIndex >= 0 {
 		window := e.tabs[r.tabIndex].windows[r.windowIndex]
