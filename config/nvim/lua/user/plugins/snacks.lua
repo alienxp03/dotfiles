@@ -276,6 +276,13 @@ return {
       desc = "Toggle Lazygit",
     },
     {
+      "<c-g>",
+      function()
+        Snacks.lazygit()
+      end,
+      desc = "Toggle Lazygit",
+    },
+    {
       "<leader>gl",
       function()
         Snacks.lazygit.log()
