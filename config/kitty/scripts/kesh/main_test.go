@@ -2813,6 +2813,48 @@ esac
 	}
 }
 
+func TestWorktreeTabNotableBugFixes(t *testing.T) {
+	t.Run("shift-tab moves back one filter", func(t *testing.T) {
+		m := model{filter: filterAll}
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		if got := updated.(model).filter; got != filterWorktrees {
+			t.Fatalf("shift-tab filter = %d, want %d", got, filterWorktrees)
+		}
+	})
+
+	t.Run("rebuild preserves the focused worktree", func(t *testing.T) {
+		m := model{
+			filter: filterWorktrees, worktreeFilterEntryIndex: 0, cursor: 1,
+			entries:            []entry{{worktreesLoaded: true, worktrees: []worktreeItem{{path: "/wt/main", branch: "main"}, {path: "/wt/feature", branch: "feature"}}}},
+			worktreeFilterRows: []worktreeFilterRow{{worktree: worktreeItem{path: "/wt/main"}}, {worktree: worktreeItem{path: "/wt/feature"}}},
+			rows:               []row{{section: "wt-filter", wt: 0}, {section: "wt-filter", wt: 1}},
+		}
+		m.rebuildWorktreeRows()
+		if got := m.focusedWorktreePath(); got != "/wt/feature" {
+			t.Fatalf("focused worktree = %q, want /wt/feature", got)
+		}
+	})
+
+	t.Run("escape clears selections before leaving the tab", func(t *testing.T) {
+		m := model{filter: filterWorktrees, previousFilter: filterAll, selected: map[string]bool{"repo": true}}
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		result := updated.(model)
+		if result.filter != filterAll || len(result.selected) != 0 {
+			t.Fatalf("escape result = filter %d, selected %#v", result.filter, result.selected)
+		}
+	})
+
+	t.Run("fetch failures are returned while reload continues", func(t *testing.T) {
+		directory := t.TempDir()
+		writeBin(t, directory, "git", "echo offline >&2\nexit 1\n")
+		t.Setenv("PATH", directory)
+		msg := fetchOriginThenReload("/repo", 3)().(worktreeFetchedMsg)
+		if msg.err == nil || msg.dir != "/repo" || msg.entryIndex != 3 {
+			t.Fatalf("fetch result = %#v", msg)
+		}
+	})
+}
+
 // TestOpenURLPlatformAware locks in the fix for the critical bug where the PR
 // opener was platform-wrong: the Worktree tab hardcoded xdg-open (broken on
 // macOS) and main mode hardcoded open (missing on Linux).

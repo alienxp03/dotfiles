@@ -123,7 +123,7 @@ type row struct {
 	entryIndex   int
 	tabIndex     int
 	windowIndex  int
-	section      string // "", "wt-head", "wt-item", "wt-foot", "wt-filter"
+	section      string // "", "wt-head", "wt-item", "wt-filter"
 	wt           int    // index into the entry or window worktree list for "wt-item" rows
 	worktreePath string // for worktree filter mode
 }
@@ -230,6 +230,7 @@ type worktreeRemoveMsg struct {
 type worktreeFetchedMsg struct {
 	dir        string
 	entryIndex int
+	err        error
 }
 
 type worktreePullMsg struct {
@@ -1429,12 +1430,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case worktreeMsg:
 		if m.worktreeBusy {
-			// Creation completed
+			// Creation completed.
 			m.worktreeBusy = false
 			m.worktreeMode = false
 			if msg.err != nil {
 				m.err = msg.err
 				return m, nil
+			}
+			if m.filter == filterWorktrees && m.worktreeFilterEntryIndex >= 0 && m.worktreeFilterEntryIndex < len(m.entries) {
+				entryIndex := m.worktreeFilterEntryIndex
+				return m, fetchWorktrees(m.entries[entryIndex].path, entryIndex, -1, -1)
 			}
 			return m, tea.Quit
 		}
@@ -1489,8 +1494,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case worktreeFetchedMsg:
-		// fetch already ran; reload worktrees (recomputes dirty/ahead/behind
-		// against fresh refs) and force a PR refresh so `r` is authoritative.
+		// Reload even if fetch failed so local worktree state remains useful, but
+		// make the failed remote refresh visible to the user.
+		if msg.err != nil {
+			m.err = msg.err
+		}
 		cmds := []tea.Cmd{fetchWorktrees(msg.dir, msg.entryIndex, -1, -1)}
 		if msg.entryIndex >= 0 && msg.entryIndex < len(m.entries) {
 			cmds = append(cmds, m.refreshPRStatuses(m.entries[msg.entryIndex].path, true))
@@ -2029,6 +2037,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Escape returns to command mode from transient modes; once there,
 			// it is intentionally a no-op so a repeated key cannot close Kesh.
 			if m.filter == filterWorktrees {
+				// Worktree rows are not selectable; discard any main-list selection
+				// before returning so it cannot affect subsequent bulk actions.
+				m.selected = map[string]bool{}
 				// Return to previous filter
 				m.filter = m.previousFilter
 				m.worktreeFilterEntryIndex = -1
@@ -2070,7 +2081,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Find if there's a window with this worktree path
 				windowIDs, err := worktreeWindowIDs(m.kitty, wt.path)
-				if err == nil && len(windowIDs) > 0 {
+				if err != nil {
+					m.err = fmt.Errorf("find existing worktree window: %w", err)
+					return m, nil
+				}
+				if len(windowIDs) > 0 {
 					// Focus the existing window
 					return m, func() tea.Msg {
 						return actionMsg{err: run(m.kitty, "@", "focus-window", "--match", "id:"+strconv.Itoa(windowIDs[0]))}
@@ -2285,7 +2300,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filter = (m.filter + 1) % 7
 			m.rebuildRows()
 		case "shift+tab":
-			m.filter = (m.filter + 5) % 7
+			m.filter = (m.filter + 6) % 7
 			m.rebuildRows()
 		}
 		return m, m.queuePreview()
@@ -2834,6 +2849,7 @@ func (m *model) rebuildAgentRows() {
 }
 
 func (m *model) rebuildWorktreeRows() {
+	focused := m.focusedWorktreePath()
 	entryIndex := m.worktreeFilterEntryIndex
 	if entryIndex < 0 || entryIndex >= len(m.entries) {
 		m.worktreeFilterRows = []worktreeFilterRow{}
@@ -2887,9 +2903,10 @@ func (m *model) rebuildWorktreeRows() {
 	for i := range rows {
 		m.rows[i] = row{entryIndex: entryIndex, tabIndex: -1, windowIndex: -1, section: "wt-filter", wt: i}
 	}
-	m.cursor = 0
-	if len(m.rows) == 0 {
-		m.cursor = 0
+	if focused != "" {
+		m.restoreFocusedWorktree(focused)
+	} else if m.cursor >= len(m.rows) {
+		m.cursor = max(0, len(m.rows)-1)
 	}
 }
 
@@ -3032,7 +3049,7 @@ func (m model) View() string {
 	if m.saving {
 		footer = "Saving workspace…"
 	}
-	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode {
+	if m.err != nil && !m.renaming && !m.creating && !m.cloning && !m.saveConfirming && !m.pinning && !m.closing && !m.worktreeMode && !m.mergedWorktreeBusy && !m.worktreePullBusy {
 		footer = errorStyle.Render("Error: " + m.err.Error())
 	} else {
 		footer = dimStyle.Render(footer)
@@ -3455,7 +3472,7 @@ func (m model) detailPanelView(width, height int, compact bool) string {
 			{label: "Branch", value: entry.pathPR.Branch, middle: true},
 		}
 	}
-	return renderDetailPanel(title, fields, "Enter open · e worktrees", nil, width, height, compact)
+	return renderDetailPanel(title, fields, "Enter open · w worktrees", nil, width, height, compact)
 }
 
 // prCheckoutPreview renders the dim summary block under the PR input. Once gh
@@ -5580,13 +5597,15 @@ func openProjectSession(kitty, zoxide, project string, nameTaken bool) error {
 }
 
 // fetchOriginThenReload updates remote-tracking refs before reloading a
-// project's worktrees. The fetch is best-effort (offline repos or missing
-// remotes still reload local state), and the returned message drives the
-// reload + PR refresh so the Worktree tab's ahead/behind numbers are current.
+// project's worktrees. Local state still reloads if fetch fails, while the
+// returned error makes a stale remote status visible to the user.
 func fetchOriginThenReload(dir string, entryIndex int) tea.Cmd {
 	return func() tea.Msg {
-		_ = exec.Command("git", "-C", dir, "fetch", "--prune").Run()
-		return worktreeFetchedMsg{dir: dir, entryIndex: entryIndex}
+		output, err := exec.Command("git", "-C", dir, "fetch", "--prune").CombinedOutput()
+		if err != nil {
+			err = commandError("git fetch", output, err)
+		}
+		return worktreeFetchedMsg{dir: dir, entryIndex: entryIndex, err: err}
 	}
 }
 
@@ -6525,6 +6544,9 @@ func (m model) focusedWorktreePath() string {
 		return ""
 	}
 	selected := m.rows[m.cursor]
+	if selected.section == "wt-filter" && selected.wt >= 0 && selected.wt < len(m.worktreeFilterRows) {
+		return m.worktreeFilterRows[selected.wt].worktree.path
+	}
 	if selected.section != "wt-item" {
 		return ""
 	}
@@ -6540,6 +6562,10 @@ func (m *model) restoreFocusedWorktree(path string) {
 		return
 	}
 	for index, candidate := range m.rows {
+		if candidate.section == "wt-filter" && candidate.wt >= 0 && candidate.wt < len(m.worktreeFilterRows) && m.worktreeFilterRows[candidate.wt].worktree.path == path {
+			m.cursor = index
+			return
+		}
 		if candidate.section != "wt-item" {
 			continue
 		}

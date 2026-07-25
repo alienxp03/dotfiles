@@ -63,31 +63,31 @@ or mis-target work; fix before anything else.
 
 ## 🟠 Notable bugs (annoying, recoverable)
 
-- [ ] **`shift+tab` cycles wrong** (~2224): `(filter+5)%7` jumps back two
+- [x] **`shift+tab` cycles wrong** (~2224): `(filter+5)%7` jumps back two
   tabs, not one. Should be `(filter+6)%7`. Forward `tab` is correct.
-- [ ] **Cursor jumps to top while typing in tab search** —
+- [x] **Cursor jumps to top while typing in tab search** —
   `rebuildWorktreeRows` sets `m.cursor = 0` on every rebuild (~2827).
   Main-mode `rebuildRows` only clamps when out of range; do the same here.
-- [ ] **Cursor jumps to top on any background PR refresh** in the tab —
+- [x] **Cursor jumps to top on any background PR refresh** in the tab —
   `focusedWorktreePath`/`restoreFocusedWorktree` (~6420/~6436) only handle
   `"wt-item"`, so the save/restore is a no-op for `"wt-filter"`.
-- [ ] **Create-from-tab quits kesh** — `worktreeMsg` → `tea.Quit`
+- [x] **Create-from-tab quits kesh** — `worktreeMsg` → `tea.Quit`
   unconditionally (~1406). When `filter == filterWorktrees`, reload the
   tab instead of quitting (matches the documented "esc returns to tab").
-- [ ] **`space` in the tab leaks selections into main mode** — not cleared
+- [x] **`space` in the tab leaks selections into main mode** — not cleared
   on `esc` (~2001); pollutes the "Selected (N)" header and
   `n`/`worktreeEntries` resolution.
-- [ ] **Stale `e worktrees` hint** — detail panel action still reads
+- [x] **Stale `e worktrees` hint** — detail panel action still reads
   `"Enter open · e worktrees"` (~3395) but `e`/`toggleWorktrees` was
   removed; pressing `e` is a silent no-op.
-- [ ] **`git fetch` errors swallowed** while the UI claims the refresh is
+- [x] **`git fetch` errors swallowed** while the UI claims the refresh is
   authoritative (`fetchOriginThenReload` ~5517). Surface failures as
   `m.err` while still reloading local state.
-- [ ] **Footer error-guard omits the new busy flags** (~2972): excludes
+- [x] **Footer error-guard omits the new busy flags** (~2972): excludes
   `worktreePullBusy`/`mergedWorktreeBusy`, so an error during those flows
   renders in both popup and footer.
-- [ ] **Dead `"wt-foot"`** in the `row.section` doc comment (~125).
-- [ ] **`worktreeWindowIDs` error silently swallowed** in the tab `enter`
+- [x] **Dead `"wt-foot"`** in the `row.section` doc comment (~125).
+- [x] **`worktreeWindowIDs` error silently swallowed** in the tab `enter`
   flow (~2042); user gets no signal that focus-existing failed.
 
 ## 🟢 UX / feature opportunities
