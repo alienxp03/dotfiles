@@ -155,7 +155,7 @@ function ide_kitty() {
 	local editor_window="$KITTY_WINDOW_ID"
 	local shell_window
 
-	kitty @ set-tab-title "${dir_name}-code" || return 1
+	# The tab title is initialized by the first shell in the tab.
 	# Do not re-enter the splits layout here: Kitty rebuilds its split tree,
 	# flattening the right-hand nested split into three columns.
 

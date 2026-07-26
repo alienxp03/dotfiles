@@ -52,4 +52,11 @@ if [[ -n "$KITTY_INSTALLATION_DIR" ]]; then
 	autoload -Uz -- "$KITTY_INSTALLATION_DIR"/shell-integration/zsh/kitty-integration
 	kitty-integration
 	unfunction kitty-integration
+
+	# Name each Kitty tab once, using the directory of its first shell.
+	# The exported marker is inherited by windows launched from this tab.
+	if [[ -z ${KITTY_TAB_TITLE_INITIALIZED:-} ]]; then
+		kitty @ set-tab-title "${PWD:t}" >/dev/null 2>&1
+		export KITTY_TAB_TITLE_INITIALIZED=1
+	fi
 fi
