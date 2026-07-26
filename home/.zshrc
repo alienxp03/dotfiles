@@ -182,7 +182,6 @@ _zsh_deferred_init() {
 		_direnv_hook 2>/dev/null
 	fi
 
-	(($+commands[wktree])) && eval "$(wktree init zsh)"
 	(($+commands[workmux])) && eval "$(workmux completions zsh)"
 
 	precmd_functions=(${precmd_functions:#_zsh_deferred_init})

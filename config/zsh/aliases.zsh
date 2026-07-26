@@ -112,4 +112,3 @@ alias pix='pi --approve'
 
 alias js='just'
 alias wx='workmux'
-alias wk='wktree'
