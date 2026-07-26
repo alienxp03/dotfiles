@@ -31,6 +31,21 @@ Key examples:
 
 The full mapping is declared in `config/mise/config.toml` under `[dotfiles]`.
 
+## Kitty Workflow
+
+Kitty is configured with the `tall` layout for Kesh workspaces: the primary
+pane occupies the left side and additional panes stack on the right. Keep
+`tall` first in `enabled_layouts`; Kitty uses the first enabled layout when
+reloading its configuration with `Cmd+R`, and putting `splits` first turns the
+workspace into vertical columns.
+
+The first shell opened in a tab sets the tab title from its initial directory.
+Shell title updates are disabled, and windows launched from that tab keep the
+same title. Use `Cmd+Shift+N` to set a title manually.
+
+Window navigation uses `Ctrl+H/J/K/L` for left/down/up/right. Navigation is
+geometric: `Ctrl+K` only moves when the focused pane has another pane above it.
+
 ## Usage
 
 Preview dotfile changes:
