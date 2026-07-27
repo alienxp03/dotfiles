@@ -42,7 +42,7 @@ zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 # after-init hook (runs at source time, after zvm's own keymap setup) so
 # zsh-vi-mode doesn't clobber it. (Ctrl-L was kitty's window-nav key.)
 function _zsh_bind_partial_accept() {
-	(( $+functions[zvm_bindkey] )) && zvm_bindkey viins '^[f' forward-word
+	(($+functions[zvm_bindkey])) && zvm_bindkey viins '^[f' forward-word
 }
 zvm_after_init_commands+=(_zsh_bind_partial_accept)
 
