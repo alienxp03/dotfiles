@@ -1,0 +1,35 @@
+onboarding = false
+
+[keys]
+prefix = "ctrl+a"
+
+# Side-by-side and stacked panes, matching the tmux bindings.
+split_vertical   = "prefix+|"
+split_horizontal = "prefix+minus"
+zoom             = "prefix+m"
+
+# Cycle between agents instead of tabs.
+previous_tab   = ""
+next_tab       = ""
+previous_agent = "prefix+p"
+next_agent     = "prefix+n"
+
+# Vim-style space selection in the workspace navigator.
+navigate_workspace_up   = "k"
+navigate_workspace_down = "j"
+navigate_pane_up        = ""
+navigate_pane_down      = ""
+
+# Direct pane navigation without entering prefix mode.
+focus_pane_left  = "ctrl+h"
+focus_pane_down  = "ctrl+j"
+focus_pane_up    = "ctrl+k"
+focus_pane_right = "ctrl+l"
+
+[ui]
+sidebar_start_collapsed = true
+sidebar_collapsed_mode  = "hidden"
+pane_gaps               = false
+
+[theme]
+name = "rose-pine-dawn"

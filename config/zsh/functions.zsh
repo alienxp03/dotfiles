@@ -406,3 +406,23 @@ ide-aurora() {
 		tmux attach-session -t "$session_name"
 	fi
 }
+
+# Mark Herdr windows so Kitty passes Ctrl+H/J/K/L through.
+function herdr() {
+	local exit_status
+	local mark_kitty_window=false
+
+	if [[ -n ${KITTY_WINDOW_ID:-} ]] && command -v kitty >/dev/null 2>&1; then
+		kitty @ set-user-vars herdr=1 >/dev/null 2>&1
+		mark_kitty_window=true
+	fi
+
+	command herdr "$@"
+	exit_status=$?
+
+	if [[ $mark_kitty_window == true ]]; then
+		kitty @ set-user-vars herdr >/dev/null 2>&1
+	fi
+
+	return $exit_status
+}
