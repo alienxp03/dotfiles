@@ -13,3 +13,4 @@ nvim/dictionaries
 config/nvim/dictionaries
 tmp/
 /.claude
+.kesh*

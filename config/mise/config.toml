@@ -1,11 +1,12 @@
 [bootstrap.packages]
-"brew:alienxp03/tap/kesh" = "latest"
+# "brew:alienxp03/tap/kesh" = "latest"
 "brew:ghostscript" = "latest"
 "brew:imagemagick" = "latest"
 "brew:ranger"      = "latest"
 "brew:witr"        = "latest"
 "brew:viu"         = "latest"
 "brew-cask:kitty"  = "latest"
+"brew:goreleaser"  = "latest"
 
 [tools]
 # Languages / runtimes
