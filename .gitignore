@@ -14,3 +14,4 @@ config/nvim/dictionaries
 tmp/
 /.claude
 .kesh*
+config/kesh/config.yaml

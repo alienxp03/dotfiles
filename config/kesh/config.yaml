@@ -1,5 +1,0 @@
-clone:
-  root: ~/workspace
-
-worktree:
-  root: ~/workspace/worktree
