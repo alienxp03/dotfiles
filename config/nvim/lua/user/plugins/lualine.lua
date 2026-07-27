@@ -1,6 +1,7 @@
 return {
   "nvim-lualine/lualine.nvim",
   dependencies = { "nvim-tree/nvim-web-devicons", "arkav/lualine-lsp-progress" },
+  event = "VeryLazy",
   config = function()
     require("lualine").setup({
       options = {
@@ -21,24 +22,13 @@ return {
             "filename",
             path = 1,
           },
-          {
-            "filetype",
-          },
         },
         lualine_x = {
-          {
-            "lsp_status",
-            icon = "",
-            symbols = {
-              -- Standard unicode symbols to cycle through for LSP progress:
-              spinner = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" },
-              done = "✓",
-              separator = " ",
-            },
-            ignore_lsp = {},
-          },
+          "searchcount",
+          "selectioncount",
         },
         lualine_y = {},
+        lualine_z = { "filetype", "location" },
       },
     })
   end,
