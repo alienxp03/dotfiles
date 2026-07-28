@@ -1,5 +1,12 @@
 gui:
   sidePanelWidth: 0.2
+  theme:
+    # Reverse video keeps colored commit fields legible on the selected row.
+    selectedLineBgColor:
+      - reverse
+  # Favor readable author names over commit hashes in the narrow commits panel.
+  commitAuthorShortLength: 10
+  commitHashLength: 4
 keybinding:
   universal:
     quit: q
