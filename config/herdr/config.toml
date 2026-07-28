@@ -29,7 +29,9 @@ focus_pane_right = "ctrl+l"
 [ui]
 sidebar_start_collapsed = true
 sidebar_collapsed_mode  = "hidden"
+pane_borders            = false
 pane_gaps               = false
+mouse_scroll_lines      = 1
 
 [theme]
-name = "rose-pine-dawn"
+name = "tokyo-night"
