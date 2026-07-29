@@ -89,7 +89,7 @@ alias gotest='go test -v --count=1'
 alias tf='terraform'
 
 # why not
-alias ls='eza --group-directories-first --sort extension'
+alias ls='eza --group-directories-first --sort extension --hyperlink=auto'
 alias cat='bat'
 
 alias t='sesh connect $(sesh list | fzf)'
@@ -107,7 +107,7 @@ alias cop='mise exec node@24.9.0 -- copilot'
 alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1" ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.2[1m]" ANTHROPIC_BASE_URL=$ZAI_BASE_URL claude --dangerously-skip-permissions'
 alias happy-zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1" ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.2[1m]" ANTHROPIC_BASE_URL=$ZAI_BASE_URL happy claude --dangerously-skip-permissions'
 alias happy-codex='happy codex --dangerously-bypass-approvals-and-sandbox'
-alias ccusage='bunx ccusage'
+alias ccusage='bunx ccusage@latest'
 alias pix='pi --approve'
 
 alias js='just'
