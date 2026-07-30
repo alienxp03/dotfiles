@@ -67,6 +67,10 @@ vim.keymap.set("n", "<leader>e", function()
   Snacks.explorer.reveal()
 end, opts({ desc = "Reveal current file in explorer" }))
 
+keymap("n", "<leader>oe", function()
+  vim.cmd.edit(vim.fn.expand("~/.env.local"))
+end, opts({ desc = "Open local environment" }))
+
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts())
 -- Normal paste
