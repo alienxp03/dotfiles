@@ -98,7 +98,7 @@ MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise run dev-update
 
 Treat files under `home/`, `config/`, `local/`, and `macos/` as shared/tracked by default. Keep machine-specific or secret values in local-only files under `$HOME`:
 
-- `~/.env.local` for global secret environment variables loaded by mise (`[settings].env_file`)
+- `~/.env.local` for global secret and machine-specific environment variables loaded by mise (`[settings].env_file`), including `OBSIDIAN_VAULT` pointing to the directory that contains `.obsidian`
 - `~/.config/zsh/aliases.private.zsh`
 - `~/.config/zsh/aliases.local.zsh`
 - `~/.config/zsh/functions.local.zsh`
