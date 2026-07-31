@@ -69,7 +69,7 @@ end, opts({ desc = "Reveal current file in explorer" }))
 
 keymap("n", "<leader>oe", function()
   vim.cmd.edit(vim.fn.expand("~/.env.local"))
-end, opts({ desc = "Open local environment" }))
+end, opts({ desc = "Open ~/.env.local" }))
 
 -- Don't replace yanked word
 keymap("x", "<leader>p", [["_dP]], opts())
