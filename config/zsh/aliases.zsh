@@ -97,6 +97,7 @@ alias t='sesh connect $(sesh list | fzf)'
 alias cc='claude'
 alias ccd="claude --dangerously-skip-permissions"
 alias cox="mise exec node@26 -- codex --dangerously-bypass-approvals-and-sandbox"
+alias codex-langfuse='TRACE_TO_LANGFUSE=true LANGFUSE_CODEX_PUBLIC_KEY="$DEV_LANGFUSE_PUBLIC_KEY" LANGFUSE_CODEX_SECRET_KEY="$DEV_LANGFUSE_SECRET_KEY" LANGFUSE_CODEX_BASE_URL="$DEV_LANGFUSE_BASE_URL" mise exec node@26 -- codex --dangerously-bypass-approvals-and-sandbox'
 alias oc="opencode"
 alias cop='copilot'
 
@@ -108,6 +109,7 @@ alias zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_DEFAULT_SONNET_MODEL="glm
 alias happy-zai='ANTHROPIC_AUTH_TOKEN=$ZAI_API_KEY ANTHROPIC_DEFAULT_SONNET_MODEL="glm-5.1" ANTHROPIC_DEFAULT_OPUS_MODEL="glm-5.2[1m]" ANTHROPIC_BASE_URL=$ZAI_BASE_URL happy claude --dangerously-skip-permissions'
 alias happy-codex='happy codex --dangerously-bypass-approvals-and-sandbox'
 alias ccusage='bunx ccusage@latest'
+alias pi-langfuse='LANGFUSE_PUBLIC_KEY="$DEV_LANGFUSE_PUBLIC_KEY" LANGFUSE_SECRET_KEY="$DEV_LANGFUSE_SECRET_KEY" LANGFUSE_BASE_URL="$DEV_LANGFUSE_BASE_URL" LANGFUSE_PRIVACY_PRESET="$DEV_LANGFUSE_PRIVACY_PRESET" pi --approve'
 alias pix='pi --approve'
 
 alias js='just'
