@@ -116,7 +116,22 @@ return {
       height = 0.95,
     },
     image = { enabled = true },
-    notifier = { enabled = false },
+    notifier = {
+      enabled = true,
+      style = "fancy",
+      timeout = 4000,
+      width = { min = 48, max = 0.6 },
+      margin = { top = 0, right = 1, bottom = 1 },
+      top_down = false,
+    },
+    styles = {
+      notification = {
+        wo = {
+          wrap = true,
+          linebreak = true,
+        },
+      },
+    },
     -- ascii pokemon
     dashboard = {
       enabled = true,
