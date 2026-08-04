@@ -4,6 +4,11 @@ return {
   config = function()
     require("Comment").setup({
       pre_hook = function()
+        -- .env has no Treesitter parser; return its commentstring explicitly.
+        if vim.bo.filetype == "env" then
+          return "#%s"
+        end
+
         if vim.bo.filetype == "just" or vim.bo.filetype == "justfile" then
           return "#%s"
         end
