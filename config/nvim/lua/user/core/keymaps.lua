@@ -114,6 +114,12 @@ vim.keymap.set("n", "<leader>cl", function()
   vim.notify("Copied relative: " .. location, vim.log.levels.INFO, { title = "Clipboard" })
 end, opts({ desc = "Copy relative path with line number" }))
 
+local agent = require("user.util.agent")
+vim.keymap.set("n", "<leader>ai", agent.prompt, opts({ desc = "Ask AI about location" }))
+vim.keymap.set("x", "<leader>ai", function()
+  agent.prompt({ visual = true })
+end, opts({ desc = "Ask AI about selected lines" }))
+
 -- `il` text object: inner line, trimmed of leading/trailing whitespace
 -- Enables yil, vil, dil, cil, etc.
 keymap("x", "il", "^og_", opts({ desc = "inner line (trimmed)" }))
