@@ -13,9 +13,9 @@ keybinding:
     quit-alt1: <esc>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
-  pagers:
+  diffRenderers:
     - colorArg: always
-      pager: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
+      command: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
       # pager: delta --dark --paging=never --line-numbers --features=mellow-barbet
       # pager: delta --dark --paging=never --line-numbers --features=chameleon
 customCommands:
