@@ -26,11 +26,11 @@ pnpm = "11.21.0"
 "npm:@mermaid-js/mermaid-cli" = "11.16.0"
 
 # AI agents
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.228", npm_args = "--ignore-scripts=false" }
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.232", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.84.1"
 "npm:@openai/codex"                   = "0.147.0"
 "npm:happy"                           = { version = "1.2.0", npm_args = "--ignore-scripts=false" }
-"npm:opencode-ai"                     = { version = "1.18.16", npm_args = "--ignore-scripts=false" }
+"npm:opencode-ai"                     = { version = "1.18.18", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
 
 # Python tooling
@@ -115,6 +115,9 @@ compile = false
 default_mode = "symlink"
 root         = "~/.dotfiles"
 
+[settings.npm]
+package_manager = "npm"
+
 [dotfiles]
 "~/.config/alacritty"                                        = "~/.dotfiles/config/alacritty"
 "~/.config/atuin"                                            = "~/.dotfiles/config/atuin"
@@ -172,6 +175,7 @@ run = [
 [tasks.bump-daily]
 description = "Update AI tools"
 run = [
+  "mise self-update -y",
   "mise upgrade --bump --yes npm:@earendil-works/pi-coding-agent npm:@openai/codex npm:@anthropic-ai/claude-code npm:opencode-ai",
   "pi update --extensions",
 ]
