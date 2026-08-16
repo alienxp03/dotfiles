@@ -101,7 +101,9 @@ keymap("v", "<S-k>", ":m '<-2<CR>gv=gv", opts())
 
 -- Copy path
 vim.keymap.set("n", "<leader>cp", function()
-  vim.fn.setreg("+", vim.fn.expand("%:p:."))
+  local path = vim.fn.expand("%:p:.")
+  vim.fn.setreg("+", path)
+  vim.notify("Copied relative: " .. path, vim.log.levels.INFO, { title = "Clipboard" })
 end, opts({ desc = "Copy relative path" }))
 vim.keymap.set("n", "<leader>cf", function()
   local path = vim.fn.expand("%:p")
@@ -161,6 +163,12 @@ end, opts())
 vim.keymap.set("n", "<C-l>", function()
   navigate_window("l", "TmuxNavigateRight", "right")
 end, opts())
+
+-- Terminal applications such as LazyGit run inside Neovim, so Kitty passes
+-- Ctrl-L through to the terminal job instead of handling the window switch.
+vim.keymap.set("t", "<C-l>", function()
+  navigate_window("l", "TmuxNavigateRight", "right")
+end, opts({ desc = "Navigate right" }))
 
 -- trouble
 keymap(
