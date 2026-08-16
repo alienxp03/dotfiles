@@ -51,7 +51,6 @@ function ide_kitty() {
 	nvim
 }
 
-
 function ide() {
 	if [[ -n "$KITTY_WINDOW_ID" ]]; then
 		ide_kitty
