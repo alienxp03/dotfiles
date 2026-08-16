@@ -156,7 +156,7 @@ run = [
   "mise ls --current >/dev/null",
   "zsh -n ~/.dotfiles/home/.zshrc ~/.dotfiles/config/zsh/*.zsh",
   "python - <<'PY'\nimport tomllib\nfrom pathlib import Path\ntomllib.loads((Path.home() / '.dotfiles/config/mise/config.toml').read_text())\nPY",
-  "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.octo\") end); if not ok then error(err) end' -c 'qa!'",
+  "XDG_CONFIG_HOME=~/.dotfiles/config nvim --headless -c 'lua local ok, err = pcall(function() require(\"user.plugins.codediff\") end); if not ok then error(err) end' -c 'qa!'",
   "tmux new-session -d -s nvim-mise-test 'cd ~/.dotfiles && XDG_CONFIG_HOME=~/.dotfiles/config nvim test.ts' && sleep 3 && tmux capture-pane -t nvim-mise-test -p >/dev/null && tmux send-keys -t nvim-mise-test ':qa!' Enter && sleep 1 && tmux kill-session -t nvim-mise-test 2>/dev/null || true",
 ]
 
