@@ -5,7 +5,7 @@ return {
   config = function()
     require("lualine").setup({
       options = {
-        theme = "gruvbox",
+        theme = "luna",
         disabled_filetypes = {
           statusline = {
             "snacks_picker_input",
