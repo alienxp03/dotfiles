@@ -1,0 +1,3 @@
+# Run with: jg llama-qwen3.8-27b
+llama-qwen3-8-27b:
+  @llama serve -hf ggml-org/Qwen3.8-27B-GGUF:Q4_K_M -hfd ggml-org/Qwen3.8-27B-GGUF:Q4_0 --spec-default --spec-type draft-mtp --reasoning-preserve

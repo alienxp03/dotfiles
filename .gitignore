@@ -15,3 +15,5 @@ tmp/
 /.claude
 .kesh*
 config/kesh/config.yaml
+!config/just/
+!config/just/justfile

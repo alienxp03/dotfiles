@@ -1,3 +1,22 @@
+# Run global just recipes. Keep the public command name dotted for convenience.
+jg() {
+	if [[ "$1" == "llama-qwen3.8-27b" ]]; then
+		shift
+		just --global-justfile llama-qwen3-8-27b "$@"
+	else
+		just --global-justfile "$@"
+	fi
+}
+
+_jg() {
+	local -a recipes
+	recipes=(
+		'llama-qwen3.8-27b:Serve Qwen 3.8 27B with llama'
+	)
+	_describe 'global just recipe' recipes
+}
+compdef _jg jg
+
 # Setup a 3-pane workspace in a new window
 function ide_tmux() {
 	local dir_name="${PWD##*/}"
