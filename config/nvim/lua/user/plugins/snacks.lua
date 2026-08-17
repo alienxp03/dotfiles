@@ -2,6 +2,11 @@ local function format_file_columns(item, picker)
   local path = Snacks.picker.util.path(item) or item.file
   local filename = vim.fn.fnamemodify(path, ":t")
   local directory = vim.fn.fnamemodify(path, ":h")
+  local cwd = picker:cwd()
+  if cwd and cwd ~= "" then
+    directory = vim.fs.relpath(cwd, vim.fn.fnamemodify(directory, ":p")) or directory
+  end
+
   local filename_width = 32
   local padding = math.max(2, filename_width - vim.fn.strdisplaywidth(filename))
 
