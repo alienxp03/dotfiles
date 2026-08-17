@@ -21,7 +21,7 @@ return {
         typescriptreact = { "prettier" },
         html = { "prettier" },
         json = { "prettier" },
-        yaml = { "prettier" },
+        yaml = { "prettier_yaml" },
         markdown = { "prettier" },
         lua = { "stylua" },
         toml = { "taplo" },
@@ -30,6 +30,13 @@ return {
         hcl = { "terraform_fmt" },
         ["_"] = { "trim_whitespace" },
         go = { "gofmt", "goimports" },
+      },
+
+      formatters = {
+        prettier_yaml = {
+          inherit = "prettier",
+          append_args = { "--print-width", "120" },
+        },
       },
 
       format_after_save = function(bufnr)

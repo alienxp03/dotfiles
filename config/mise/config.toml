@@ -20,7 +20,8 @@ ruby   = "4.0.6"
 rust   = "1.97.1"
 
 # JavaScript package managers
-pnpm = "11.21.0"
+pnpm           = "11.21.0"
+"npm:prettier" = "3.9.6"
 
 # Diagram rendering
 "npm:@mermaid-js/mermaid-cli" = "11.16.0"
