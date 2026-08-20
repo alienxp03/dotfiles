@@ -1,0 +1,26 @@
+{
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.6-luna",
+  "defaultThinkingLevel": "xhigh",
+  "lastChangelogVersion": "0.84.2",
+  "collapseChangelog": true,
+  "packages": [
+    "npm:pi-mcp-adapter",
+    "npm:pi-web-access",
+    "npm:@ff-labs/pi-fff",
+    "npm:pi-vim"
+  ],
+  "skills": ["~/.codex/skills"],
+  "images": {
+    "showImages": false
+  },
+  "steeringMode": "all",
+  "enableInstallTelemetry": false,
+  "theme": "dark",
+  "enabledModels": [
+    "openai-codex/gpt-5.6-sol",
+    "openai-codex/gpt-5.6-terra",
+    "openai-codex/gpt-5.6-luna"
+  ],
+  "hideThinkingBlock": true
+}
