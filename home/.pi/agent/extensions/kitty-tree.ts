@@ -58,17 +58,17 @@ async function cloneCurrentConversation(sessionManager: ReadonlySessionManager):
 }
 
 export default function (pi: ExtensionAPI) {
-	pi.registerCommand("ktree", {
+	pi.registerCommand("kclone", {
 		description: "Clone the current conversation into an interactive Kitty pane",
 		getArgumentCompletions: getDirectionCompletions,
 		handler: async (args, ctx) => {
 			const direction = parseDirection(args);
 			if (!direction) {
-				ctx.ui.notify("Usage: /ktree [bottom|top|left|right]", "error");
+				ctx.ui.notify("Usage: /kclone [bottom|top|left|right]", "error");
 				return;
 			}
 			if (!process.env.KITTY_WINDOW_ID) {
-				ctx.ui.notify("/ktree requires Kitty", "error");
+				ctx.ui.notify("/kclone requires Kitty", "error");
 				return;
 			}
 
