@@ -12,6 +12,7 @@ vim.g.maplocalleader = ","
 local keymap = vim.keymap.set
 
 -- Clipboard
+keymap("n", "<leader>ya", "<cmd>%yank +<cr>", opts({ desc = "Yank entire file" }))
 
 -- Clear search
 keymap("v", "<Esc><Esc>", "<Esc>", opts({ desc = "clear search" }))
@@ -198,5 +199,34 @@ vim.api.nvim_create_user_command("OpenInFinder", function()
   -- Use macOS 'open -R' to reveal the file in Finder
   vim.fn.jobstart({ "open", "-R", file }, { detach = true })
 end, {})
+
+local function open_in_external_editor(command, args, label)
+  local file = vim.fn.expand("%:p")
+  if file == "" then
+    vim.notify("No file to open", vim.log.levels.WARN, { title = label })
+    return
+  end
+  if vim.fn.executable(command) == 0 then
+    vim.notify("Command not found: " .. command, vim.log.levels.ERROR, { title = label })
+    return
+  end
+
+  local location = string.format("%s:%d:%d", file, vim.fn.line("."), vim.fn.col("."))
+  local command_args = { command }
+  vim.list_extend(command_args, args)
+  table.insert(command_args, location)
+  vim.fn.jobstart(command_args, { detach = true })
+end
+
+vim.api.nvim_create_user_command("OpenInVisualCode", function()
+  open_in_external_editor("code", { "--reuse-window", "--goto" }, "Visual Studio Code")
+end, {})
+
+vim.api.nvim_create_user_command("OpenInSublimeText", function()
+  open_in_external_editor("subl", {}, "Sublime Text")
+end, {})
+
+keymap("n", "<leader>ov", "<cmd>OpenInVisualCode<cr>", opts({ desc = "Open in Visual Studio Code" }))
+keymap("n", "<leader>os", "<cmd>OpenInSublimeText<cr>", opts({ desc = "Open in Sublime Text" }))
 
 keymap("n", "<leader>gd", ":DiffviewOpen<cr>", opts({ desc = "Diffview" }))

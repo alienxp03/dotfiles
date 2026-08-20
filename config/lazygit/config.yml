@@ -1,9 +1,14 @@
 gui:
   sidePanelWidth: 0.2
+  # Use one light author color so names stay readable instead of cycling through
+  # random colors that become backgrounds when the row is selected.
+  authorColors:
+    "*": "#e4e4e8"
   theme:
-    # Reverse video keeps colored commit fields legible on the selected row.
+    # Keep the selected row dark and bold so author names remain legible.
     selectedLineBgColor:
-      - reverse
+      - "#1c1c1c"
+      - bold
   # Favor readable author names over commit hashes in the narrow commits panel.
   commitAuthorShortLength: 10
   commitHashLength: 4
@@ -15,9 +20,9 @@ keybinding:
 git:
   diffRenderers:
     - colorArg: always
-      command: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
-    - colorArg: always
       command: delta --dark --paging=never --line-numbers --features=arctic-fox
+    - colorArg: always
+      command: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
 customCommands:
   - key: "<c-g>"
     context: "global"
