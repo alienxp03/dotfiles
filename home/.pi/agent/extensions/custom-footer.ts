@@ -49,29 +49,6 @@ function formatElapsed(milliseconds: number): string {
 	return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
-type UsageTotals = {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	cost: number;
-};
-
-function addUsage(totals: UsageTotals, usage: {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	cost: { total: number };
-} | undefined): void {
-	if (!usage) return;
-	totals.input += usage.input;
-	totals.output += usage.output;
-	totals.cacheRead += usage.cacheRead;
-	totals.cacheWrite += usage.cacheWrite;
-	totals.cost += usage.cost.total;
-}
-
 type GitLocation = {
 	repositoryRoot: string;
 	isWorktree: boolean;
@@ -144,31 +121,6 @@ export default function (pi: ExtensionAPI) {
 						: formatWorkspacePath(sessionCwd, home);
 					const location = `${icon} ${locationPath}${branch ? ` · ${branch}` : ""}${sessionName ? ` • ${sessionName}` : ""}`;
 
-					const totals: UsageTotals = {
-						input: 0,
-						output: 0,
-						cacheRead: 0,
-						cacheWrite: 0,
-						cost: 0,
-					};
-					let latestCacheHitRate: number | undefined;
-
-					for (const entry of ctx.sessionManager.getEntries()) {
-						if (entry.type === "message" && entry.message.role === "assistant") {
-							addUsage(totals, entry.message.usage);
-							const promptTokens =
-								entry.message.usage.input +
-								entry.message.usage.cacheRead +
-								entry.message.usage.cacheWrite;
-							latestCacheHitRate =
-								promptTokens > 0 ? (entry.message.usage.cacheRead / promptTokens) * 100 : undefined;
-						} else if (entry.type === "message" && entry.message.role === "toolResult") {
-							addUsage(totals, entry.message.usage);
-						} else if (entry.type === "branch_summary" || entry.type === "compaction") {
-							addUsage(totals, entry.usage);
-						}
-					}
-
 					const model = ctx.model?.id ?? "no-model";
 					const reasoning = ctx.model?.reasoning ? (ctx.thinkingLevel ?? "off") : "off";
 					const context = ctx.getContextUsage();
@@ -184,16 +136,6 @@ export default function (pi: ExtensionAPI) {
 								? "warning"
 								: "muted";
 
-					const tokenParts: string[] = [];
-					if (totals.input) tokenParts.push(`↑${formatTokens(totals.input)}`);
-					if (totals.output) tokenParts.push(`↓${formatTokens(totals.output)}`);
-					if (totals.cacheRead) tokenParts.push(`R${formatTokens(totals.cacheRead)}`);
-					if (totals.cacheWrite) tokenParts.push(`W${formatTokens(totals.cacheWrite)}`);
-					if ((totals.cacheRead || totals.cacheWrite) && latestCacheHitRate !== undefined) {
-						tokenParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
-					}
-					if (totals.cost) tokenParts.push(`$${totals.cost.toFixed(3)}`);
-
 					const separator = theme.fg("dim", " | ");
 					const primaryLine =
 						theme.fg("accent", `${model} (${reasoning})`) +
@@ -201,13 +143,9 @@ export default function (pi: ExtensionAPI) {
 						theme.fg(contextColor, contextUsage) +
 						separator +
 						theme.fg("dim", formatElapsed(Date.now() - startedAt));
-					const usageLine = tokenParts.length
-						? separator + theme.fg("dim", tokenParts.join(" "))
-						: "";
-
 					return [
 						truncateToWidth(theme.fg("dim", location), width, theme.fg("dim", "...")),
-						truncateToWidth(primaryLine + usageLine, width, ""),
+						truncateToWidth(primaryLine, width, ""),
 					];
 				},
 			};
