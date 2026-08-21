@@ -137,12 +137,15 @@ export default function (pi: ExtensionAPI) {
 								: "muted";
 
 					const separator = theme.fg("dim", " | ");
-					const primaryLine =
-						theme.fg("accent", `${model} (${reasoning})`) +
-						separator +
-						theme.fg(contextColor, contextUsage) +
-						separator +
-						theme.fg("dim", formatElapsed(Date.now() - startedAt));
+					const extensionStatus = [...footerData.getExtensionStatuses().values()].join(separator);
+					const primaryLine = [
+						theme.fg("accent", `${model} (${reasoning})`),
+						theme.fg(contextColor, contextUsage),
+						theme.fg("dim", formatElapsed(Date.now() - startedAt)),
+						extensionStatus,
+					]
+						.filter(Boolean)
+						.join(separator);
 					return [
 						truncateToWidth(theme.fg("dim", location), width, theme.fg("dim", "...")),
 						truncateToWidth(primaryLine, width, ""),

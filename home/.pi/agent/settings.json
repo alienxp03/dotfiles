@@ -10,7 +10,9 @@
     "npm:@ff-labs/pi-fff",
     "npm:pi-vim"
   ],
-  "skills": ["~/.codex/skills"],
+  "skills": [
+    "~/.codex/skills"
+  ],
   "images": {
     "showImages": false
   },
