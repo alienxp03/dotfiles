@@ -373,6 +373,41 @@ return {
       desc = "Keymaps",
     },
     {
+      "<leader>z=",
+      function()
+        Snacks.picker.spelling({ layout = { hidden = { "preview" } } })
+      end,
+      desc = "Spelling suggestions",
+    },
+    {
+      "<leader>zg",
+      function()
+        vim.cmd.normal({ bang = true, args = { "zg" } })
+      end,
+      desc = "Add word to dictionary",
+    },
+    {
+      "<leader>zG",
+      function()
+        vim.cmd.normal({ bang = true, args = { "zG" } })
+      end,
+      desc = "Add word for this session",
+    },
+    {
+      "<leader>zu",
+      function()
+        vim.cmd.normal({ bang = true, args = { "zug" } })
+      end,
+      desc = "Undo dictionary addition",
+    },
+    {
+      "<leader>zw",
+      function()
+        vim.cmd.normal({ bang = true, args = { "zw" } })
+      end,
+      desc = "Mark word as misspelled",
+    },
+    {
       "<leader>sv",
       function()
         Snacks.picker.files({ cwd = vim.fn.getcwd() .. "/vendor" })

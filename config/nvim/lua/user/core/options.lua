@@ -35,6 +35,7 @@ local options = {
   wildmenu = true, -- wildcard auto-complete by default in command-line
   syntax = "on", -- syntax highlighting
   spell = true, -- enable spell checking by default
+  spelllang = "en_gb", -- use British English spelling
 }
 
 for k, v in pairs(options) do
