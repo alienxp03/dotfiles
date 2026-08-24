@@ -1,4 +1,11 @@
-export WORKSPACE="$HOME/Workspace"
+# Keep workspace-based paths portable across machines with different casing.
+if [[ -d "$HOME/Workspace" ]]; then
+	export WORKSPACE="$HOME/Workspace"
+elif [[ -d "$HOME/workspace" ]]; then
+	export WORKSPACE="$HOME/workspace"
+else
+	export WORKSPACE="$HOME/Workspace"
+fi
 export ZSH="$HOME/.oh-my-zsh"
 export ZSH_THEME="powerlevel10k/powerlevel10k"
 export EDITOR='nvim'
