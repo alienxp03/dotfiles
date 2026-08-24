@@ -34,6 +34,7 @@ local options = {
   linebreak = true, -- companion to wrap, don't split words
   wildmenu = true, -- wildcard auto-complete by default in command-line
   syntax = "on", -- syntax highlighting
+  spell = true, -- enable spell checking by default
 }
 
 for k, v in pairs(options) do
