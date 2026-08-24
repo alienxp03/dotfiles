@@ -119,35 +119,48 @@ export default function (pi: ExtensionAPI) {
 							? formatCwd(repositoryRoot, home)
 							: formatWorkspacePath(repositoryRoot, home)
 						: formatWorkspacePath(sessionCwd, home);
-					const location = `${icon} ${locationPath}${branch ? ` · ${branch}` : ""}${sessionName ? ` • ${sessionName}` : ""}`;
+					const location = [
+						`${theme.fg("muted", icon)} ${theme.fg("text", locationPath)}`,
+						branch ? theme.fg("customMessageLabel", ` · ${branch}`) : "",
+						sessionName ? theme.fg("customMessageLabel", ` • ${sessionName}`) : "",
+					].join("");
 
 					const model = ctx.model?.id ?? "no-model";
 					const reasoning = ctx.model?.reasoning ? (ctx.thinkingLevel ?? "off") : "off";
 					const context = ctx.getContextUsage();
 					const contextWindow = context?.contextWindow ?? ctx.model?.contextWindow ?? 0;
-					const contextUsage =
-						context?.percent == null
-							? `? / ${formatTokens(contextWindow)}`
-							: `${context.percent.toFixed(1)}% / ${formatTokens(contextWindow)}`;
-					const contextColor: "error" | "warning" | "muted" =
+					const contextColor: "success" | "error" | "warning" =
 						(context?.percent ?? 0) > 90
 							? "error"
 							: (context?.percent ?? 0) > 70
 								? "warning"
-								: "muted";
+								: "success";
+					const contextUsage =
+						context?.percent == null
+							? `${theme.fg("dim", "?")} ${theme.fg("dim", "/")} ${theme.fg("dim", formatTokens(contextWindow))}`
+							: `${theme.fg(contextColor, `${context.percent.toFixed(1)}%`)} ${theme.fg("dim", "/")} ${theme.fg(contextColor, formatTokens(contextWindow))}`;
 
 					const separator = theme.fg("dim", " | ");
 					const extensionStatus = [...footerData.getExtensionStatuses().values()].join(separator);
+					const reasoningColors = {
+						off: "thinkingOff",
+						minimal: "thinkingMinimal",
+						low: "thinkingLow",
+						medium: "thinkingMedium",
+						high: "thinkingHigh",
+						xhigh: "thinkingXhigh",
+						max: "thinkingMax",
+					} as const;
 					const primaryLine = [
-						theme.fg("accent", `${model} (${reasoning})`),
-						theme.fg(contextColor, contextUsage),
-						theme.fg("dim", formatElapsed(Date.now() - startedAt)),
+						`${theme.fg("accent", model)} ${theme.fg(reasoningColors[reasoning], `(${reasoning})`)}`,
+						contextUsage,
+						theme.fg("muted", formatElapsed(Date.now() - startedAt)),
 						extensionStatus,
 					]
 						.filter(Boolean)
 						.join(separator);
 					return [
-						truncateToWidth(theme.fg("dim", location), width, theme.fg("dim", "...")),
+						truncateToWidth(location, width, theme.fg("dim", "...")),
 						truncateToWidth(primaryLine, width, ""),
 					];
 				},
