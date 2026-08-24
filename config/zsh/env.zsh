@@ -11,6 +11,8 @@ export SOLARGRAPH_GLOBAL_CONFIG=~/.solargraph.yml
 export ZAI_BASE_URL="https://api.z.ai/api/anthropic"
 
 export PATH="$HOME/.local/bin:$PATH"
+# Locally built speech-to-text tools
+export PATH="$WORKSPACE/projects/transcribe.cpp/build/bin:$PATH"
 export PATH="$HOME/.rbenv/bin:$PATH"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$WORKSPACE/bin/apache-maven-3.8.6/bin:$PATH"

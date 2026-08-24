@@ -112,5 +112,4 @@ alias pi-langfuse='LANGFUSE_PUBLIC_KEY="$DEV_LANGFUSE_PUBLIC_KEY" LANGFUSE_SECRE
 alias pix='pi --approve'
 
 alias js='just'
-compdef _just js
 alias wx='workmux'

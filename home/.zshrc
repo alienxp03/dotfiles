@@ -125,6 +125,13 @@ if [[ -x "$_mise_bin" ]]; then
 fi
 
 source "$HOME/.config/zsh/init.zsh"
+
+# Cache Just's dynamic completion function and share it with the `js` alias.
+if (($+commands[just])); then
+	_cached_source just "$commands[just]" env JUST_COMPLETE=zsh "$commands[just]"
+	compdef _clap_dynamic_completer_just just js
+fi
+
 if [[ -n "${JAVA_HOME:-}" && ! -d "$JAVA_HOME" ]]; then
 	unset JAVA_HOME
 fi
