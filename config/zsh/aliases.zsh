@@ -73,6 +73,39 @@ alias sub=subl
 # tmux/nvim
 alias tx='tmux attach-session'
 alias tn="tmux new -s $(pwd | sed 's/.*\///g')"
+
+# Start Pi in a project-scoped tmux session. The global tmux status
+# configuration applies to these sessions too.
+pi-session() {
+	local root key session target
+	root="$(git rev-parse --show-toplevel 2>/dev/null || print -r -- "$PWD")"
+	key="${root:t}"
+	key="${key//[^[:alnum:]_.-]/-}"
+	session="pi-${key}"
+	target="${session}:"
+
+	# The trailing colon makes this an explicit session target. This matters for
+	# names such as `pi-.dotfiles`, where a dot can otherwise be parsed as a
+	# session/window separator.
+	if ! tmux has-session -t "$target" 2>/dev/null; then
+		tmux new-session -d -s "$session" -c "$PWD" pi || return 1
+	fi
+
+	# Keep the Pi session compact without changing normal tmux sessions.
+	tmux set-option -t "$target" status on
+	tmux set-option -t "$target" status-left-length 0
+	tmux set-option -t "$target" status-left ""
+	tmux set-option -t "$target" status-right-length 8
+	tmux set-option -t "$target" status-right "#[fg=#{@thm_overlay_0}]#{window_index}/#{session_windows} "
+
+	if [[ -n "${TMUX:-}" ]]; then
+		tmux switch-client -t "$target"
+	else
+		exec tmux attach-session -t "$target"
+	fi
+}
+
+alias pis='pi-session'
 alias v='nvim'
 alias xx='exit'
 
