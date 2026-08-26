@@ -1,14 +1,15 @@
 {
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-luna",
-  "defaultThinkingLevel": "xhigh",
+  "defaultModel": "gpt-5.6-sol",
+  "defaultThinkingLevel": "high",
   "lastChangelogVersion": "0.84.2",
   "collapseChangelog": true,
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     "npm:@ff-labs/pi-fff",
-    "npm:pi-vim"
+    "npm:pi-vim",
+    "npm:@plannotator/pi-extension"
   ],
   "skills": [
     "~/.codex/skills"
