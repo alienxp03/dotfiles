@@ -33,5 +33,9 @@ pane_borders            = false
 pane_gaps               = false
 mouse_scroll_lines      = 1
 
+show_agent_labels_on_pane_borders = false
 [theme]
 name = "tokyo-night"
+
+[ui.sound]
+enabled = false

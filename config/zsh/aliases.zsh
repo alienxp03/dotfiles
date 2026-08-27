@@ -74,7 +74,7 @@ alias sub=subl
 alias tx='tmux attach-session'
 alias tn="tmux new -s $(pwd | sed 's/.*\///g')"
 
-# Start Pi in a project-scoped tmux session. The global tmux status
+# Resume Pi in a project-scoped tmux session. The global tmux status
 # configuration applies to these sessions too.
 pi-session() {
 	local root key session target
@@ -88,7 +88,7 @@ pi-session() {
 	# names such as `pi-.dotfiles`, where a dot can otherwise be parsed as a
 	# session/window separator.
 	if ! tmux has-session -t "$target" 2>/dev/null; then
-		tmux new-session -d -s "$session" -c "$PWD" pi || return 1
+		tmux new-session -d -s "$session" -c "$PWD" "$HOME/.local/bin/mise exec -- pi -c" || return 1
 	fi
 
 	# Keep the Pi session compact without changing normal tmux sessions.
