@@ -52,7 +52,7 @@ width       = "80%"
 height      = "80%"
 
 [[keys.command]]
-key         = "prefix+shift+r"
+key         = "prefix+r"
 type        = "popup"
 command     = "tuicr --working-tree"
 description = "review unstaged changes"
