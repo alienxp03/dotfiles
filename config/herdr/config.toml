@@ -33,6 +33,14 @@ command = "lazygit"
 width   = "80%"
 height  = "80%"
 
+[[keys.command]]
+key         = "prefix+shift+i"
+type        = "popup"
+command     = 'printf "Agent name: " >&2 && IFS= read -r name && [ -n "$name" ] && herdr agent rename "$HERDR_ACTIVE_PANE_ID" "$name"'
+description = "rename active agent"
+width       = 40
+height      = 5
+
 [ui]
 sidebar_start_collapsed = true
 sidebar_collapsed_mode  = "hidden"

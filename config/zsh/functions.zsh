@@ -217,7 +217,10 @@ function herdr() {
 	local exit_status
 	local mark_kitty_window=false
 
-	if [[ -n ${KITTY_WINDOW_ID:-} ]] && command -v kitty >/dev/null 2>&1; then
+	# Herdr panes inherit HERDR_ENV. Do not clear the outer window marker when
+	# running a Herdr CLI command such as `herdr server reload-config` inside a
+	# pane; only the outer `herdr` client owns that marker's lifecycle.
+	if [[ -z ${HERDR_ENV:-} && -n ${KITTY_WINDOW_ID:-} ]] && command -v kitty >/dev/null 2>&1; then
 		kitty @ set-user-vars herdr=1 >/dev/null 2>&1
 		mark_kitty_window=true
 	fi
