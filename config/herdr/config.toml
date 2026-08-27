@@ -9,10 +9,10 @@ split_horizontal = "prefix+minus"
 zoom             = "prefix+m"
 
 # Cycle between agents instead of tabs.
-previous_tab   = ""
-next_tab       = ""
-previous_agent = "prefix+p"
-next_agent     = "prefix+n"
+previous_tab = "prefix+p"
+next_tab     = "prefix+n"
+# previous_agent = "prefix+p"
+# next_agent     = "prefix+n"
 
 # Vim-style space selection in the workspace navigator.
 navigate_workspace_up   = "k"
@@ -26,16 +26,24 @@ focus_pane_down  = "ctrl+j"
 focus_pane_up    = "ctrl+k"
 focus_pane_right = "ctrl+l"
 
+[[keys.command]]
+key     = "prefix+l"
+type    = "popup"
+command = "lazygit"
+width   = "80%"
+height  = "80%"
+
 [ui]
 sidebar_start_collapsed = true
 sidebar_collapsed_mode  = "hidden"
-pane_borders            = false
-pane_gaps               = false
+pane_borders            = true
+pane_gaps               = true
 mouse_scroll_lines      = 1
 
 show_agent_labels_on_pane_borders = false
+agent_panel_sort                  = "spaces"
 [theme]
-name = "tokyo-night"
+name = "catppuccin"
 
 [ui.sound]
 enabled = false
