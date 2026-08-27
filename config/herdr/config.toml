@@ -20,18 +20,18 @@ navigate_workspace_down = "j"
 navigate_pane_up        = ""
 navigate_pane_down      = ""
 
-# Direct pane navigation without entering prefix mode.
-focus_pane_left  = "ctrl+h"
-focus_pane_down  = "ctrl+j"
-focus_pane_up    = "ctrl+k"
-focus_pane_right = "ctrl+l"
+# Prefix-based pane navigation keeps Ctrl+h/j/k/l available to pane applications.
+focus_pane_left  = "prefix+h"
+focus_pane_down  = "prefix+j"
+focus_pane_up    = "prefix+k"
+focus_pane_right = "prefix+l"
 
 [[keys.command]]
-key     = "prefix+l"
+key     = "prefix+shift+l"
 type    = "popup"
 command = "lazygit"
-width   = "80%"
-height  = "80%"
+width   = "90%"
+height  = "90%"
 
 [[keys.command]]
 key         = "prefix+shift+i"
@@ -40,6 +40,22 @@ command     = 'printf "Agent name: " >&2 && IFS= read -r name && [ -n "$name" ] 
 description = "rename active agent"
 width       = 40
 height      = 5
+
+[[keys.command]]
+key         = "prefix+t"
+type        = "popup"
+command     = "exec \"${SHELL:-sh}\""
+description = "open scratch terminal"
+width       = "80%"
+height      = "80%"
+
+[[keys.command]]
+key         = "prefix+shift+r"
+type        = "popup"
+command     = "tuicr --working-tree"
+description = "review unstaged changes"
+width       = "90%"
+height      = "90%"
 
 [ui]
 sidebar_start_collapsed = true
@@ -55,3 +71,9 @@ name = "catppuccin"
 
 [ui.sound]
 enabled = false
+
+[worktrees]
+directory = "~/Workspace/worktrees"
+
+[experimental]
+kitty_graphics = true
