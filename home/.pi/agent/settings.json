@@ -9,7 +9,8 @@
     "npm:pi-web-access",
     "npm:@ff-labs/pi-fff",
     "npm:pi-vim",
-    "npm:@plannotator/pi-extension"
+    "npm:@plannotator/pi-extension",
+    "git:https://github.com/hasit/pi-community-themes"
   ],
   "skills": [
     "~/.codex/skills"
