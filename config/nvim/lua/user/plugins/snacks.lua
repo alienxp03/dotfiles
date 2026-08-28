@@ -303,6 +303,15 @@ return {
       desc = "Toggle Lazygit",
     },
     {
+      "<leader>gr",
+      function()
+        Snacks.terminal({ "tuicr", "--working-tree" }, {
+          win = { style = "lazygit" },
+        })
+      end,
+      desc = "Toggle tuicr (working tree)",
+    },
+    {
       "<leader>gl",
       function()
         Snacks.lazygit.log()
