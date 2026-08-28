@@ -8,11 +8,13 @@ split_vertical   = "prefix+|"
 split_horizontal = "prefix+minus"
 zoom             = "prefix+m"
 
-# Cycle between agents instead of tabs.
+# Cycle through tabs.
 previous_tab = "prefix+p"
 next_tab     = "prefix+n"
-# previous_agent = "prefix+p"
-# next_agent     = "prefix+n"
+
+# Cycle through agents.
+previous_agent = "prefix+u"
+next_agent     = "prefix+d"
 
 # Vim-style space selection in the workspace navigator.
 navigate_workspace_up   = "k"
@@ -65,7 +67,7 @@ pane_gaps               = true
 mouse_scroll_lines      = 1
 
 show_agent_labels_on_pane_borders = false
-agent_panel_sort                  = "spaces"
+agent_panel_sort = "priority"
 [theme]
 name = "catppuccin"
 

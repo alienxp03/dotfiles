@@ -1,0 +1,2 @@
+# Preview the selected file as the file-list cursor moves.
+single_file_view = true
