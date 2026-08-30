@@ -11,7 +11,6 @@
     "npm:pi-vim",
     "npm:@plannotator/pi-extension",
     "git:https://github.com/hasit/pi-community-themes",
-    "npm:pi-langfuse",
     "npm:pi-subagents"
   ],
   "skills": [
@@ -26,7 +25,9 @@
   "enabledModels": [
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-terra",
-    "openai-codex/gpt-5.6-luna"
+    "openai-codex/gpt-5.6-luna",
+    "zai/glm-5.3",
+    "zai/glm-5.3-flash"
   ],
   "hideThinkingBlock": true,
   "subagents": {

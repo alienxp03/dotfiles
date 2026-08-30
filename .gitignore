@@ -15,5 +15,6 @@ tmp/
 /.claude
 .kesh*
 config/kesh/config.yaml
+/home/.pi/agent/models.json
 !config/just/
 !config/just/justfile
