@@ -9,6 +9,17 @@ const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state
 const statusFile = join(stateHome, "kesh", "agent-status", `pi-${windowID}.json`);
 
 type Status = "idle" | "working" | "finished" | "errored";
+type StatusRecord = { lastDoneAt?: string; status?: Status; updatedAt?: string };
+
+function isTerminalStatus(status: Status | undefined): boolean {
+	switch (status) {
+		case "finished":
+		case "errored":
+			return true;
+		default:
+			return false;
+	}
+}
 
 export default function (pi: ExtensionAPI) {
 	if (!Number.isInteger(windowID) || windowID <= 0) return;
@@ -17,6 +28,22 @@ export default function (pi: ExtensionAPI) {
 
 	async function writeStatus(status: Status, ctx: ExtensionContext) {
 		await mkdir(dirname(statusFile), { recursive: true, mode: 0o700 });
+		let lastDoneAt: string | undefined;
+		try {
+			const current = JSON.parse(await readFile(statusFile, "utf8")) as StatusRecord;
+			lastDoneAt = current.lastDoneAt;
+			if (!lastDoneAt) {
+				if (isTerminalStatus(current.status)) {
+					lastDoneAt = current.updatedAt;
+				}
+			}
+		} catch {
+			// A missing or malformed previous record has no completion timestamp.
+		}
+		const updatedAt = new Date().toISOString();
+		if (isTerminalStatus(status)) {
+			lastDoneAt = updatedAt;
+		}
 		const temporary = `${statusFile}.${process.pid}.tmp`;
 		const record = {
 			version: VERSION,
@@ -25,7 +52,8 @@ export default function (pi: ExtensionAPI) {
 			pid: process.pid,
 			sessionId: ctx.sessionManager.getSessionId(),
 			status,
-			updatedAt: new Date().toISOString(),
+			updatedAt,
+			...(lastDoneAt ? { lastDoneAt } : {}),
 		};
 		await writeFile(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
 		await rename(temporary, statusFile);
