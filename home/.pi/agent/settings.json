@@ -2,7 +2,7 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-luna",
   "defaultThinkingLevel": "xhigh",
-  "lastChangelogVersion": "0.84.3",
+  "lastChangelogVersion": "0.84.4",
   "collapseChangelog": true,
   "packages": [
     "npm:pi-mcp-adapter",
@@ -21,7 +21,8 @@
   },
   "steeringMode": "all",
   "enableInstallTelemetry": false,
-  "theme": "dark",
+  "theme": "github-dark-default",
+  "quietStartup": true,
   "enabledModels": [
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-terra",
