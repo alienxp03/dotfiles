@@ -9,6 +9,7 @@ local function format_file_columns(item, picker)
   end
 
   local filename_width = 32
+  local padding = math.max(2, filename_width - vim.fn.strdisplaywidth(filename))
   if directory == "." then
     directory = ""
   end

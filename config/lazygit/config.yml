@@ -18,11 +18,13 @@ keybinding:
     quit-alt1: <esc>
     confirmInEditor: [<alt-enter>, <ctrl+s>]
 git:
+  # calochortus-lyallii
+  # woolly-mammoth
   diffRenderers:
     - colorArg: always
-      command: delta --paging=never --line-numbers
+      command: delta --paging=never --line-numbers --features=woolly-mammoth
     - colorArg: always
-      command: delta --paging=never --line-numbers --side-by-side
+      command: delta --paging=never --line-numbers --side-by-side --features=woolly-mammoth
 customCommands:
   - key: "Y"
     context: "global"
@@ -32,38 +34,14 @@ customCommands:
         title: "Delta diff theme"
         key: "DeltaTheme"
         options:
-          - name: "arctic-fox"
+          - name: "calochortus-lyallii"
             description: "Dark Nord palette"
-            value: "arctic-fox"
-            key: "a"
-          - name: "collared-trogon"
-            description: "Dark blue/green palette"
-            value: "collared-trogon"
-            key: "t"
-          - name: "coracias-caudatus"
-            description: "Light purple/cyan palette"
-            value: "coracias-caudatus"
-            key: "r"
-          - name: "corvus"
-            description: "Dark monochrome palette"
-            value: "corvus"
-            key: "c"
-          - name: "mellow-barbet"
-            description: "Dark high-contrast palette"
-            value: "mellow-barbet"
-            key: "m"
-          - name: "villsau"
-            description: "Dark syntax palette"
-            value: "villsau"
-            key: "v"
+            value: "calochortus-lyallii"
+            key: "l"
           - name: "woolly-mammoth"
             description: "Dark green/red palette"
             value: "woolly-mammoth"
             key: "w"
-          - name: "zebra-dark"
-            description: "Dark muted palette"
-            value: "zebra-dark"
-            key: "z"
     command: |
       #!/bin/bash
       THEME="{{.Form.DeltaTheme}}"
