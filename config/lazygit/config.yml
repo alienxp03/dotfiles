@@ -20,10 +20,61 @@ keybinding:
 git:
   diffRenderers:
     - colorArg: always
-      command: delta --dark --paging=never --line-numbers --features=arctic-fox
+      command: delta --paging=never --line-numbers
     - colorArg: always
-      command: delta --dark --paging=never --line-numbers --side-by-side --features=arctic-fox
+      command: delta --paging=never --line-numbers --side-by-side
 customCommands:
+  - key: "Y"
+    context: "global"
+    description: "Switch Delta diff theme"
+    prompts:
+      - type: "menu"
+        title: "Delta diff theme"
+        key: "DeltaTheme"
+        options:
+          - name: "arctic-fox"
+            description: "Dark Nord palette"
+            value: "arctic-fox"
+            key: "a"
+          - name: "collared-trogon"
+            description: "Dark blue/green palette"
+            value: "collared-trogon"
+            key: "t"
+          - name: "coracias-caudatus"
+            description: "Light purple/cyan palette"
+            value: "coracias-caudatus"
+            key: "r"
+          - name: "corvus"
+            description: "Dark monochrome palette"
+            value: "corvus"
+            key: "c"
+          - name: "mellow-barbet"
+            description: "Dark high-contrast palette"
+            value: "mellow-barbet"
+            key: "m"
+          - name: "villsau"
+            description: "Dark syntax palette"
+            value: "villsau"
+            key: "v"
+          - name: "woolly-mammoth"
+            description: "Dark green/red palette"
+            value: "woolly-mammoth"
+            key: "w"
+          - name: "zebra-dark"
+            description: "Dark muted palette"
+            value: "zebra-dark"
+            key: "z"
+    command: |
+      #!/bin/bash
+      THEME="{{.Form.DeltaTheme}}"
+      git config --global delta.features "$THEME"
+      if [ "$THEME" = "coracias-caudatus" ]; then
+        git config --global --unset delta.dark 2>/dev/null || true
+      else
+        git config --global delta.dark true
+      fi
+      echo "Delta theme: $THEME"
+    output: log
   - key: "<c-g>"
     context: "global"
     description: "Review PR diff against the default branch"

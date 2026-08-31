@@ -1,6 +1,7 @@
 local function format_file_columns(item, picker)
   local path = Snacks.picker.util.path(item) or item.file
-  local filename = vim.fn.fnamemodify(path, ":t")
+  local filename = vim.fn.fnamemodify(path, ":tss")
+
   local directory = vim.fn.fnamemodify(path, ":h")
   local cwd = picker:cwd()
   if cwd and cwd ~= "" then
@@ -8,17 +9,8 @@ local function format_file_columns(item, picker)
   end
 
   local filename_width = 32
-  local padding = math.max(2, filename_width - vim.fn.strdisplaywidth(filename))
-
   if directory == "." then
     directory = ""
-  end
-
-  if vim.fn.strdisplaywidth(directory) > 60 then
-    directory = Snacks.picker.util.truncpath(directory, 60, {
-      cwd = picker:cwd(),
-      kind = "left",
-    })
   end
 
   local base_hl = item.dir and "SnacksPickerDirectory" or "SnacksPickerFile"
