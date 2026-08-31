@@ -2,12 +2,6 @@ hs.ipc.cliInstall()
 
 local super = { "ctrl", "shift", "alt", "cmd" }
 
-for i = 1, 9 do
-	hs.hotkey.bind({ "alt" }, tostring(i), function()
-		hs.eventtap.keyStroke({ "ctrl" }, tostring(i), 0)
-	end)
-end
-
 hs.hotkey.bind(super, "r", function()
 	hs.reload()
 end)
