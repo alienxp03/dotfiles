@@ -29,7 +29,7 @@ pnpm           = "11.24.0"
 # AI agents
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.252", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.84.4"
-"npm:@openai/codex"                   = "0.151.0"
+"npm:@openai/codex"                   = "0.152.0"
 "npm:happy"                           = { version = "1.2.0", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.18.25", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
@@ -148,6 +148,7 @@ package_manager = "npm"
 "~/.pi/agent/plannotator.json"                               = "~/.dotfiles/pi/plannotator.json"
 "~/.pi/agent/models.json"                                    = "~/.dotfiles/pi/models.json"
 "~/.pi/agent/settings.json"                                  = "~/.dotfiles/pi/settings.json"
+"~/.pi/agent/themes"                                         = "~/.dotfiles/pi/themes"
 "~/.p10k.zsh"                                                = "~/.dotfiles/home/.p10k.zsh"
 "~/.pryrc"                                                   = "~/.dotfiles/home/.pryrc"
 "~/.solargraph.yml"                                          = "~/.dotfiles/home/.solargraph.yml"

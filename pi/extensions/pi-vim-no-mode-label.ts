@@ -34,9 +34,16 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		const startedAt = Date.now();
 		const timer = setInterval(() => {
-			if (ctx.ui.getEditorComponent()) {
+			try {
+				if (ctx.ui.getEditorComponent()) {
+					clearInterval(timer);
+					wrapEditorWithoutInsertAndNormalLabels(ctx);
+					return;
+				}
+			} catch {
+				// The session can be replaced while this short poll is still active.
+				// Stop polling instead of using a stale extension context.
 				clearInterval(timer);
-				wrapEditorWithoutInsertAndNormalLabels(ctx);
 				return;
 			}
 
