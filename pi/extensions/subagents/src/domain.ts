@@ -65,6 +65,8 @@ export interface SpawnTask {
 
 export interface SubagentMeta {
   readonly backend: BackendName;
+  /** Shared reasoning level requested for this subagent, when specified. */
+  readonly reasoningEffort?: ReasoningEffort;
   /** Display label, e.g. "anthropic/claude-opus-4-5" or "gpt-5-codex". */
   readonly modelLabel?: string;
   /** Context window capacity for utilization display, when known. */
@@ -183,11 +185,16 @@ export type SubagentEvent =
   /** Non-fatal diagnostics. Fatal failures arrive as a RunSettled outcome. */
   | { readonly _tag: "BackendError"; readonly message: string };
 
+/** Usage and metadata refreshes do not represent new work by themselves. */
+export function isMeaningfulActivityEvent(event: SubagentEvent) {
+  return event._tag !== "UsageChanged" && event._tag !== "MetaChanged";
+}
+
 // --- Snapshot ---------------------------------------------------------------
 
 /**
  * The manager folds `SubagentEvent`s into one snapshot per subagent. This is
- * everything the tools, footer status, and both TUI views read.
+ * everything the tools, activity widget, and both TUI views read.
  */
 export interface SubagentSnapshot {
   readonly id: string;
@@ -198,6 +205,8 @@ export interface SubagentSnapshot {
   readonly cwd: string;
   readonly status: SubagentStatus;
   readonly createdAt: number;
+  /** Last meaningful lifecycle, transcript, tool, queue, or diagnostic update. */
+  readonly lastActivityAt: number;
   readonly settledAt?: number;
   readonly errorText?: string;
   readonly meta: SubagentMeta;

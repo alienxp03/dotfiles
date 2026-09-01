@@ -310,6 +310,7 @@ const makeClaudeSession = (
       settleWaiters: new Set<() => void>(),
       meta: {
         backend: "claude",
+        reasoningEffort: task.reasoningEffort,
         modelLabel: task.model,
         // Claude models used by this backend currently expose 200k context;
         // result.modelUsage replaces this fallback when the CLI knows better.

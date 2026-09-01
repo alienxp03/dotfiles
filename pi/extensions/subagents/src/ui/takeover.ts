@@ -13,7 +13,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { Component, Focusable, TUI } from "@earendil-works/pi-tui";
 import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatElapsed, type SubagentSnapshot } from "../domain.ts";
+import {
+  formatElapsed,
+  type ReasoningEffort,
+  type SubagentSnapshot,
+} from "../domain.ts";
 import { formatContextUtilization } from "../format.ts";
 import type { SubagentReadModel } from "../manager.ts";
 import { buildTranscriptLines } from "./transcript.ts";
@@ -36,15 +40,23 @@ function statusGlyph(snap: SubagentSnapshot, theme: Theme): string {
   }
 }
 
-function statusWord(snap: SubagentSnapshot, theme: Theme): string {
-  switch (snap.status) {
-    case "running":
-      return theme.fg("warning", "running");
-    case "done":
-      return theme.fg("success", "done");
-    case "error":
-      return theme.fg("error", "failed");
-  }
+function reasoningLabel(snap: SubagentSnapshot): string {
+  return snap.meta.reasoningEffort ?? "default";
+}
+
+function styledReasoning(theme: Theme, effort: ReasoningEffort | undefined) {
+  const label = effort ?? "default";
+  if (!effort) return theme.fg("muted", label);
+  const colors = {
+    off: "thinkingOff",
+    minimal: "thinkingMinimal",
+    low: "thinkingLow",
+    medium: "thinkingMedium",
+    high: "thinkingHigh",
+    xhigh: "thinkingXhigh",
+    max: "thinkingMax",
+  } as const;
+  return theme.fg(colors[effort], label);
 }
 
 // --- Entry points --------------------------------------------------------------
@@ -74,29 +86,36 @@ export async function openSubagentPicker(
   ctx: ExtensionCommandContext,
   view: SubagentReadModel,
 ) {
-  const selection: DashboardSelection = { index: 0 };
-
-  while (true) {
-    if (view.size() === 0) {
-      ctx.ui.notify("No subagents", "info");
-      return;
-    }
-
-    const picked = await ctx.ui.custom<string | null>(
-      (tui, theme, keybindings, done) =>
-        new SubagentDashboard(tui, theme, keybindings, view, selection, done),
-      {
-        overlay: true,
-        overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
-      },
-    );
-
-    if (!picked) return;
-    if (!view.get(picked)) continue;
-
-    await openSubagentTakeover(ctx, view, picked);
-    // After leaving the takeover view, fall back to the dashboard.
+  if (view.size() === 0) {
+    ctx.ui.notify("No subagents", "info");
+    return;
   }
+
+  const selection: DashboardSelection = { index: 0 };
+  let takeover: Promise<void> | undefined;
+  await ctx.ui.custom<null>(
+    (tui, theme, keybindings, done) =>
+      new SubagentDashboard(
+        tui,
+        theme,
+        keybindings,
+        view,
+        selection,
+        () => done(null),
+        (id) => {
+          // Keep the dashboard mounted underneath the takeover overlay. When
+          // takeover closes, TUI restores focus to this dashboard instead of
+          // the main editor, so one Escape means "back to list".
+          takeover = openSubagentTakeover(ctx, view, id);
+          return takeover;
+        },
+      ),
+    {
+      overlay: true,
+      overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
+    },
+  );
+  await takeover;
 }
 
 // --- Dashboard (fullscreen overlay) ----------------------------------------------
@@ -104,6 +123,69 @@ export async function openSubagentPicker(
 export interface DashboardSelection {
   id?: string;
   index: number;
+}
+
+export interface DashboardColumnLayout {
+  readonly marker: number;
+  readonly state: number;
+  readonly title: number;
+  readonly backend?: number;
+  readonly model?: number;
+  readonly reasoning?: number;
+  readonly context?: number;
+  readonly elapsed?: number;
+}
+
+const DASHBOARD_COLUMN_GAP = 3; // space + separator + space
+
+/** Allocate stable table columns, removing low-priority metadata when narrow. */
+export function dashboardColumnLayout(width: number): DashboardColumnLayout {
+  const available = Math.max(1, width);
+  const marker = 2;
+  const state = 1;
+  const backend = available >= 52 ? 7 : undefined;
+  const reasoning = available >= 68 ? 8 : undefined;
+  const context = available >= 74 ? 10 : undefined;
+  const elapsed = available >= 38 ? 6 : undefined;
+
+  const fixedWidths = [state, backend, reasoning, context, elapsed].filter(
+    (value): value is number => value !== undefined,
+  );
+  const columnsWithoutModel = fixedWidths.length + 1;
+  const fixedWithoutModel =
+    marker +
+    fixedWidths.reduce((total, value) => total + value, 0) +
+    (columnsWithoutModel - 1) * DASHBOARD_COLUMN_GAP;
+  const model =
+    available >= 88
+      ? Math.min(
+          24,
+          Math.max(
+            12,
+            available -
+              fixedWithoutModel -
+              DASHBOARD_COLUMN_GAP -
+              12,
+          ),
+        )
+      : undefined;
+  const columnCount = columnsWithoutModel + (model === undefined ? 0 : 1);
+  const fixed =
+    marker +
+    fixedWidths.reduce((total, value) => total + value, 0) +
+    (model ?? 0) +
+    (columnCount - 1) * DASHBOARD_COLUMN_GAP;
+
+  return {
+    marker,
+    state,
+    title: Math.max(1, available - fixed),
+    backend,
+    model,
+    reasoning,
+    context,
+    elapsed,
+  };
 }
 
 export function reconcileDashboardSelection(
@@ -126,9 +208,12 @@ class SubagentDashboard implements Component {
   private keybindings: KeybindingsManager;
   private view: SubagentReadModel;
   private selection: DashboardSelection;
-  private done: (value: string | null) => void;
+  private done: () => void;
+  private onTakeover: (id: string) => Promise<void>;
 
   private closed = false;
+  private takeoverActive = false;
+  private ignoreCancelUntil = 0;
   private ticker: ReturnType<typeof setInterval>;
   private unsubChange: () => void;
 
@@ -138,7 +223,8 @@ class SubagentDashboard implements Component {
     keybindings: KeybindingsManager,
     view: SubagentReadModel,
     selection: DashboardSelection,
-    done: (value: string | null) => void,
+    done: () => void,
+    onTakeover: (id: string) => Promise<void>,
   ) {
     this.tui = tui;
     this.theme = theme;
@@ -146,6 +232,7 @@ class SubagentDashboard implements Component {
     this.view = view;
     this.selection = selection;
     this.done = done;
+    this.onTakeover = onTakeover;
     // Elapsed times, token counts, and statuses tick along at 1Hz.
     this.ticker = setInterval(() => this.tui.requestRender(), 1000);
     this.unsubChange = view.subscribe(() => this.tui.requestRender());
@@ -163,12 +250,28 @@ class SubagentDashboard implements Component {
     return true;
   }
 
-  private close(result: string | null) {
-    if (this.cleanup()) this.done(result);
+  private close() {
+    if (this.cleanup()) this.done();
   }
 
   dispose(): void {
     this.cleanup();
+  }
+
+  private async takeOver(id: string) {
+    if (this.takeoverActive) return;
+    this.takeoverActive = true;
+    try {
+      await this.onTakeover(id);
+    } finally {
+      this.takeoverActive = false;
+      // Pi uses a 500 ms double-Escape window for the session tree. Some
+      // terminals deliver a second Escape when focus returns from an overlay.
+      // Consume that repeated input here so the dashboard cannot flash closed
+      // and pass navigation back to the main editor.
+      this.ignoreCancelUntil = Date.now() + 500;
+      this.tui.requestRender();
+    }
   }
 
   handleInput(data: string): void {
@@ -176,12 +279,13 @@ class SubagentDashboard implements Component {
     reconcileDashboardSelection(this.selection, subs);
 
     if (this.keybindings.matches(data, "tui.select.cancel")) {
-      this.close(null);
+      if (this.takeoverActive || Date.now() < this.ignoreCancelUntil) return;
+      this.close();
       return;
     }
     if (this.keybindings.matches(data, "tui.select.confirm")) {
       const snap = subs[this.selection.index];
-      if (snap) this.close(snap.id);
+      if (snap) void this.takeOver(snap.id);
       return;
     }
     if (this.keybindings.matches(data, "tui.select.up") || data === "k") {
@@ -210,6 +314,15 @@ class SubagentDashboard implements Component {
 
   private pad(text: string, width: number): string {
     const truncated = truncateToWidth(text, width);
+    return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
+  }
+
+  private column(text: string, width: number): string {
+    const truncated = truncateToWidth(
+      text,
+      width,
+      this.theme.fg("dim", "…"),
+    );
     return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
   }
 
@@ -316,30 +429,55 @@ class SubagentDashboard implements Component {
       const index = start + i;
       const isSelected = index === this.selection.index;
 
-      // Left: marker, status square, title, dim id
+      const layout = dashboardColumnLayout(width);
       const marker = isSelected ? theme.fg("accent", "❯") : " ";
+      const state = statusGlyph(snap, theme);
       const title = isSelected
         ? theme.fg("accent", snap.title)
         : theme.fg("text", snap.title);
-      const left = ` ${marker} ${statusGlyph(snap, theme)} ${title} ${theme.fg("dim", snap.id)}`;
-
-      // Right: backend · model · context utilization · elapsed · status
-      const utilization = formatContextUtilization(snap.usage);
-      const dot = theme.fg("dim", " · ");
-      const rightParts = [
-        theme.fg("muted", snap.backend),
-        theme.fg("muted", snap.meta.modelLabel ?? "?"),
-        ...(utilization ? [theme.fg("muted", utilization)] : []),
-        theme.fg("muted", formatElapsed(snap)),
-        statusWord(snap, theme),
+      const utilization = formatContextUtilization(snap.usage) || "—";
+      const separator = theme.fg("borderMuted", "│");
+      const gap = ` ${separator} `;
+      const columns = [
+        this.column(state, layout.state),
+        this.column(title, layout.title),
+        ...(layout.backend === undefined
+          ? []
+          : [this.column(theme.fg("muted", snap.backend), layout.backend)]),
+        ...(layout.model === undefined
+          ? []
+          : [
+              this.column(
+                theme.fg("muted", snap.meta.modelLabel ?? "?"),
+                layout.model,
+              ),
+            ]),
+        ...(layout.reasoning === undefined
+          ? []
+          : [
+              this.column(
+                styledReasoning(theme, snap.meta.reasoningEffort),
+                layout.reasoning,
+              ),
+            ]),
+        ...(layout.context === undefined
+          ? []
+          : [this.column(theme.fg("muted", utilization), layout.context)]),
+        ...(layout.elapsed === undefined
+          ? []
+          : [
+              this.column(
+                theme.fg("muted", formatElapsed(snap)),
+                layout.elapsed,
+              ),
+            ]),
       ];
-      const right = `${rightParts.join(dot)} `;
-
-      const rightWidth = visibleWidth(right);
-      const leftMax = Math.max(0, width - rightWidth - 2);
-      const leftTruncated = truncateToWidth(left, leftMax);
-      const gap = Math.max(2, width - visibleWidth(leftTruncated) - rightWidth);
-      out.push(truncateToWidth(leftTruncated + " ".repeat(gap) + right, width));
+      out.push(
+        truncateToWidth(
+          this.column(`${marker} `, layout.marker) + columns.join(gap),
+          width,
+        ),
+      );
     }
 
     if (start > 0) {
@@ -515,12 +653,13 @@ class TakeoverView implements Component, Focusable {
     const utilization = formatContextUtilization(snap.usage);
     const header =
       `${statusGlyph(snap, theme)} ` +
-      theme.fg("accent", theme.bold(`${snap.id} · ${snap.title}`)) +
-      theme.fg("muted", ` · ${snap.status} · ${formatElapsed(snap)}`) +
+      theme.fg("accent", theme.bold(snap.title)) +
+      theme.fg("muted", ` · ${formatElapsed(snap)}`) +
       (this.options?.badge
         ? theme.fg("muted", ` · ${this.options.badge}`)
         : "") +
       theme.fg("dim", ` · ${snap.backend}: ${snap.meta.modelLabel ?? "?"}`) +
+      theme.fg("dim", ` · reasoning: ${reasoningLabel(snap)}`) +
       (utilization ? theme.fg("dim", ` · ${utilization}`) : "");
     lines.push(truncateToWidth(header, width));
     lines.push(border);

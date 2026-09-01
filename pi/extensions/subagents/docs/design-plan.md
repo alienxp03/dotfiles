@@ -54,7 +54,7 @@ the concurrency cap, and that children can't orchestrate/see the parent conversa
   `agent_settled` settles). Failure detection: thrown prompt error, last assistant
   `stopReason === "error" | "aborted"`, error text bounded to 4096 chars.
 - Change notification: `addChangeListener()` + `nextChange(signal)` promise — used by
-  `waitFor`, the footer status, and the dashboard.
+  `waitFor`, the activity widget, and the dashboard.
 - `waitFor(ids, signal, onPending)` keeps a `waitInterest` refcount per id so settles
   during an active wait are marked consumed.
 - `send(sub, text)`: steer via `session.steer()` while streaming, else start a fresh
@@ -79,9 +79,18 @@ the concurrency cap, and that children can't orchestrate/see the parent conversa
 
 ### 1.4 UI (carried over into v2 essentially as-is)
 
-1. **Footer status** (`ctx.ui.setStatus("subagents", ...)`): `subagents: ■ 2 running ·
-   ■ 1 done · ■ 1 failed · /subagents to view` (warning/success/error colored squares;
-   cleared when no subagents). Driven by manager change listener.
+1. **Live activity widget** (`ctx.ui.setWidget("subagents-activity", ...)`): an above-editor
+   frame with the number of running children and at most two rows. Rows show status,
+   id/title, backend, elapsed time, and one sanitized latest action. The two rows are
+   selected by descending `lastActivityAt`, with a deterministic id tie-breaker. More
+   active children render as `+N more · /subagents for details`; the widget is cleared
+   as soon as no children are running. Streaming repaint requests are coalesced to
+   50ms and elapsed-time display ticks at 1Hz. It includes model and `by the way`
+   origins; `/subagents` remains the detailed drill-down. The dashboard stays mounted
+   underneath the takeover overlay, so Escape from takeover restores the dashboard.
+   The dashboard consumes repeated Escape input for Pi's 500 ms double-Escape window
+   to prevent a key cascade into the main editor or session tree. A later Escape closes
+   the dashboard.
 2. **`subagent-result` message renderer**: status icon (`■`/`x`) + bold accent header
    `subagent sa-N · title · finished/failed`; collapsed = first 8 body lines +
    `... (ctrl+o to expand)`; expanded = header + `Markdown` component render of the body.
@@ -321,7 +330,7 @@ interface SubagentEntry {
 interface SubagentSnapshot {      // what the UI and tools read; plain immutable data
   id: string; backend: BackendName; title: string; cwd: string;
   status: SubagentStatus;
-  createdAt: number; settledAt?: number;
+  createdAt: number; lastActivityAt: number; settledAt?: number;
   errorText?: string;
   meta: SubagentMeta;
   usage: { tokens?: number; contextWindow?: number };
@@ -378,7 +387,7 @@ imperative and render synchronously — they cannot `yield*` effects. Bridge:
 interface SubagentReadModel {
   list(): ReadonlyArray<SubagentSnapshot>;         // sync snapshot reads
   get(id: string): SubagentSnapshot | undefined;
-  subscribe(listener: () => void): () => void;     // any-change notification (dashboard, footer)
+  subscribe(listener: () => void): () => void;     // any-change notification (dashboard, activity widget)
   subscribeTo(id: string, l: () => void): () => void; // per-agent (takeover view)
   // sync fire-and-forget commands, executed via the ManagedRuntime under the hood:
   requestSend(id: string, text: string): void;     // TakeoverView input submit
@@ -429,7 +438,7 @@ Layer graph:
   dashboard gain the backend name (e.g. `sa-3 [running] "title" (codex, gpt-5-codex,
   41%/272k, 1m32s, /repo)`).
 - `pi.registerMessageRenderer("subagent-result", ...)`, `pi.registerCommand(
-  "subagents", ...)`, footer status updates, and the result-delivery flush hooks
+  "subagents", ...)`, activity-widget updates, and the result-delivery flush hooks
   (`agent_settled`, idle-check on settle) are wired exactly like v1 — these all live
   outside the runtime and call into it only via `runPromise`/the read model.
 
@@ -447,7 +456,7 @@ views are exercised end to end:
   preview), `UsageChanged` ramping tokens, a final `AssistantMessage`, and `RunSettled`
   with `Completed` — final text echoes the task: `"[stub:claude] completed: <first 200
   chars of prompt>"`. Total runtime ~3–6s (configurable per profile) so `subagent_wait`,
-  the footer counters, and the dashboard's running→done transition are observable.
+  the activity widget, and the dashboard's running→done transition are observable.
 - **send**: emits `UserMessage` + `QueueChanged` (briefly, to exercise the queued-line
   rendering) and runs another scripted turn — so takeover steering works.
 - **interrupt**: stops the script timer and settles with `Interrupted` (→ status
@@ -475,7 +484,7 @@ views are exercised end to end:
 ├── docs/
 │   └── design-plan.md         # this document
 ├── index.ts                   # extension factory: runtime lifecycle, 5 tools, /subagents
-│                              # command, message renderer, footer status, result flush hooks
+│                              # command, message renderer, activity widget, result flush hooks
 └── src/
     ├── domain.ts              # BackendName, SubagentStatus, SpawnTask, SubagentEvent,
     │                          # RunOutcome, TranscriptItem/Part, SubagentSnapshot, tagged errors

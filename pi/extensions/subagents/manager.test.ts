@@ -102,6 +102,68 @@ test("stub subagent completes and delivers a final result", async () => {
   });
 });
 
+test("snapshot includes the requested reasoning effort", async () => {
+  await withManager(async (manager, runtime) => {
+    const snap = await runTool(
+      runtime,
+      manager.spawn("codex", {
+        ...task("Show reasoning in the dashboard"),
+        reasoningEffort: "high",
+      }),
+    );
+    assert.equal(snap.meta.reasoningEffort, "high");
+    await runTool(runtime, manager.cancel([snap.id]));
+  });
+});
+
+test("bookkeeping updates do not refresh activity timestamps", async () => {
+  await withManager(async (manager, runtime) => {
+    const snap = await runTool(
+      runtime,
+      manager.spawn("codex", task("Track meaningful activity")),
+    );
+    const initialActivity = snap.lastActivityAt;
+    const observations: Array<{
+      lastActivityAt: number;
+      tokens?: number;
+    }> = [];
+    const unsubscribe = manager.view.subscribe(() => {
+      const current = manager.view.get(snap.id);
+      if (!current) return;
+      observations.push({
+        lastActivityAt: current.lastActivityAt,
+        tokens: current.usage.tokens,
+      });
+    });
+
+    const deadline = Date.now() + 2_000;
+    while (
+      !observations.some((observation) => observation.tokens !== undefined) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    unsubscribe();
+
+    const usageIndex = observations.findIndex(
+      (observation) => observation.tokens !== undefined,
+    );
+    assert.ok(usageIndex >= 0, "the stub should emit a usage update");
+    assert.equal(
+      observations[usageIndex].lastActivityAt,
+      observations[usageIndex - 1]?.lastActivityAt,
+    );
+    assert.ok(
+      observations.some(
+        (observation) => observation.lastActivityAt > initialActivity,
+      ),
+      "meaningful events should refresh activity",
+    );
+
+    await runTool(runtime, manager.cancel([snap.id]));
+  });
+});
+
 test("FAIL: prompts settle as errors; unconsumed settles are delivered", async () => {
   await withManager(async (manager, runtime) => {
     const settled: Array<{ id: string; consumed: boolean }> = [];

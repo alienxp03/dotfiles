@@ -350,6 +350,7 @@ const makeCodexSession = (
       stderr: "",
       meta: {
         backend: "codex",
+        reasoningEffort: task.reasoningEffort,
         modelLabel: task.model,
       } satisfies SubagentMeta as SubagentMeta,
       interruptTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -909,6 +910,7 @@ const makeCodexSession = (
     }
     state.meta = {
       backend: "codex",
+      reasoningEffort: task.reasoningEffort,
       modelLabel: stringValue(threadResult.model) ?? task.model,
       sessionFilePath: stringValue(thread?.path),
       nativeSessionId,

@@ -48,11 +48,9 @@ import {
   REASONING_EFFORTS,
   type SubagentSnapshot,
 } from "./src/domain.ts";
-import {
-  formatActivityStatus,
-  formatContextUtilization,
-} from "./src/format.ts";
+import { formatContextUtilization } from "./src/format.ts";
 import { SubagentManager, type SubagentManagerShape } from "./src/manager.ts";
+import { resolveSubagentReferences } from "./src/references.ts";
 import {
   buildSubagentResultMessage,
   buildSubagentSpawnResult,
@@ -74,11 +72,13 @@ import {
   runTool,
   type SubagentRuntime,
 } from "./src/runtime.ts";
+import { SubagentActivityWidget } from "./src/ui/activity.ts";
 import { openSubagentPicker, openSubagentTakeover } from "./src/ui/takeover.ts";
 
 const SUBAGENT_OUTPUT_MAX_BYTES = 24 * 1024;
 const WAIT_OUTPUT_MAX_BYTES = 48 * 1024;
 const WAIT_PER_AGENT_MAX_BYTES = 16 * 1024;
+const ACTIVITY_WIDGET_ID = "subagents-activity";
 
 interface BtwResultData {
   readonly id: string;
@@ -98,6 +98,32 @@ function describeSubagent(snap: SubagentSnapshot) {
     snap.cwd,
   ].filter(Boolean);
   return `${snap.id} [${snap.status}] "${snap.title}" (${details.join(", ")})`;
+}
+
+function resolveVisibleSubagentIds(
+  references: ReadonlyArray<string>,
+  visible: ReadonlyArray<SubagentSnapshot>,
+): string[] {
+  const resolution = resolveSubagentReferences(references, visible);
+  if (resolution.unknown.length === 0 && resolution.ambiguous.length === 0) {
+    return [...resolution.ids];
+  }
+
+  const problems = [
+    ...(resolution.unknown.length > 0
+      ? [`unknown: ${resolution.unknown.join(", ")}`]
+      : []),
+    ...resolution.ambiguous.map(
+      ({ reference, ids }) =>
+        `ambiguous name "${reference}" (${ids.join(", ")})`,
+    ),
+  ];
+  const known = visible
+    .map((snap) => `${snap.title} (${snap.id})`)
+    .join(", ");
+  throw new Error(
+    `Unknown or ambiguous subagent reference(s): ${problems.join("; ")}. Known: ${known || "none"}.`,
+  );
 }
 
 function truncatedOutput(
@@ -142,7 +168,8 @@ export default function (pi: ExtensionAPI) {
   let managerPromise: Promise<SubagentManagerShape> | undefined;
   let sessionContext: ExtensionContext | undefined;
   let ui: ExtensionUIContext | undefined;
-  let unsubStatus: (() => void) | undefined;
+  let unsubActivity: (() => void) | undefined;
+  let activityWidgetInstalled = false;
   const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
 
   const getRuntime = () => (runtime ??= createSubagentRuntime());
@@ -153,28 +180,36 @@ export default function (pi: ExtensionAPI) {
       .runPromise(SubagentManager)
       .then((manager) => {
         manager.view.setOnSettled(onSettled);
-        unsubStatus?.();
-        unsubStatus = manager.view.subscribe(() => updateStatus(manager));
-        updateStatus(manager);
+        unsubActivity?.();
+        unsubActivity = manager.view.subscribe(() =>
+          updateActivityWidget(manager),
+        );
+        updateActivityWidget(manager);
         return manager;
       });
     return managerPromise;
   };
 
-  const updateStatus = (manager: SubagentManagerShape) => {
+  const updateActivityWidget = (manager: SubagentManagerShape) => {
     if (!ui) return;
-    const subs = manager.view.list();
-    if (subs.length === 0) {
-      ui.setStatus("subagents", undefined);
+    const hasRunning = manager.view.list().some(
+      (snap) => snap.status === "running",
+    );
+    if (!hasRunning) {
+      if (activityWidgetInstalled) {
+        ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
+        activityWidgetInstalled = false;
+      }
       return;
     }
-    const running = subs.filter((snap) => snap.status === "running").length;
-    const failed = subs.filter((snap) => snap.status === "error").length;
-    const done = subs.length - running - failed;
-    ui.setStatus(
-      "subagents",
-      formatActivityStatus(ui.theme, { running, done, failed }),
+    if (activityWidgetInstalled) return;
+
+    const view = manager.view;
+    ui.setWidget(
+      ACTIVITY_WIDGET_ID,
+      (tui, theme) => new SubagentActivityWidget(tui, theme, view),
     );
+    activityWidgetInstalled = true;
   };
 
   const deliverResult = (snap: SubagentSnapshot) => {
@@ -250,9 +285,10 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     sessionContext = undefined;
     resultDelivery.clear();
-    unsubStatus?.();
-    unsubStatus = undefined;
-    ui?.setStatus("subagents", undefined);
+    unsubActivity?.();
+    unsubActivity = undefined;
+    ui?.setWidget(ACTIVITY_WIDGET_ID, undefined);
+    activityWidgetInstalled = false;
     ui = undefined;
     const closing = runtime;
     runtime = undefined;
@@ -367,29 +403,22 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, onUpdate) {
       const manager = await getManager();
-      const ids = [...new Set(params.ids)];
-      if (ids.length === 0)
-        throw new Error("Provide at least one subagent id.");
-      const known = manager.view
-        .list()
-        .filter(isModelVisible)
-        .map((snap) => snap.id);
-      const unknown = ids.filter((id) => {
-        const snap = manager.view.get(id);
-        return !snap || !isModelVisible(snap);
-      });
-      if (unknown.length > 0) {
-        throw new Error(
-          `Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`,
-        );
-      }
+      const references = [...new Set(params.ids)];
+      if (references.length === 0)
+        throw new Error("Provide at least one subagent id or name.");
+      const visible = manager.view.list().filter(isModelVisible);
+      const ids = resolveVisibleSubagentIds(references, visible);
+      const titleById = new Map(visible.map((snap) => [snap.id, snap.title]));
 
       await runTool(
         getRuntime(),
         manager.waitFor(ids, (pending) => {
           onUpdate?.({
             content: [
-              { type: "text", text: `Waiting for ${pending.join(", ")}...` },
+              {
+                type: "text",
+                text: `Waiting for ${pending.map((id) => titleById.get(id) ?? id).join(", ")}...`,
+              },
             ],
             details: { pending },
           });
@@ -460,23 +489,11 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal) {
       const manager = await getManager();
-      const ids = [...new Set(params.ids)];
-      if (ids.length === 0)
-        throw new Error("Provide at least one subagent id.");
-
-      const known = manager.view
-        .list()
-        .filter(isModelVisible)
-        .map((snap) => snap.id);
-      const unknown = ids.filter((id) => {
-        const snap = manager.view.get(id);
-        return !snap || !isModelVisible(snap);
-      });
-      if (unknown.length > 0) {
-        throw new Error(
-          `Unknown subagent id(s): ${unknown.join(", ")}. Known: ${known.join(", ") || "none"}.`,
-        );
-      }
+      const references = [...new Set(params.ids)];
+      if (references.length === 0)
+        throw new Error("Provide at least one subagent id or name.");
+      const visible = manager.view.list().filter(isModelVisible);
+      const ids = resolveVisibleSubagentIds(references, visible);
 
       const report = await runTool(getRuntime(), manager.cancel(ids), {
         signal,
@@ -513,16 +530,10 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       const manager = await getManager();
-      const snap = manager.view.get(params.id);
-      if (!snap || !isModelVisible(snap)) {
-        const known = manager.view
-          .list()
-          .filter(isModelVisible)
-          .map((s) => s.id);
-        throw new Error(
-          `Unknown subagent id "${params.id}". Known: ${known.join(", ") || "none"}.`,
-        );
-      }
+      const visible = manager.view.list().filter(isModelVisible);
+      const [id] = resolveVisibleSubagentIds([params.id], visible);
+      const snap = id ? manager.view.get(id) : undefined;
+      if (!snap) throw new Error(`Subagent "${params.id}" is no longer tracked.`);
 
       let text = `${describeSubagent(snap)}\nTurns: ${snap.turns}`;
       if (snap.errorText) text += `\nError: ${snap.errorText}`;

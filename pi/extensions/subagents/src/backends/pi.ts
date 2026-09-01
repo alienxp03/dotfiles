@@ -28,6 +28,7 @@ import type { Cause, Scope } from "effect";
 import { Effect, Queue, Stream } from "effect";
 import type { SubagentBackend, SubagentSession } from "../backend.ts";
 import type {
+  ReasoningEffort,
   SpawnTask,
   SubagentEvent,
   SubagentMeta,
@@ -347,6 +348,7 @@ const makePiSession = (
       const m = activeModel();
       return {
         backend: "pi",
+        reasoningEffort: thinkingLevel as ReasoningEffort | undefined,
         modelLabel: m ? `${m.provider}/${m.id}` : undefined,
         contextWindow: m?.contextWindow,
         sessionFilePath: session.sessionFile,

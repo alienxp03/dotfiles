@@ -38,6 +38,7 @@ import type {
 import {
   BackendUnavailableError,
   ConcurrencyLimitError,
+  isMeaningfulActivityEvent,
   SendError,
   SpawnError,
 } from "./domain.ts";
@@ -81,6 +82,7 @@ interface MutableSnapshot {
   cwd: string;
   status: SubagentStatus;
   createdAt: number;
+  lastActivityAt: number;
   settledAt?: number;
   errorText?: string;
   meta: SubagentMeta;
@@ -111,7 +113,7 @@ export interface SubagentReadModel {
   list(): ReadonlyArray<SubagentSnapshot>;
   get(id: string): SubagentSnapshot | undefined;
   size(): number;
-  /** Any-change notification (footer status, dashboard). */
+  /** Any-change notification (activity widget, dashboard). */
   subscribe(listener: () => void): () => void;
   /** Per-subagent notification (takeover view). */
   subscribeTo(id: string, listener: () => void): () => void;
@@ -267,11 +269,17 @@ const makeManager = Effect.gen(function* () {
     }
   };
 
+  const markActivity = (snapshot: MutableSnapshot) => {
+    snapshot.lastActivityAt = Date.now();
+  };
+
   const settle = (entry: Entry, outcome: RunOutcome) => {
     const s = entry.snapshot;
     entry.restarting = false;
     if (s.status !== "running") return;
-    s.settledAt = Date.now();
+    const settledAt = Date.now();
+    s.settledAt = settledAt;
+    s.lastActivityAt = settledAt;
     switch (outcome._tag) {
       case "Completed":
         s.status = "done";
@@ -313,6 +321,9 @@ const makeManager = Effect.gen(function* () {
 
   const foldEvent = (entry: Entry, event: SubagentEvent) => {
     const s = entry.snapshot;
+    if (isMeaningfulActivityEvent(event) && event._tag !== "RunSettled") {
+      markActivity(s);
+    }
     switch (event._tag) {
       case "RunStarted":
         entry.restarting = false;
@@ -469,6 +480,7 @@ const makeManager = Effect.gen(function* () {
         const id =
           origin === "btw" ? `btw-${++btwCounter}` : `sa-${++modelCounter}`;
         const meta = yield* session.meta;
+        const createdAt = Date.now();
         const entry: Entry = {
           snapshot: {
             id,
@@ -478,7 +490,8 @@ const makeManager = Effect.gen(function* () {
             prompt: task.prompt,
             cwd: task.cwd,
             status: "running",
-            createdAt: Date.now(),
+            createdAt,
+            lastActivityAt: createdAt,
             meta,
             usage: { contextWindow: meta.contextWindow },
             transcript: [],

@@ -4,7 +4,7 @@
  *
  * - streams a plausible turn (thinking deltas, one fake tool cycle, text
  *   deltas, usage ramp, a final assistant message, RunSettled) over a few
- *   seconds so streaming UI, wait, and the footer counters are observable;
+ *   seconds so streaming UI, wait, and activity updates are observable;
  * - supports send() while running (queued-steer rendering) and while idle
  *   (fresh run);
  * - supports interrupt (RunSettled Interrupted -> status "error", matching v1);
@@ -81,6 +81,7 @@ const makeStubSession = (
     const state = {
       meta: {
         backend: profile.backend,
+        reasoningEffort: task.reasoningEffort,
         modelLabel: task.model ?? profile.defaultModelLabel,
         contextWindow: profile.contextWindow,
         sessionFilePath: sessionFile,
