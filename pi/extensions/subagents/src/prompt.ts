@@ -13,6 +13,7 @@ export const SUBAGENT_SPAWN_PROMPT_GUIDELINES = [
   "Use subagent_spawn to delegate self-contained tasks that can run in the background; give it a complete, standalone prompt.",
   "Pick the subagent harness deliberately: pi unless you have a reason to prefer Claude Code or Codex (e.g. the user asked for one, or the task suits that harness).",
   "After subagent_spawn, keep working; results arrive automatically. Only call subagent_wait when you cannot proceed without the result.",
+  "If subagent_check reports a settled result that is still queued and you plan to use it in your response, call subagent_wait before responding. This consumes the queued delivery so it cannot appear after your summary.",
 ];
 
 /** Model-facing schema descriptions for subagent_spawn task and execution options. */
@@ -65,7 +66,12 @@ export const SUBAGENT_CANCEL_PARAMETER_DESCRIPTIONS = {
 
 /** Describes nonblocking inspection of a subagent without consuming its result. */
 export const SUBAGENT_CHECK_TOOL_DESCRIPTION =
-  "Peek at a subagent's status and recent activity without blocking. Accepts a runtime id or exact human-readable name. Does not consume its result.";
+  "Peek at a subagent's status and recent activity without blocking. Accepts a runtime id or exact human-readable name. Does not consume its result. If a settled result is queued and you plan to use it in your response, call subagent_wait before responding so the completion cannot appear afterward.";
+
+/** Tells the model how to avoid summarizing ahead of queued result delivery. */
+export function buildSubagentCheckSettledGuidance(id: string) {
+  return `This settled result is still queued for automatic delivery. Before responding with or summarizing it, call subagent_wait(ids: ["${id}"]) to consume that delivery; otherwise its completion message may appear after your response.`;
+}
 
 /** Model-facing schema description for the subagent id or name to inspect. */
 export const SUBAGENT_CHECK_PARAMETER_DESCRIPTIONS = {

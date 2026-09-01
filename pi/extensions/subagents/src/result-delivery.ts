@@ -8,6 +8,9 @@ export function createDeferredResultDelivery<T extends { id: string }>() {
     consume(ids: Iterable<string>) {
       for (const id of ids) pending.delete(id);
     },
+    has(id: string) {
+      return pending.has(id);
+    },
     drain() {
       const results = [...pending.values()];
       pending.clear();

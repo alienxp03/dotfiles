@@ -52,6 +52,7 @@ import { formatContextUtilization } from "./src/format.ts";
 import { SubagentManager, type SubagentManagerShape } from "./src/manager.ts";
 import { resolveSubagentReferences } from "./src/references.ts";
 import {
+  buildSubagentCheckSettledGuidance,
   buildSubagentResultMessage,
   buildSubagentSpawnResult,
   SUBAGENT_CANCEL_PARAMETER_DESCRIPTIONS,
@@ -545,6 +546,10 @@ export default function (pi: ExtensionAPI) {
         if (preview.truncated) text += "\n[...]";
       } else if (snap.status === "running") {
         text += "\n\n(no text output yet)";
+      }
+
+      if (snap.status !== "running" && resultDelivery.has(snap.id)) {
+        text += `\n\n${buildSubagentCheckSettledGuidance(snap.id)}`;
       }
 
       return {
