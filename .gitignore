@@ -15,6 +15,10 @@ tmp/
 /.claude
 .kesh*
 config/kesh/config.yaml
-/home/.pi/agent/models.json
+/pi/models.json
+
+# Local JavaScript dependencies
+node_modules/
+
 !config/just/
 !config/just/justfile
