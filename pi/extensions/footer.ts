@@ -91,21 +91,13 @@ function findGitLocation(cwd: string): GitLocation | undefined {
 }
 
 export default function (pi: ExtensionAPI) {
-	let agentStartMs: number | undefined;
-	let lastTps: number | undefined;
-	let requestRender: (() => void) | undefined;
-
 	pi.on("session_start", async (_event, ctx) => {
-		agentStartMs = undefined;
-		lastTps = undefined;
-		requestRender = undefined;
 		const startedAt = Date.now();
 		const gitLocation = findGitLocation(ctx.sessionManager.getCwd());
 		const isWorktree = gitLocation?.isWorktree ?? false;
 		const repositoryRoot = gitLocation?.repositoryRoot;
 
 		ctx.ui.setFooter((tui, theme, footerData) => {
-			requestRender = () => tui.requestRender();
 			const timer = setInterval(() => tui.requestRender(), 1000);
 			timer.unref?.();
 			const unsubscribeBranchChange = footerData.onBranchChange(() => tui.requestRender());
@@ -114,7 +106,6 @@ export default function (pi: ExtensionAPI) {
 				dispose() {
 					clearInterval(timer);
 					unsubscribeBranchChange();
-					requestRender = undefined;
 				},
 				invalidate() {},
 				render(width: number): string[] {
@@ -164,7 +155,6 @@ export default function (pi: ExtensionAPI) {
 						`${theme.fg("accent", model)} ${theme.fg(reasoningColors[reasoning], `(${reasoning})`)}`,
 						contextUsage,
 						theme.fg("muted", formatElapsed(Date.now() - startedAt)),
-						lastTps === undefined ? "" : theme.fg("muted", `TPS ${lastTps.toFixed(1)}`),
 						extensionStatus,
 					]
 						.filter(Boolean)
@@ -178,31 +168,4 @@ export default function (pi: ExtensionAPI) {
 		});
 	});
 
-	pi.on("agent_start", () => {
-		agentStartMs = Date.now();
-	});
-
-	pi.on("agent_end", (event) => {
-		if (agentStartMs === undefined) return;
-
-		const elapsedMs = Date.now() - agentStartMs;
-		agentStartMs = undefined;
-		if (elapsedMs <= 0) return;
-
-		const output = event.messages.reduce(
-			(total, message) =>
-				message.role === "assistant" ? total + (message.usage.output ?? 0) : total,
-			0,
-		);
-		if (output <= 0) return;
-
-		lastTps = output / (elapsedMs / 1000);
-		requestRender?.();
-	});
-
-	pi.on("session_shutdown", () => {
-		agentStartMs = undefined;
-		lastTps = undefined;
-		requestRender = undefined;
-	});
 }
