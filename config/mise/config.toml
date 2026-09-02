@@ -184,7 +184,7 @@ run = [
   "mise reshim",
 ]
 
-[tasks.update-daily]
+[tasks.update]
 description = "Update AI tools"
 run = [
   "mise self-update -y",
