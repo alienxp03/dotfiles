@@ -82,8 +82,8 @@ the concurrency cap, and that children can't orchestrate/see the parent conversa
 1. **Live activity widget** (`ctx.ui.setWidget("subagents-activity", ...)`): an above-editor
    frame with the number of running children and at most two rows. Rows show status,
    id/title, backend, elapsed time, and one sanitized latest action. The two rows are
-   selected by descending `lastActivityAt`, with a deterministic id tie-breaker. More
-   active children render as `+N more · /subagents for details`; the widget is cleared
+   selected in ascending `createdAt` order, with a deterministic id tie-breaker. Additional
+   children render as `+N more · /subagents for details`; the widget is cleared
    as soon as no children are running. Streaming repaint requests are coalesced to
    50ms and elapsed-time display ticks at 1Hz. It includes model and `by the way`
    origins; `/subagents` remains the detailed drill-down. The dashboard stays mounted

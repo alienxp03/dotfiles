@@ -38,23 +38,23 @@ function snapshot(
   };
 }
 
-test("selectActiveSubagents keeps the two most recently active agents", () => {
+test("selectActiveSubagents keeps the first two running agents in creation order", () => {
   const selected = selectActiveSubagents([
-    snapshot({ id: "sa-old", lastActivityAt: 10 }),
-    snapshot({ id: "btw-recent", origin: "btw", lastActivityAt: 30 }),
-    snapshot({ id: "sa-new", lastActivityAt: 40 }),
-    snapshot({ id: "sa-done", status: "done", lastActivityAt: 50 }),
+    snapshot({ id: "sa-old", createdAt: 10, lastActivityAt: 40 }),
+    snapshot({ id: "btw-recent", origin: "btw", createdAt: 20, lastActivityAt: 10 }),
+    snapshot({ id: "sa-new", createdAt: 30, lastActivityAt: 50 }),
+    snapshot({ id: "sa-done", status: "done", createdAt: 40, lastActivityAt: 60 }),
   ]);
 
   assert.deepEqual(
     selected.visible.map((snap) => snap.id),
-    ["sa-new", "btw-recent"],
+    ["sa-old", "btw-recent"],
   );
   assert.equal(selected.active.length, 3);
   assert.equal(selected.hiddenCount, 1);
 });
 
-test("selectActiveSubagents uses stable id order for equal activity times", () => {
+test("selectActiveSubagents uses stable id order for equal creation times", () => {
   const selected = selectActiveSubagents([
     snapshot({ id: "sa-z", lastActivityAt: 20 }),
     snapshot({ id: "sa-a", lastActivityAt: 20 }),
@@ -145,12 +145,12 @@ test("only meaningful events change the activity ranking", () => {
   assert.equal(isMeaningfulActivityEvent({ _tag: "ToolStart", toolId: "t", name: "read" }), true);
 });
 
-test("the widget shows two recent active agents and bounded overflow", async () => {
+test("the widget shows the first two active agents and bounded overflow", async () => {
   const snapshots = [
-    snapshot({ id: "sa-old", title: "old", lastActivityAt: 10 }),
-    snapshot({ id: "btw-recent", origin: "btw", title: "aside", lastActivityAt: 30 }),
-    snapshot({ id: "sa-new", title: "new", lastActivityAt: 40 }),
-    snapshot({ id: "sa-done", status: "done", title: "done", lastActivityAt: 50 }),
+    snapshot({ id: "sa-old", title: "old", createdAt: 10, lastActivityAt: 40 }),
+    snapshot({ id: "btw-recent", origin: "btw", title: "aside", createdAt: 20, lastActivityAt: 10 }),
+    snapshot({ id: "sa-new", title: "new", createdAt: 30, lastActivityAt: 50 }),
+    snapshot({ id: "sa-done", status: "done", title: "done", createdAt: 40, lastActivityAt: 60 }),
   ];
   let listener: (() => void) | undefined;
   let renders = 0;
@@ -176,7 +176,7 @@ test("the widget shows two recent active agents and bounded overflow", async () 
   const lines = widget.render(100);
   assert.equal(lines.length, 4);
   assert.match(lines[0], /Subagents · 3 running/);
-  assert.match(lines[1], /■\s+│\s+new\s+│\s+codex/);
+  assert.match(lines[1], /■\s+│\s+old\s+│\s+codex/);
   assert.match(lines[2], /■\s+│\s+aside\s+│\s+codex/);
   assert.doesNotMatch(lines[1], /sa-new|btw-recent|running/);
   assert.doesNotMatch(lines[2], /sa-new|btw-recent|running/);

@@ -14,11 +14,7 @@ export interface ActiveSubagentSelection {
   readonly hiddenCount: number;
 }
 
-function activityTime(snap: SubagentSnapshot) {
-  return snap.lastActivityAt ?? snap.createdAt;
-}
-
-/** Select the most recently active running agents with deterministic ties. */
+/** Select running agents in creation order with deterministic ties. */
 export function selectActiveSubagents(
   snapshots: ReadonlyArray<SubagentSnapshot>,
   limit = MAX_VISIBLE_ACTIVE_AGENTS,
@@ -26,9 +22,7 @@ export function selectActiveSubagents(
   const active = snapshots
     .filter((snap) => snap.status === "running")
     .sort((a, b) => {
-      const activity = activityTime(b) - activityTime(a);
-      if (activity !== 0) return activity;
-      const created = b.createdAt - a.createdAt;
+      const created = a.createdAt - b.createdAt;
       if (created !== 0) return created;
       return a.id.localeCompare(b.id);
     });
