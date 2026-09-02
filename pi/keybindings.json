@@ -3,5 +3,9 @@
   "app.message.followUp": ["ctrl+enter"],
   "app.thinking.cycle": ["ctrl+shift+p"],
   "app.model.cycleBackward": [],
-  "app.session.rename": []
+  "app.session.rename": [],
+  "app.session.toggleNamedFilter": "ctrl+shift+n",
+  "tui.editor.cursorLineEnd": ["end", "ctrl+end", "alt+e"],
+  "app.editor.external": [],
+  "tui.altScreen.searchNext": "enter"
 }
