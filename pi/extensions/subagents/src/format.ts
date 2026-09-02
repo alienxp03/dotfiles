@@ -35,6 +35,20 @@ export function formatCompactTokens(count: number) {
   return `${(count / 1000000).toFixed(1)}M`;
 }
 
+export function formatDuration(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h${minutes.toString().padStart(2, "0")}m${seconds
+      .toString()
+      .padStart(2, "0")}s`;
+  }
+  if (minutes > 0) return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
+  return `${seconds}s`;
+}
+
 /**
  * Render `%/capacity`. If occupancy is unknown, retain the useful capacity
  * as `?%/capacity`; with no valid capacity, omit the statistic entirely.

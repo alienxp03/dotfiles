@@ -1,7 +1,12 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatElapsed, type SubagentSnapshot, type TranscriptPart } from "../domain.ts";
+import {
+  formatElapsed,
+  type SubagentSnapshot,
+  type TranscriptPart,
+} from "../domain.ts";
+import { formatCompactTokens, formatDuration } from "../format.ts";
 import type { SubagentReadModel } from "../manager.ts";
 import { sanitizeText } from "./transcript.ts";
 
@@ -240,7 +245,11 @@ export class SubagentActivityWidget implements Component {
     this.theme = theme;
     this.view = view;
     this.unsubscribe = view.subscribe(() => this.scheduleRender());
-    this.ticker = setInterval(() => this.tui.requestRender(), 1000);
+    this.ticker = setInterval(() => {
+      if (this.view.list().some((snap) => snap.status === "running")) {
+        this.tui.requestRender();
+      }
+    }, 1000);
   }
 
   private scheduleRender() {
@@ -266,16 +275,33 @@ export class SubagentActivityWidget implements Component {
 
   render(width: number): string[] {
     const selection = selectActiveSubagents(this.view.list());
-    if (selection.active.length === 0) return [];
-
+    const stats = this.view.stats();
     const dot = this.theme.fg("dim", " · ");
+    const context =
+      stats.contextTokens === undefined
+        ? ""
+        : dot +
+          this.theme.fg(
+            "muted",
+            `${formatCompactTokens(stats.contextTokens)} ctx tokens`,
+          );
     const header = borderBoxLine(
       this.theme,
       "╭",
       "╮",
       this.theme.fg("accent", "Subagents") +
         dot +
-        this.theme.fg("warning", `${selection.active.length} running`),
+        this.theme.fg("warning", `${selection.active.length} running`) +
+        dot +
+        this.theme.fg("muted", `${stats.totalAgents} total`) +
+        dot +
+        this.theme.fg("muted", `${formatDuration(stats.wallTimeMs)} wall`) +
+        dot +
+        this.theme.fg(
+          "muted",
+          `${formatDuration(stats.agentTimeMs)} total`,
+        ) +
+        context,
       width,
     );
     const rows = selection.visible.map((snap) =>
@@ -287,11 +313,8 @@ export class SubagentActivityWidget implements Component {
     );
     const more =
       selection.hiddenCount > 0
-        ? this.theme.fg("dim", `+${selection.hiddenCount} more · `) +
-          this.theme.fg("accent", "/subagents") +
-          this.theme.fg("dim", " for details")
-        : this.theme.fg("accent", "/subagents") +
-          this.theme.fg("dim", " for details");
+        ? this.theme.fg("dim", `+${selection.hiddenCount} more`)
+        : "";
     return [
       header,
       ...rows,

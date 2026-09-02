@@ -101,6 +101,8 @@ interface Entry {
   scope: Scope.Closeable;
   pump?: Fiber.Fiber<void>;
   liveToolMap: Map<string, LiveToolState>;
+  /** Start time of the currently active run, if any. */
+  runStartedAt?: number;
   /** Idle restart dispatched but RunStarted not folded yet; counts as running
    * so concurrent restarts cannot race past the cap. */
   restarting?: boolean;
@@ -108,11 +110,23 @@ interface Entry {
 
 // --- Read model ----------------------------------------------------------------
 
+export interface SubagentStats {
+  /** Number of subagent entries created in this parent session. */
+  readonly totalAgents: number;
+  /** Sum of active run durations. Parallel runs count separately. */
+  readonly agentTimeMs: number;
+  /** Time from the first spawn until the latest run finishes. */
+  readonly wallTimeMs: number;
+  /** Sum of the latest known context occupancy for each subagent. */
+  readonly contextTokens?: number;
+}
+
 /** Synchronous bridge for the TUI. Snapshots are live objects; do not mutate. */
 export interface SubagentReadModel {
   list(): ReadonlyArray<SubagentSnapshot>;
   get(id: string): SubagentSnapshot | undefined;
   size(): number;
+  stats(): SubagentStats;
   /** Any-change notification (activity widget, dashboard). */
   subscribe(listener: () => void): () => void;
   /** Per-subagent notification (takeover view). */
@@ -192,6 +206,12 @@ const makeManager = Effect.gen(function* () {
   const cleanups = new Set<Fiber.Fiber<unknown>>();
   let modelCounter = 0;
   let btwCounter = 0;
+  let totalAgents = 0;
+  let totalAgentTimeMs = 0;
+  let firstSpawnedAt: number | undefined;
+  let lastRunEndedAt: number | undefined;
+  let contextTokensTotal = 0;
+  let knownContextTokenEntries = 0;
   let reserved = 0;
   let disposed = false;
   let onSettled:
@@ -278,6 +298,10 @@ const makeManager = Effect.gen(function* () {
     entry.restarting = false;
     if (s.status !== "running") return;
     const settledAt = Date.now();
+    const runStartedAt = entry.runStartedAt ?? s.createdAt;
+    totalAgentTimeMs += Math.max(0, settledAt - runStartedAt);
+    entry.runStartedAt = undefined;
+    lastRunEndedAt = settledAt;
     s.settledAt = settledAt;
     s.lastActivityAt = settledAt;
     switch (outcome._tag) {
@@ -327,6 +351,7 @@ const makeManager = Effect.gen(function* () {
     switch (event._tag) {
       case "RunStarted":
         entry.restarting = false;
+        entry.runStartedAt ??= Date.now();
         s.status = "running";
         s.settledAt = undefined;
         s.errorText = undefined;
@@ -414,12 +439,21 @@ const makeManager = Effect.gen(function* () {
       case "QueueChanged":
         s.queued = event.queued;
         break;
-      case "UsageChanged":
+      case "UsageChanged": {
+        if (event.tokens !== undefined) {
+          if (s.usage.tokens === undefined) {
+            knownContextTokenEntries++;
+            contextTokensTotal += event.tokens;
+          } else {
+            contextTokensTotal += event.tokens - s.usage.tokens;
+          }
+        }
         s.usage = {
           tokens: event.tokens ?? s.usage.tokens,
           contextWindow: event.contextWindow ?? s.usage.contextWindow,
         };
         break;
+      }
       case "MetaChanged":
         s.meta = { ...s.meta, ...event.meta };
         break;
@@ -505,6 +539,8 @@ const makeManager = Effect.gen(function* () {
           liveToolMap: new Map(),
         };
         entries.set(id, entry);
+        totalAgents++;
+        firstSpawnedAt ??= createdAt;
 
         // Pump: fold the event stream into the snapshot. Tied to the entry
         // scope, so closing the scope stops it. If the stream ends while the
@@ -695,6 +731,33 @@ const makeManager = Effect.gen(function* () {
     list: () => [...entries.values()].map((entry) => entry.snapshot),
     get: (id) => entries.get(id)?.snapshot,
     size: () => entries.size,
+    stats: () => {
+      const now = Date.now();
+      const activeAgentTimeMs = [...entries.values()].reduce(
+        (total, entry) => {
+          if (entry.snapshot.status !== "running") return total;
+          return (
+            total +
+            Math.max(
+              0,
+              now - (entry.runStartedAt ?? entry.snapshot.createdAt),
+            )
+          );
+        },
+        0,
+      );
+      const wallEnd = runningCount() > 0 ? now : lastRunEndedAt;
+      return {
+        totalAgents,
+        agentTimeMs: totalAgentTimeMs + activeAgentTimeMs,
+        wallTimeMs:
+          firstSpawnedAt === undefined
+            ? 0
+            : Math.max(0, (wallEnd ?? firstSpawnedAt) - firstSpawnedAt),
+        contextTokens:
+          knownContextTokenEntries > 0 ? contextTokensTotal : undefined,
+      };
+    },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

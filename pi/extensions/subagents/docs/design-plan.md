@@ -83,10 +83,13 @@ the concurrency cap, and that children can't orchestrate/see the parent conversa
    frame with the number of running children and at most two rows. Rows show status,
    id/title, backend, elapsed time, and one sanitized latest action. The two rows are
    selected in ascending `createdAt` order, with a deterministic id tie-breaker. Additional
-   children render as `+N more · /subagents for details`; the widget is cleared
-   as soon as no children are running. Streaming repaint requests are coalesced to
-   50ms and elapsed-time display ticks at 1Hz. It includes model and `by the way`
-   origins; `/subagents` remains the detailed drill-down. The dashboard stays mounted
+   children render as `+N more`. The header also shows the
+   running count, total agents, wall time, total time, and summed latest context
+   tokens. The widget remains as a summary after all children settle and
+   disappears on the next submitted interactive message; it reappears for new runs.
+   It is also cleared when the session ends. Streaming repaint requests are coalesced to 50ms
+   and elapsed-time display ticks at 1Hz. It includes model and `by the way` origins;
+   `/subagents` remains the detailed drill-down. The dashboard stays mounted
    underneath the takeover overlay, so Escape from takeover restores the dashboard.
    The dashboard consumes repeated Escape input for Pi's 500 ms double-Escape window
    to prevent a key cascade into the main editor or session tree. A later Escape closes
@@ -97,7 +100,8 @@ the concurrency cap, and that children can't orchestrate/see the parent conversa
 3. **`/subagents` command** → `openSubagentPicker` loop (TUI mode only; notifies and
    bails in non-TUI or when there are no subagents):
    - **SubagentDashboard** — fullscreen overlay (`anchor: "center", width: "100%",
-     maxHeight: "100%"`), bordered list panel titled `agents · settled/total`. Each row:
+     maxHeight: "100%"`), bordered list panel titled `agents · settled/total`. The
+     header shows aggregate wall time, total time, and context tokens. Each row:
      selection marker `❯`, status glyph, title, dim id on the left; model id · context
      utilization (`%/capacity`) · elapsed · status word on the right. Scroll window
      centered on the selection with `... N more` markers. 1Hz ticker re-render for
@@ -384,9 +388,17 @@ The TUI components (`Component` classes with `render(width)`/`handleInput(data)`
 imperative and render synchronously — they cannot `yield*` effects. Bridge:
 
 ```ts
+interface SubagentStats {
+  totalAgents: number;
+  agentTimeMs: number;       // sum of active run durations
+  wallTimeMs: number;        // first spawn to latest run finish
+  contextTokens?: number;    // sum of latest known context occupancy
+}
+
 interface SubagentReadModel {
   list(): ReadonlyArray<SubagentSnapshot>;         // sync snapshot reads
   get(id: string): SubagentSnapshot | undefined;
+  stats(): SubagentStats;                         // session aggregate metrics
   subscribe(listener: () => void): () => void;     // any-change notification (dashboard, activity widget)
   subscribeTo(id: string, l: () => void): () => void; // per-agent (takeover view)
   // sync fire-and-forget commands, executed via the ManagedRuntime under the hood:

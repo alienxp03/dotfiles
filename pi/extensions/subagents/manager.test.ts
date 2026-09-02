@@ -99,6 +99,12 @@ test("stub subagent completes and delivers a final result", async () => {
     assert.ok(done.transcript.some((item) => item.kind === "toolResult"));
     // The waitFor marked the settle as consumed.
     assert.deepEqual(settled, [{ id: snap.id, consumed: true }]);
+
+    const stats = manager.view.stats();
+    assert.equal(stats.totalAgents, 1);
+    assert.ok(stats.agentTimeMs > 0);
+    assert.ok(stats.wallTimeMs > 0);
+    assert.ok((stats.contextTokens ?? 0) > 0);
   });
 });
 

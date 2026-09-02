@@ -18,7 +18,11 @@ import {
   type ReasoningEffort,
   type SubagentSnapshot,
 } from "../domain.ts";
-import { formatContextUtilization } from "../format.ts";
+import {
+  formatCompactTokens,
+  formatContextUtilization,
+  formatDuration,
+} from "../format.ts";
 import type { SubagentReadModel } from "../manager.ts";
 import { buildTranscriptLines } from "./transcript.ts";
 
@@ -353,11 +357,16 @@ class SubagentDashboard implements Component {
 
     const lines: string[] = [];
 
-    // Header: title left, count right
+    // Header: title left, aggregate totals right
+    const stats = this.view.stats();
+    const context =
+      stats.contextTokens === undefined
+        ? ""
+        : ` · ${formatCompactTokens(stats.contextTokens)} ctx`;
     const headerLeft = theme.fg("accent", theme.bold("Subagents"));
     const headerRight = theme.fg(
       "muted",
-      `${subs.length} agent${subs.length === 1 ? "" : "s"}`,
+      `${stats.totalAgents} agent${stats.totalAgents === 1 ? "" : "s"} · ${formatDuration(stats.wallTimeMs)} wall · ${formatDuration(stats.agentTimeMs)} total${context}`,
     );
     const headerPad = Math.max(
       1,

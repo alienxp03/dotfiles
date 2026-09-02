@@ -169,8 +169,10 @@ export default function (pi: ExtensionAPI) {
   let managerPromise: Promise<SubagentManagerShape> | undefined;
   let sessionContext: ExtensionContext | undefined;
   let ui: ExtensionUIContext | undefined;
+  let activityManager: SubagentManagerShape | undefined;
   let unsubActivity: (() => void) | undefined;
   let activityWidgetInstalled = false;
+  let activitySummaryDismissed = false;
   const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
 
   const getRuntime = () => (runtime ??= createSubagentRuntime());
@@ -180,6 +182,8 @@ export default function (pi: ExtensionAPI) {
     managerPromise ??= getRuntime()
       .runPromise(SubagentManager)
       .then((manager) => {
+        activityManager = manager;
+        activitySummaryDismissed = false;
         manager.view.setOnSettled(onSettled);
         unsubActivity?.();
         unsubActivity = manager.view.subscribe(() =>
@@ -196,7 +200,10 @@ export default function (pi: ExtensionAPI) {
     const hasRunning = manager.view.list().some(
       (snap) => snap.status === "running",
     );
-    if (!hasRunning) {
+    if (hasRunning) activitySummaryDismissed = false;
+    const shouldShow =
+      hasRunning || (manager.view.size() > 0 && !activitySummaryDismissed);
+    if (!shouldShow) {
       if (activityWidgetInstalled) {
         ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
         activityWidgetInstalled = false;
@@ -281,6 +288,12 @@ export default function (pi: ExtensionAPI) {
     if (ctx.hasUI) ui = ctx.ui;
   });
 
+  pi.on("input", (event) => {
+    if (event.source !== "interactive") return;
+    activitySummaryDismissed = true;
+    if (activityManager) updateActivityWidget(activityManager);
+  });
+
   pi.on("agent_settled", flushResults);
 
   pi.on("session_shutdown", async () => {
@@ -290,6 +303,8 @@ export default function (pi: ExtensionAPI) {
     unsubActivity = undefined;
     ui?.setWidget(ACTIVITY_WIDGET_ID, undefined);
     activityWidgetInstalled = false;
+    activitySummaryDismissed = false;
+    activityManager = undefined;
     ui = undefined;
     const closing = runtime;
     runtime = undefined;
