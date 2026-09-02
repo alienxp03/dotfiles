@@ -27,11 +27,11 @@ pnpm           = "11.24.0"
 "npm:@mermaid-js/mermaid-cli" = "11.16.0"
 
 # AI agents
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.252", npm_args = "--ignore-scripts=false" }
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.258", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.84.4"
-"npm:@openai/codex"                   = "0.152.0"
+"npm:@openai/codex"                   = "0.152.1"
 "npm:happy"                           = { version = "1.2.0", npm_args = "--ignore-scripts=false" }
-"npm:opencode-ai"                     = { version = "1.18.25", npm_args = "--ignore-scripts=false" }
+"npm:opencode-ai"                     = { version = "1.18.26", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
 
 # Python tooling
