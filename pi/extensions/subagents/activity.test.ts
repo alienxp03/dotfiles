@@ -121,8 +121,14 @@ test("latestActivity bounds long previews and formatActivityRow includes metadat
 
   assert.equal(activity.length, 240);
   assert.match(
-    formatActivityRow(snapshot({ title: "review", createdAt: Date.now() })),
-    /^review · codex · \d+s · starting$/,
+    formatActivityRow(
+      snapshot({
+        title: "review",
+        createdAt: Date.now(),
+        usage: { tokens: 12_400 },
+      }),
+    ),
+    /^review · codex · 12k · \d+s · starting$/,
   );
 });
 
@@ -147,8 +153,21 @@ test("only meaningful events change the activity ranking", () => {
 
 test("the widget shows the first two active agents and bounded overflow", async () => {
   const snapshots = [
-    snapshot({ id: "sa-old", title: "old", createdAt: 10, lastActivityAt: 40 }),
-    snapshot({ id: "btw-recent", origin: "btw", title: "aside", createdAt: 20, lastActivityAt: 10 }),
+    snapshot({
+      id: "sa-old",
+      title: "old",
+      createdAt: 10,
+      lastActivityAt: 40,
+      usage: { tokens: 12_400 },
+    }),
+    snapshot({
+      id: "btw-recent",
+      origin: "btw",
+      title: "aside",
+      createdAt: 20,
+      lastActivityAt: 10,
+      usage: { tokens: 7_800 },
+    }),
     snapshot({ id: "sa-new", title: "new", createdAt: 30, lastActivityAt: 50 }),
     snapshot({ id: "sa-done", status: "done", title: "done", createdAt: 40, lastActivityAt: 60 }),
   ];
@@ -186,8 +205,8 @@ test("the widget shows the first two active agents and bounded overflow", async 
   assert.match(lines[0], /1m00s wall/);
   assert.match(lines[0], /1m30s total/);
   assert.match(lines[0], /12k ctx tokens/);
-  assert.match(lines[1], /■\s+│\s+old\s+│\s+codex/);
-  assert.match(lines[2], /■\s+│\s+aside\s+│\s+codex/);
+  assert.match(lines[1], /■\s+│\s+old\s+│\s+codex\s+│\s+12k\s+│/);
+  assert.match(lines[2], /■\s+│\s+aside\s+│\s+codex\s+│\s+7\.8k\s+│/);
   assert.doesNotMatch(lines[1], /sa-new|btw-recent|running/);
   assert.doesNotMatch(lines[2], /sa-new|btw-recent|running/);
   assert.match(lines[3], /\+1 more/);

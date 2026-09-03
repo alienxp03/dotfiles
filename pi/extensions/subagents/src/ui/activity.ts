@@ -98,9 +98,15 @@ export function latestActivity(snap: SubagentSnapshot): string {
   return "starting";
 }
 
+function formatTokenUsage(snap: SubagentSnapshot): string {
+  return snap.usage.tokens === undefined
+    ? "—"
+    : formatCompactTokens(snap.usage.tokens);
+}
+
 /** Plain row text, useful for tests and non-colour callers. */
 export function formatActivityRow(snap: SubagentSnapshot): string {
-  return `${compactText(snap.title, 80)} · ${snap.backend} · ${formatElapsed(snap)} · ${latestActivity(snap)}`;
+  return `${compactText(snap.title, 80)} · ${snap.backend} · ${formatTokenUsage(snap)} · ${formatElapsed(snap)} · ${latestActivity(snap)}`;
 }
 
 const CLI_ACTIVITY_NAMES = new Set([
@@ -130,6 +136,7 @@ interface ActivityColumnLayout {
   readonly marker: number;
   readonly title: number;
   readonly backend?: number;
+  readonly tokens?: number;
   readonly elapsed?: number;
   readonly activity: number;
 }
@@ -142,8 +149,11 @@ export function activityColumnLayout(width: number): ActivityColumnLayout {
   const marker = 1;
   const title = available >= 60 ? 18 : available >= 40 ? 14 : 10;
   const backend = available >= 58 ? 7 : undefined;
+  // Keep the activity preview readable on narrow terminals; the token column
+  // appears once there is enough room for both metadata and a useful preview.
+  const tokens = available >= 70 ? 7 : undefined;
   const elapsed = available >= 36 ? 6 : undefined;
-  const fixedWidths = [title, backend, elapsed].filter(
+  const fixedWidths = [title, backend, tokens, elapsed].filter(
     (value): value is number => value !== undefined,
   );
   const columnCount = fixedWidths.length + 2; // marker + activity
@@ -156,6 +166,7 @@ export function activityColumnLayout(width: number): ActivityColumnLayout {
     marker,
     title,
     backend,
+    tokens,
     elapsed,
     activity: Math.max(1, available - fixed),
   };
@@ -184,6 +195,15 @@ function formatActivityTableRow(
     ...(layout.backend === undefined
       ? []
       : [activityColumn(theme, theme.fg("muted", snap.backend), layout.backend)]),
+    ...(layout.tokens === undefined
+      ? []
+      : [
+          activityColumn(
+            theme,
+            theme.fg("muted", formatTokenUsage(snap)),
+            layout.tokens,
+          ),
+        ]),
     ...(layout.elapsed === undefined
       ? []
       : [
