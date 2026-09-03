@@ -211,4 +211,8 @@ export PATH="$PATH:$HOME/.local/bin"
 # Added by LM Studio CLI (lms)
 [[ -d "$HOME/.lmstudio/bin" ]] && export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
+# Worktrunk: let `wt switch`, `wt merge`, and `wt remove` change this shell's
+# directory. `command wt` bypasses the wrapper while loading its definition.
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
+
 unset _p10k_dir _zsh_completions_dir _zsh_autosuggestions_dir _mise_bin

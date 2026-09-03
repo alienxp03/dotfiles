@@ -5,6 +5,7 @@
 "brew:ranger"      = "latest"
 "brew:witr"        = "latest"
 "brew:viu"         = "latest"
+"brew:worktrunk"   = "latest"
 "brew-cask:kitty"  = "latest"
 "brew:goreleaser"  = "latest"
 
