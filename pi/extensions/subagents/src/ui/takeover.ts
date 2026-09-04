@@ -141,9 +141,14 @@ export interface DashboardColumnLayout {
 }
 
 const DASHBOARD_COLUMN_GAP = 3; // space + separator + space
+const DASHBOARD_DEFAULT_MODEL_WIDTH = 24;
+const DASHBOARD_MAX_MODEL_WIDTH = 40;
 
 /** Allocate stable table columns, removing low-priority metadata when narrow. */
-export function dashboardColumnLayout(width: number): DashboardColumnLayout {
+export function dashboardColumnLayout(
+  width: number,
+  longestModelLabel = DASHBOARD_DEFAULT_MODEL_WIDTH,
+): DashboardColumnLayout {
   const available = Math.max(1, width);
   const marker = 2;
   const state = 1;
@@ -163,14 +168,9 @@ export function dashboardColumnLayout(width: number): DashboardColumnLayout {
   const model =
     available >= 88
       ? Math.min(
-          24,
-          Math.max(
-            12,
-            available -
-              fixedWithoutModel -
-              DASHBOARD_COLUMN_GAP -
-              12,
-          ),
+          DASHBOARD_MAX_MODEL_WIDTH,
+          Math.max(DASHBOARD_DEFAULT_MODEL_WIDTH, longestModelLabel),
+          available - fixedWithoutModel - DASHBOARD_COLUMN_GAP - 12,
         )
       : undefined;
   const columnCount = columnsWithoutModel + (model === undefined ? 0 : 1);
@@ -432,13 +432,23 @@ class SubagentDashboard implements Component {
       );
     }
     const visible = subs.slice(start, start + height);
+    const longestModelLabel = subs.reduce(
+      (longest, candidate) =>
+        Math.max(
+          longest,
+          candidate.meta.modelLabel
+            ? visibleWidth(candidate.meta.modelLabel)
+            : 0,
+        ),
+      0,
+    );
+    const layout = dashboardColumnLayout(width, longestModelLabel);
 
     for (let i = 0; i < visible.length; i++) {
       const snap = visible[i];
       const index = start + i;
       const isSelected = index === this.selection.index;
 
-      const layout = dashboardColumnLayout(width);
       const marker = isSelected ? theme.fg("accent", "❯") : " ";
       const state = statusGlyph(snap, theme);
       const title = isSelected

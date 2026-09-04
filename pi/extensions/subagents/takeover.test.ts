@@ -39,6 +39,11 @@ test("dashboard table uses the full width and hides metadata by priority", () =>
     elapsed: 6,
   });
 
+  const longModel = dashboardColumnLayout(98, 26);
+  assert.equal(layoutWidth(longModel), 98);
+  assert.equal(longModel.model, 26);
+  assert.equal(longModel.title, 20);
+
   const medium = dashboardColumnLayout(74);
   assert.equal(layoutWidth(medium), 74);
   assert.equal(medium.model, undefined);
