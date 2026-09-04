@@ -121,7 +121,7 @@ export default function (pi: ExtensionAPI) {
 						: formatWorkspacePath(sessionCwd, home);
 					const location = [
 						`${theme.fg("muted", icon)} ${theme.fg("text", locationPath)}`,
-						branch ? theme.fg("customMessageLabel", ` · ${branch}`) : "",
+						branch ? theme.fg("muted", ` · ${branch}`) : "",
 						sessionName ? theme.fg("customMessageLabel", ` • ${sessionName}`) : "",
 					].join("");
 
@@ -152,7 +152,7 @@ export default function (pi: ExtensionAPI) {
 						max: "thinkingMax",
 					} as const;
 					const primaryLine = [
-						`${theme.fg("accent", model)} ${theme.fg(reasoningColors[reasoning], `(${reasoning})`)}`,
+						`${theme.fg("muted", model)} ${theme.fg(reasoningColors[reasoning], `(${reasoning})`)}`,
 						contextUsage,
 						theme.fg("muted", formatElapsed(Date.now() - startedAt)),
 						extensionStatus,
