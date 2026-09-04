@@ -6,6 +6,72 @@ hs.hotkey.bind(super, "r", function()
 	hs.reload()
 end)
 
+local function axAttribute(element, attribute)
+	local ok, value = pcall(function()
+		return element:attributeValue(attribute)
+	end)
+	if ok then
+		return value
+	end
+end
+
+local function findChromeTabToggle(element)
+	if element == nil then
+		return nil
+	end
+
+	local role = axAttribute(element, "AXRole")
+	local description = axAttribute(element, "AXDescription")
+	if
+		role == "AXButton"
+		and (description == "Collapse tabs" or description == "Expand tabs")
+	then
+		return element
+	end
+
+	for _, child in ipairs(axAttribute(element, "AXChildren") or {}) do
+		local toggle = findChromeTabToggle(child)
+		if toggle ~= nil then
+			return toggle
+		end
+	end
+end
+
+local function toggleChromeTabs()
+	local app = hs.application.frontmostApplication()
+	if app == nil or app:bundleID() ~= "com.google.Chrome" then
+		return
+	end
+
+	local appElement = hs.axuielement.applicationElement(app)
+	local window = axAttribute(appElement, "AXFocusedWindow") or axAttribute(appElement, "AXMainWindow")
+	local toggle = findChromeTabToggle(window)
+	if toggle ~= nil then
+		toggle:performAction("AXPress")
+	end
+end
+
+local chromeTabsHotkey = hs.hotkey.new({ "ctrl" }, "z", toggleChromeTabs)
+local function updateChromeHotkey(app)
+	if app == nil then
+		app = hs.application.frontmostApplication()
+	end
+
+	if app ~= nil and app:bundleID() == "com.google.Chrome" then
+		chromeTabsHotkey:enable()
+	else
+		chromeTabsHotkey:disable()
+	end
+end
+
+local chromeWatcher = hs.application.watcher.new(function(_, event, app)
+	if event == hs.application.watcher.activated then
+		updateChromeHotkey(app)
+	end
+end)
+chromeWatcher:start()
+updateChromeHotkey()
+
 local function frontmostAppMatches(patterns)
 	local app = hs.application.frontmostApplication()
 	if app == nil then
