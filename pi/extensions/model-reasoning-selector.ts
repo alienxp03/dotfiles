@@ -12,6 +12,7 @@ import {
   Container,
   fuzzyFilter,
   Input,
+  matchesKey,
   Spacer,
   Text,
   truncateToWidth,
@@ -36,6 +37,19 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
 
 type PiModel = Model<Api>;
 type PiTheme = ExtensionUIContext["theme"];
+
+function matchesSelectDirection(
+  data: string,
+  keybindings: KeybindingsManager,
+  direction: "up" | "down",
+) {
+  const binding = direction === "up" ? "tui.select.up" : "tui.select.down";
+  return (
+    data === direction ||
+    matchesKey(data, direction) ||
+    keybindings.matches(data, binding)
+  );
+}
 
 class SearchableModelSelector extends Container implements Focusable {
   private readonly tui: TUI;
@@ -126,14 +140,14 @@ class SearchableModelSelector extends Container implements Focusable {
     return `${model.id} [${model.provider}]${name}`;
   }
 
-  private updateList(): void {
+  private updateList(resetSelection = false): void {
     const query = this.searchInput.getValue();
     this.filteredModels = query.trim()
       ? fuzzyFilter(this.allModels, query, (model) =>
           this.getModelSearchText(model),
         )
       : this.allModels;
-    this.selectedIndex = query.trim()
+    this.selectedIndex = resetSelection && query.trim()
       ? 0
       : Math.min(
           this.selectedIndex,
@@ -162,22 +176,24 @@ class SearchableModelSelector extends Container implements Focusable {
   }
 
   handleInput(data: string): void {
-    if (this.keybindings.matches(data, "tui.select.up")) {
+    if (matchesSelectDirection(data, this.keybindings, "up")) {
       if (this.filteredModels.length > 0) {
         this.selectedIndex =
           this.selectedIndex === 0
             ? this.filteredModels.length - 1
             : this.selectedIndex - 1;
+        this.updateList();
         this.tui.requestRender();
       }
       return;
     }
-    if (this.keybindings.matches(data, "tui.select.down")) {
+    if (matchesSelectDirection(data, this.keybindings, "down")) {
       if (this.filteredModels.length > 0) {
         this.selectedIndex =
           this.selectedIndex === this.filteredModels.length - 1
             ? 0
             : this.selectedIndex + 1;
+        this.updateList();
         this.tui.requestRender();
       }
       return;
@@ -193,7 +209,7 @@ class SearchableModelSelector extends Container implements Focusable {
     }
 
     this.searchInput.handleInput(data);
-    this.updateList();
+    this.updateList(true);
     this.tui.requestRender();
   }
 
@@ -292,10 +308,13 @@ export default function (pi: ExtensionAPI) {
             render,
             invalidate: () => undefined,
             handleInput: (data: string) => {
-              if (keybindings.matches(data, "tui.select.up") || data === "k") {
+              if (
+                matchesSelectDirection(data, keybindings, "up") ||
+                data === "k"
+              ) {
                 selectedIndex = Math.max(0, selectedIndex - 1);
               } else if (
-                keybindings.matches(data, "tui.select.down") ||
+                matchesSelectDirection(data, keybindings, "down") ||
                 data === "j"
               ) {
                 selectedIndex = Math.min(levels.length - 1, selectedIndex + 1);

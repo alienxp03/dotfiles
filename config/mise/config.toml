@@ -28,9 +28,9 @@ pnpm           = "11.24.0"
 "npm:@mermaid-js/mermaid-cli" = "11.16.0"
 
 # AI agents
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.259", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "0.84.4"
-"npm:@openai/codex"                   = "0.153.0"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.260", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "0.85.0"
+"npm:@openai/codex"                   = "0.153.2"
 "npm:happy"                           = { version = "1.2.0", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.18.27", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.2.0"
