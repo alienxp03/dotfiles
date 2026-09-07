@@ -64,8 +64,37 @@ keymap("n", "<leader>la", ":lua vim.lsp.buf.code_action()<cr>", opts({ desc = "C
 -- keymap("v", "<leader>ge", ":Git blame<CR>", opts({ desc = "Git blame" }))
 
 -- File explorer
+local function explorer_target()
+  local path = vim.api.nvim_buf_get_name(0)
+  if path == "" and vim.fn.argc() > 0 then
+    path = vim.fn.argv(0)
+  end
+  if path == "" then
+    return vim.fn.getcwd(), nil
+  end
+
+  path = vim.fn.fnamemodify(path, ":p")
+  if vim.fn.isdirectory(path) == 1 then
+    return path, nil
+  end
+  return vim.fs.dirname(path), path
+end
+
 vim.keymap.set("n", "<leader>e", function()
-  Snacks.explorer.reveal()
+  local cwd, file = explorer_target()
+  local explorer = Snacks.picker.get({ source = "explorer" })[1]
+
+  if explorer then
+    Snacks.explorer.reveal(file and { file = file } or {})
+    return
+  end
+
+  Snacks.explorer.open({
+    cwd = cwd,
+    on_show = file and function()
+      Snacks.explorer.reveal({ file = file })
+    end or nil,
+  })
 end, opts({ desc = "Reveal current file in explorer" }))
 
 keymap("n", "<leader>oe", function()
