@@ -110,6 +110,7 @@ alias v='nvim'
 alias xx='exit'
 
 # misc
+alias cls='clear'
 alias kll='kill -9'
 
 # golang
