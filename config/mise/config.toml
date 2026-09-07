@@ -28,6 +28,7 @@ pnpm           = "11.24.0"
 "npm:@mermaid-js/mermaid-cli" = "11.16.0"
 
 # AI agents
+"npm:ccusage"                        = "20.0.20"
 "npm:@anthropic-ai/claude-code"       = { version = "2.1.263", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.85.1"
 "npm:@openai/codex"                   = "0.153.4"

@@ -2,7 +2,7 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.6-luna",
   "defaultThinkingLevel": "xhigh",
-  "lastChangelogVersion": "0.85.0",
+  "lastChangelogVersion": "0.85.1",
   "collapseChangelog": true,
   "packages": [
     "npm:pi-mcp-adapter",
@@ -11,7 +11,8 @@
     "npm:pi-vim",
     "npm:@plannotator/pi-extension",
     "git:https://github.com/hasit/pi-community-themes",
-    "npm:@juicesharp/rpiv-ask-user-question"
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:pi-langfuse"
   ],
   "skills": [
     "~/.codex/skills"
