@@ -68,10 +68,18 @@ width       = "80%"
 height      = "80%"
 
 [[keys.command]]
-key         = "prefix+r"
+key         = "prefix+i"
 type        = "popup"
 command     = "tuicr --working-tree"
-description = "review unstaged changes"
+description = "review working tree"
+width       = "90%"
+height      = "90%"
+
+[[keys.command]]
+key         = "prefix+shift+i"
+type        = "popup"
+command     = 'tuicr pr "$(gh pr view --json number --jq .number)"'
+description = "review current PR"
 width       = "90%"
 height      = "90%"
 
