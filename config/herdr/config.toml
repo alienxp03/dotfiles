@@ -8,13 +8,21 @@ split_vertical   = "prefix+|"
 split_horizontal = "prefix+minus"
 zoom             = "prefix+m"
 
+# Cycle through spaces.
+previous_workspace = "prefix+p"
+next_workspace     = "prefix+n"
+
 # Cycle through tabs.
-previous_tab = "prefix+p"
-next_tab     = "prefix+n"
+previous_tab = "prefix+["
+next_tab     = "prefix+]"
 
 # Cycle through agents.
-previous_agent = "prefix+u"
-next_agent     = "prefix+d"
+previous_agent = "prefix+shift+p"
+next_agent     = "prefix+shift+n"
+
+# The combined rename command below replaces the built-in pane rename.
+rename_pane   = ""
+new_workspace = "prefix+shift+o"
 
 # Vim-style space selection in the workspace navigator.
 navigate_workspace_up   = "k"
@@ -36,10 +44,18 @@ width   = "90%"
 height  = "90%"
 
 [[keys.command]]
-key         = "prefix+shift+i"
+key         = "prefix+o"
 type        = "popup"
-command     = 'printf "Agent name: " >&2 && IFS= read -r name && [ -n "$name" ] && herdr agent rename "$HERDR_ACTIVE_PANE_ID" "$name"'
-description = "rename active agent"
+command     = 'dir="$(zoxide query -i)" && [ -n "$dir" ] && herdr workspace create --cwd "$dir" --label "$(basename "$dir")" --focus'
+description = "new workspace from zoxide"
+width       = "80%"
+height      = "80%"
+
+[[keys.command]]
+key         = "prefix+shift+a"
+type        = "popup"
+command     = 'printf "Name: " >&2 && IFS= read -r name && [ -n "$name" ] && herdr pane rename "$HERDR_ACTIVE_PANE_ID" "$name" && herdr agent rename "$HERDR_ACTIVE_PANE_ID" "$name"'
+description = "rename pane and agent"
 width       = 40
 height      = 5
 
@@ -67,7 +83,25 @@ pane_gaps               = true
 mouse_scroll_lines      = 1
 
 show_agent_labels_on_pane_borders = false
-agent_panel_sort = "priority"
+agent_panel_sort                  = "priority"
+
+status_indicators = "symbols"
+[ui.sidebar.agents]
+rows = [
+  [
+    "state_icon",
+    "workspace",
+    "tab",
+  ],
+  [
+    { token = "agent", fg = "#cba6f7", bold = true },
+  ],
+]
+
+[ui.sidebar.spaces]
+row_gap = 1
+rows    = [["state_icon", "workspace"]]
+
 [theme]
 name = "catppuccin"
 
@@ -79,3 +113,6 @@ directory = "~/Workspace/worktrees"
 
 [experimental]
 kitty_graphics = true
+
+[ui.toast]
+delivery = "herdr"

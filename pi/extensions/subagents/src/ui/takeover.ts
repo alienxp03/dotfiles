@@ -33,6 +33,30 @@ function configuredKeys(
   return keybindings.getKeys(binding).join("/") || "unbound";
 }
 
+const ESCAPE_GUARD_MS = 500;
+
+/** Consume a repeated cancel key after an overlay returns focus to the editor. */
+function guardEscapeAfterOverlayClose(
+  tui: TUI,
+  keybindings: KeybindingsManager,
+): void {
+  const deadline = Date.now() + ESCAPE_GUARD_MS;
+  let remove: (() => void) | undefined;
+  const timer = setTimeout(() => remove?.(), ESCAPE_GUARD_MS);
+  remove = tui.addInputListener((data) => {
+    if (
+      !tui.hasOverlay() &&
+      Date.now() < deadline &&
+      keybindings.matches(data, "tui.select.cancel")
+    ) {
+      clearTimeout(timer);
+      remove?.();
+      return { consume: true };
+    }
+    return undefined;
+  });
+}
+
 function statusGlyph(snap: SubagentSnapshot, theme: Theme): string {
   switch (snap.status) {
     case "running":
@@ -105,7 +129,13 @@ export async function openSubagentPicker(
         keybindings,
         view,
         selection,
-        () => done(null),
+        () => {
+          // A terminal can deliver a second Escape inside Pi's 500 ms
+          // double-Escape window. Do not let that repeat reach the editor and
+          // interrupt the parent run after this overlay closes.
+          guardEscapeAfterOverlayClose(tui, keybindings);
+          done(null);
+        },
         (id) => {
           // Keep the dashboard mounted underneath the takeover overlay. When
           // takeover closes, TUI restores focus to this dashboard instead of
@@ -273,7 +303,7 @@ class SubagentDashboard implements Component {
       // terminals deliver a second Escape when focus returns from an overlay.
       // Consume that repeated input here so the dashboard cannot flash closed
       // and pass navigation back to the main editor.
-      this.ignoreCancelUntil = Date.now() + 500;
+      this.ignoreCancelUntil = Date.now() + ESCAPE_GUARD_MS;
       this.tui.requestRender();
     }
   }

@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type ThinkingLevel = "high" | "xhigh";
+type ThinkingLevel = "low" | "high" | "xhigh";
 
 type ModelPreset = {
 	label: string;
@@ -17,10 +17,10 @@ const PRESETS: ModelPreset[] = [
 		thinkingLevel: "xhigh",
 	},
 	{
-		label: "Sol · high",
+		label: "Astra · low",
 		provider: "openai-codex",
-		modelId: "gpt-5.6-sol",
-		thinkingLevel: "high",
+		modelId: "gpt-6-astra",
+		thinkingLevel: "low",
 	},
 ];
 

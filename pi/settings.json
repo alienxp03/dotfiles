@@ -12,10 +12,11 @@
     "npm:@plannotator/pi-extension",
     "git:https://github.com/hasit/pi-community-themes",
     "npm:@juicesharp/rpiv-ask-user-question",
-    "npm:pi-langfuse"
+    "../../workspace/projects/pi-langfuse"
   ],
   "skills": [
-    "~/.codex/skills"
+    "~/.codex/skills",
+    "-skills/grill-me"
   ],
   "images": {
     "showImages": false

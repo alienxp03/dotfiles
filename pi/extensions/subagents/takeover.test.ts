@@ -81,6 +81,86 @@ test("dashboard selection follows its subagent id and falls back by row", () => 
   assert.deepEqual(selection, { id: undefined, index: 0 });
 });
 
+test("Escape after closing the dashboard does not interrupt the parent run", async () => {
+  const snap = {
+    id: "sa-1",
+    origin: "model",
+    backend: "codex",
+    title: "demo",
+    status: "running",
+  };
+  const view = {
+    size: () => 1,
+    list: () => [snap],
+    get: (id: string) => (id === snap.id ? snap : undefined),
+    subscribe: () => () => {},
+    subscribeTo: () => () => {},
+  } as never;
+  const listeners = new Set<
+    (data: string) => { consume?: boolean } | undefined
+  >();
+  let overlayVisible = false;
+  let mainRunInterrupted = false;
+  let component: { handleInput(data: string): void; dispose?(): void };
+  const tui = {
+    requestRender: () => {},
+    hasOverlay: () => overlayVisible,
+    addInputListener: (
+      listener: (data: string) => { consume?: boolean } | undefined,
+    ) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    terminal: { rows: 30 },
+  } as never;
+  const theme = {} as never;
+  const keybindings = {
+    matches: (data: string, binding: string) =>
+      binding === "tui.select.cancel" && data === "escape",
+    getKeys: () => [],
+  } as never;
+  const mainEditor = {
+    handleInput: (data: string) => {
+      if (data === "escape") mainRunInterrupted = true;
+    },
+  };
+  const dispatch = (data: string) => {
+    for (const listener of [...listeners]) {
+      if (listener(data)?.consume) return;
+    }
+    if (overlayVisible) component.handleInput(data);
+    else mainEditor.handleInput(data);
+  };
+
+  const ctx = {
+    ui: {
+      notify: () => {},
+      custom: async (
+        factory: (
+          tui: never,
+          theme: never,
+          keys: never,
+          done: (value: null) => void,
+        ) => { handleInput(data: string): void; dispose?(): void },
+      ) => {
+        overlayVisible = true;
+        const done = () => {
+          overlayVisible = false;
+          component.dispose?.();
+        };
+        component = factory(tui, theme, keybindings, done);
+        dispatch("escape");
+        assert.equal(overlayVisible, false);
+        dispatch("escape");
+        assert.equal(mainRunInterrupted, false);
+        return null;
+      },
+    },
+  } as never;
+
+  await openSubagentPicker(ctx, view);
+});
+
 test("repeated Escape after takeover cannot cascade through the dashboard", async () => {
   const snap = {
     id: "sa-1",
@@ -96,7 +176,12 @@ test("repeated Escape after takeover cannot cascade through the dashboard", asyn
     subscribe: () => () => {},
     subscribeTo: () => () => {},
   } as never;
-  const tui = { requestRender: () => {}, terminal: { rows: 30 } } as never;
+  const tui = {
+    requestRender: () => {},
+    hasOverlay: () => true,
+    addInputListener: () => () => {},
+    terminal: { rows: 30 },
+  } as never;
   const theme = {} as never;
   const keybindings = {
     matches: (data: string, binding: string) =>
