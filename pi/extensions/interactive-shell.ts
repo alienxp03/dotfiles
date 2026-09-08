@@ -166,10 +166,10 @@ export default function (pi: ExtensionAPI) {
 
 	// Ctrl+N is available in the main editor; Pi uses it only in the session picker.
 	pi.registerShortcut("ctrl+n", {
-		description: "Open tuicr working tree",
+		description: "Open tuicr",
 		handler: async (ctx) => {
 			if (ctx.mode !== "tui") return;
-			await runInteractiveCommand("tuicr --working-tree", ctx);
+			await runInteractiveCommand("tuicr", ctx);
 		},
 	});
 

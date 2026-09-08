@@ -301,11 +301,11 @@ return {
     {
       "<leader>gr",
       function()
-        Snacks.terminal({ "tuicr", "--working-tree" }, {
+        Snacks.terminal({ "tuicr" }, {
           win = { style = "lazygit" },
         })
       end,
-      desc = "Toggle tuicr (working tree)",
+      desc = "Toggle tuicr",
     },
     {
       "<leader>gl",
