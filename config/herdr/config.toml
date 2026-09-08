@@ -15,6 +15,7 @@ next_workspace     = "prefix+n"
 # Cycle through tabs.
 previous_tab = "prefix+["
 next_tab     = "prefix+]"
+rename_tab   = "prefix+shift+t"
 
 # Cycle through agents.
 previous_agent = "prefix+shift+p"
