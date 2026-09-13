@@ -9,7 +9,9 @@ import {
 import type { SubagentReadModel } from "./src/manager.ts";
 import {
   SubagentActivityWidget,
+  activityColumnLayout,
   formatActivityRow,
+  formatModelAndReasoning,
   latestActivity,
   selectActiveSubagents,
 } from "./src/ui/activity.ts";
@@ -68,6 +70,12 @@ test("selectActiveSubagents uses stable id order for equal creation times", () =
   assert.equal(selected.hiddenCount, 1);
 });
 
+test("activity layout gives the saved backend space to the title", () => {
+  const layout = activityColumnLayout(77);
+  assert.equal(layout.title, 20);
+  assert.equal(layout.backend, 5);
+});
+
 test("latestActivity prefers a live tool and sanitizes its preview", () => {
   const activity = latestActivity(
     snapshot({
@@ -112,6 +120,25 @@ test("latestActivity falls back from assistant text to transcript and starting",
   assert.equal(latestActivity(snapshot()), "starting");
 });
 
+test("model metadata omits the provider and includes reasoning", () => {
+  assert.equal(
+    formatModelAndReasoning(
+      snapshot({
+        meta: {
+          backend: "pi",
+          modelLabel: "openai-codex/gpt-5.6-luna",
+          reasoningEffort: "minimal",
+        },
+      }),
+    ),
+    "gpt-5.6-luna (minimal)",
+  );
+  assert.equal(
+    formatModelAndReasoning(snapshot({ meta: { backend: "pi" } })),
+    "? (default)",
+  );
+});
+
 test("latestActivity bounds long previews and formatActivityRow includes metadata", () => {
   const activity = latestActivity(
     snapshot({
@@ -128,7 +155,7 @@ test("latestActivity bounds long previews and formatActivityRow includes metadat
         usage: { tokens: 12_400 },
       }),
     ),
-    /^review · codex · 12k · \d+s · starting$/,
+    /^review · codex · gpt-5\.6-sol \(default\) · 12k · \d+s · starting$/,
   );
 });
 
@@ -205,8 +232,14 @@ test("the widget shows the first two active agents and bounded overflow", async 
   assert.match(lines[0], /1m00s wall/);
   assert.match(lines[0], /1m30s total/);
   assert.match(lines[0], /12k ctx tokens/);
-  assert.match(lines[1], /■\s+│\s+old\s+│\s+codex\s+│\s+12k\s+│/);
-  assert.match(lines[2], /■\s+│\s+aside\s+│\s+codex\s+│\s+7\.8k\s+│/);
+  assert.match(
+    lines[1],
+    /■\s+│\s+old\s+│\s+codex\s+│\s+gpt-5\.6-sol \(default\)\s+│\s+12k\s+│/,
+  );
+  assert.match(
+    lines[2],
+    /■\s+│\s+aside\s+│\s+codex\s+│\s+gpt-5\.6-sol \(default\)\s+│\s+7\.8k\s+│/,
+  );
   assert.doesNotMatch(lines[1], /sa-new|btw-recent|running/);
   assert.doesNotMatch(lines[2], /sa-new|btw-recent|running/);
   assert.match(lines[3], /\+1 more/);
@@ -237,7 +270,8 @@ test("the widget keeps the summary after all agents settle", () => {
 
   const lines = widget.render(100);
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /Subagents · 0 running · 1 total/);
+  assert.match(lines[0], /Subagents · 1 total/);
+  assert.doesNotMatch(lines[0], /0 running/);
   assert.match(lines[0], /2\.4k ctx tokens/);
   assert.doesNotMatch(lines[1], /\/subagents for details/);
   widget.dispose();

@@ -151,6 +151,36 @@ fi
 [[ -d "$HOME/.rd/bin" ]] && export PATH="$HOME/.rd/bin:$PATH"
 ### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
 
+# Give unnamed Herdr panes stable workspace-number labels for sidebar rows.
+_herdr_auto_name_pane() {
+	local pane_id="${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}}"
+	[[ -n "$pane_id" ]] || return
+	[[ -n "${_HERDR_PANE_NAMED:-}" ]] && return
+	(($+commands[herdr] && $+commands[jq])) || return
+
+	local snapshot details label workspace_id workspace_label pane_number
+	snapshot="$(herdr api snapshot 2>/dev/null)" || return
+	label="$(jq -r --arg pane_id "$pane_id" '
+		.result.snapshot.panes[] | select(.pane_id == $pane_id) | .label // empty
+	' <<<"$snapshot")" || return
+	[[ -z "$label" ]] || return
+	details="$(jq -r --arg pane_id "$pane_id" '
+		.result.snapshot as $snapshot
+		| ($snapshot.panes[] | select(.pane_id == $pane_id)) as $pane
+		| (($snapshot.workspaces | map(select(.workspace_id == $pane.workspace_id))[0].label) // "") as $workspace_label
+		| ([$snapshot.panes[] | select(.workspace_id == $pane.workspace_id) | .pane_id] | sort | index($pane_id) + 1) as $pane_number
+		| [$pane.workspace_id, $workspace_label, $pane_number]
+		| @tsv
+	' <<<"$snapshot")" || return
+	IFS=$'\t' read -r workspace_id workspace_label pane_number <<<"$details"
+	[[ -n "$workspace_id" ]] || return
+	[[ -n "$workspace_label" ]] || workspace_label="${PWD:t}"
+	[[ "$pane_number" == <-> ]] || return
+
+	herdr pane rename "$pane_id" "${workspace_label}-${pane_number}" >/dev/null 2>&1 || return
+	_HERDR_PANE_NAMED=1
+}
+
 # --- Deferred: loaded after first prompt renders ---
 _zsh_deferred_init() {
 	# Heavy plugins
@@ -205,7 +235,7 @@ if command -v direnv >/dev/null 2>&1; then
 	eval "$(direnv hook zsh)"
 fi
 
-precmd_functions=(_zsh_deferred_init ${precmd_functions[@]})
+precmd_functions=(_herdr_auto_name_pane _zsh_deferred_init ${precmd_functions[@]})
 export PATH="$PATH:$HOME/.local/bin"
 
 # Added by LM Studio CLI (lms)

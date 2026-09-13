@@ -104,9 +104,20 @@ function formatTokenUsage(snap: SubagentSnapshot): string {
     : formatCompactTokens(snap.usage.tokens);
 }
 
+/** Omit the provider prefix to keep model metadata compact in the preview. */
+function compactModelLabel(modelLabel: string | undefined): string {
+  if (!modelLabel) return "?";
+  const separator = modelLabel.indexOf("/");
+  return separator < 0 ? modelLabel : modelLabel.slice(separator + 1);
+}
+
+export function formatModelAndReasoning(snap: SubagentSnapshot): string {
+  return `${compactModelLabel(snap.meta.modelLabel)} (${snap.meta.reasoningEffort ?? "default"})`;
+}
+
 /** Plain row text, useful for tests and non-colour callers. */
 export function formatActivityRow(snap: SubagentSnapshot): string {
-  return `${compactText(snap.title, 80)} · ${snap.backend} · ${formatTokenUsage(snap)} · ${formatElapsed(snap)} · ${latestActivity(snap)}`;
+  return `${compactText(snap.title, 80)} · ${snap.backend} · ${formatModelAndReasoning(snap)} · ${formatTokenUsage(snap)} · ${formatElapsed(snap)} · ${latestActivity(snap)}`;
 }
 
 const CLI_ACTIVITY_NAMES = new Set([
@@ -136,24 +147,28 @@ interface ActivityColumnLayout {
   readonly marker: number;
   readonly title: number;
   readonly backend?: number;
+  readonly model?: number;
   readonly tokens?: number;
   readonly elapsed?: number;
   readonly activity: number;
 }
 
 const ACTIVITY_COLUMN_GAP = 3; // space + separator + space
+const ACTIVITY_MODEL_WIDTH = 24;
 
 /** Keep the compact activity panel aligned without hiding its useful preview. */
 export function activityColumnLayout(width: number): ActivityColumnLayout {
   const available = Math.max(1, width);
   const marker = 1;
-  const title = available >= 60 ? 18 : available >= 40 ? 14 : 10;
-  const backend = available >= 58 ? 7 : undefined;
+  const title = available >= 60 ? 20 : available >= 40 ? 14 : 10;
+  const backend = available >= 58 ? 5 : undefined;
+  // Keep the model and reasoning together so the preview remains scannable.
+  const model = available >= 88 ? ACTIVITY_MODEL_WIDTH : undefined;
   // Keep the activity preview readable on narrow terminals; the token column
   // appears once there is enough room for both metadata and a useful preview.
   const tokens = available >= 70 ? 7 : undefined;
   const elapsed = available >= 36 ? 6 : undefined;
-  const fixedWidths = [title, backend, tokens, elapsed].filter(
+  const fixedWidths = [title, backend, model, tokens, elapsed].filter(
     (value): value is number => value !== undefined,
   );
   const columnCount = fixedWidths.length + 2; // marker + activity
@@ -166,6 +181,7 @@ export function activityColumnLayout(width: number): ActivityColumnLayout {
     marker,
     title,
     backend,
+    model,
     tokens,
     elapsed,
     activity: Math.max(1, available - fixed),
@@ -195,6 +211,15 @@ function formatActivityTableRow(
     ...(layout.backend === undefined
       ? []
       : [activityColumn(theme, theme.fg("muted", snap.backend), layout.backend)]),
+    ...(layout.model === undefined
+      ? []
+      : [
+          activityColumn(
+            theme,
+            theme.fg("muted", formatModelAndReasoning(snap)),
+            layout.model,
+          ),
+        ]),
     ...(layout.tokens === undefined
       ? []
       : [
@@ -305,13 +330,17 @@ export class SubagentActivityWidget implements Component {
             "muted",
             `${formatCompactTokens(stats.contextTokens)} ctx tokens`,
           );
+    const running =
+      selection.active.length === 0
+        ? ""
+        : dot +
+          this.theme.fg("warning", `${selection.active.length} running`);
     const header = borderBoxLine(
       this.theme,
       "╭",
       "╮",
       this.theme.fg("accent", "Subagents") +
-        dot +
-        this.theme.fg("warning", `${selection.active.length} running`) +
+        running +
         dot +
         this.theme.fg("muted", `${stats.totalAgents} total`) +
         dot +
