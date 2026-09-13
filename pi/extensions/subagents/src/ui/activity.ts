@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { type Editor, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
@@ -128,9 +128,13 @@ const CLI_ACTIVITY_NAMES = new Set([
   "terminal",
 ]);
 
-function styledActivity(theme: Theme, activity: string) {
+function styledActivity(
+  theme: Theme,
+  activity: string,
+  plainColor: ThemeColor = "muted",
+) {
   const separator = activity.indexOf(":");
-  if (separator < 0) return theme.fg("muted", activity);
+  if (separator < 0) return theme.fg(plainColor, activity);
   const label = activity.slice(0, separator);
   const detail = activity.slice(separator + 1);
   const labelColor = CLI_ACTIVITY_NAMES.has(label.toLowerCase())
@@ -193,6 +197,13 @@ function activityColumn(theme: Theme, text: string, width: number) {
   return truncated + " ".repeat(Math.max(0, width - visibleWidth(truncated)));
 }
 
+function boldText(theme: Theme, text: string) {
+  const bold = (theme as Theme & {
+    bold?: (value: string) => string;
+  }).bold;
+  return typeof bold === "function" ? bold.call(theme, text) : text;
+}
+
 function formatActivityTableRow(
   theme: Theme,
   snap: SubagentSnapshot,
@@ -207,19 +218,19 @@ function formatActivityTableRow(
     activityColumn(
       theme,
       selected
-        ? theme.fg("accent", theme.bold(compactText(snap.title, 80)))
-        : theme.fg("text", compactText(snap.title, 80)),
+        ? theme.fg("accent", boldText(theme, compactText(snap.title, 80)))
+        : theme.fg("text", boldText(theme, compactText(snap.title, 80))),
       layout.title,
     ),
     ...(layout.backend === undefined
       ? []
-      : [activityColumn(theme, theme.fg("muted", snap.backend), layout.backend)]),
+      : [activityColumn(theme, theme.fg("text", snap.backend), layout.backend)]),
     ...(layout.model === undefined
       ? []
       : [
           activityColumn(
             theme,
-            theme.fg("muted", formatModelAndReasoning(snap)),
+            theme.fg("text", formatModelAndReasoning(snap)),
             layout.model,
           ),
         ]),
@@ -228,7 +239,7 @@ function formatActivityTableRow(
       : [
           activityColumn(
             theme,
-            theme.fg("muted", formatTokenUsage(snap)),
+            theme.fg("text", formatTokenUsage(snap)),
             layout.tokens,
           ),
         ]),
@@ -237,13 +248,20 @@ function formatActivityTableRow(
       : [
           activityColumn(
             theme,
-            theme.fg("muted", formatElapsed(snap)),
+            theme.fg("text", formatElapsed(snap)),
             layout.elapsed,
           ),
         ]),
-    activityColumn(theme, styledActivity(theme, latestActivity(snap)), layout.activity),
   ];
   return columns.join(gap);
+}
+
+function formatActivityDetailRow(theme: Theme, snap: SubagentSnapshot) {
+  return (
+    theme.fg("dim", "  └─") +
+    " " +
+    styledActivity(theme, latestActivity(snap))
+  );
 }
 
 function padBoxContent(
@@ -331,11 +349,6 @@ export class SubagentActivityWidget implements Component {
     // omits it. Disable navigation gracefully on renderers without it.
     return (this.tui as TUI & { getFocusedComponent?: () => Component | null })
       .getFocusedComponent?.();
-  }
-
-  private hasPromptDraft() {
-    const focused = this.focusedComponent();
-    return isEditor(focused) && focused.getText().length > 0;
   }
 
   private previews() {
@@ -452,10 +465,6 @@ export class SubagentActivityWidget implements Component {
   }
 
   render(width: number): string[] {
-    // Keep the activity panel out of the way as soon as the user starts a
-    // prompt. The editor handles the key first, then the TUI renders again.
-    if (this.hasPromptDraft()) return [];
-
     const snapshots = this.view.list();
     const selection = selectActiveSubagents(snapshots);
     const previews = this.previews();
@@ -496,14 +505,23 @@ export class SubagentActivityWidget implements Component {
         context,
       width,
     );
-    const rows = visible.map((snap) =>
-      padBoxContent(
-        this.theme,
-        formatActivityTableRow(this.theme, snap, Math.max(1, width - 3), !!this.editor && snap.id === this.selectedId),
-        width,
-        !!this.editor && snap.id === this.selectedId,
-      ),
-    );
+    const rows = visible.flatMap((snap) => {
+      const selected = !!this.editor && snap.id === this.selectedId;
+      return [
+        padBoxContent(
+          this.theme,
+          formatActivityTableRow(this.theme, snap, Math.max(1, width - 3), selected),
+          width,
+          selected,
+        ),
+        padBoxContent(
+          this.theme,
+          formatActivityDetailRow(this.theme, snap),
+          width,
+          selected,
+        ),
+      ];
+    });
     const more =
       hiddenCount > 0
         ? this.theme.fg("dim", `+${hiddenCount} more`)

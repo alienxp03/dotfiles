@@ -10,6 +10,9 @@
  * - subagent_check: peek at a subagent's status and recent activity.
  * - subagent_list: list all subagents.
  *
+ * Main-editor prompts starting with `@subagent-name` are sent directly to that
+ * subagent; the name is autocompleteable.
+ *
  * Unawaited subagents queue their result as a follow-up message when they
  * settle. `/subagents` opens a picker + full interactive takeover view.
  *
@@ -41,6 +44,10 @@ import {
 import { Markdown, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { deriveBtwTitle, isModelVisible } from "./src/by-the-way.ts";
+import {
+  createDirectSubagentAutocomplete,
+  parseDirectSubagentPrompt,
+} from "./src/direct.ts";
 import {
   BACKEND_NAMES,
   formatElapsed,
@@ -171,7 +178,10 @@ export default function (pi: ExtensionAPI) {
   let ui: ExtensionUIContext | undefined;
   let unsubActivity: (() => void) | undefined;
   let activityWidgetInstalled = false;
+  let activityWidgetSuppressed = false;
+  let knownActivityIds = new Set<string>();
   let uiPromptOpen = false;
+  let directAutocompleteInstalled = false;
   const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
 
   const getRuntime = () => (runtime ??= createSubagentRuntime());
@@ -192,9 +202,34 @@ export default function (pi: ExtensionAPI) {
     return managerPromise;
   };
 
+  const installDirectAutocomplete = (manager: SubagentManagerShape) => {
+    if (!ui || directAutocompleteInstalled) return;
+    ui.addAutocompleteProvider((current) =>
+      createDirectSubagentAutocomplete(
+        current,
+        async () => manager.view.list(),
+      ),
+    );
+    directAutocompleteInstalled = true;
+  };
+
+  const hideActivityWidget = () => {
+    activityWidgetSuppressed = true;
+    if (!ui || !activityWidgetInstalled) return;
+    ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
+    activityWidgetInstalled = false;
+  };
+
   const updateActivityWidget = (manager: SubagentManagerShape) => {
     if (!ui) return;
-    const shouldShow = manager.view.size() > 0;
+    const snapshots = manager.view.list();
+    const ids = new Set(snapshots.map((snap) => snap.id));
+    const hasNewAgent = [...ids].some((id) => !knownActivityIds.has(id));
+    knownActivityIds = ids;
+    if (hasNewAgent) activityWidgetSuppressed = false;
+    if (activityWidgetSuppressed && !hasNewAgent) return;
+
+    const shouldShow = snapshots.length > 0;
     if (!shouldShow) {
       if (activityWidgetInstalled) {
         ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
@@ -202,6 +237,7 @@ export default function (pi: ExtensionAPI) {
       }
       return;
     }
+    installDirectAutocomplete(manager);
     if (activityWidgetInstalled) return;
 
     const view = manager.view;
@@ -286,6 +322,52 @@ export default function (pi: ExtensionAPI) {
     if (ctx.hasUI) ui = ctx.ui;
   });
 
+  pi.on("input", async (event, ctx) => {
+    if (event.source !== "interactive") return;
+    hideActivityWidget();
+    const direct = parseDirectSubagentPrompt(event.text);
+    if (!direct) return;
+
+    let manager: SubagentManagerShape;
+    try {
+      manager = await getManager();
+    } catch (error) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(`Could not address subagent: ${String(error)}`, "error");
+      }
+      return { action: "handled" };
+    }
+
+    const resolution = resolveSubagentReferences(
+      [direct.reference],
+      manager.view.list(),
+    );
+    if (resolution.ambiguous.length > 0) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(
+          `Subagent name is ambiguous: ${direct.reference} (${resolution.ambiguous[0]?.ids.join(", ")})`,
+          "error",
+        );
+      }
+      return { action: "handled" };
+    }
+    const id = resolution.ids[0];
+    if (!id) return;
+
+    // A direct @-prompt is still an activity view, so restore it immediately
+    // after removing it for the submitted main-editor input.
+    activityWidgetSuppressed = false;
+    updateActivityWidget(manager);
+    try {
+      await runTool(getRuntime(), manager.send(id, direct.prompt));
+    } catch (error) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(`Could not address subagent: ${String(error)}`, "error");
+      }
+    }
+    return { action: "handled" };
+  });
+
   pi.on("ui_prompt_start", () => { uiPromptOpen = true; });
   pi.on("ui_prompt_end", () => { uiPromptOpen = false; });
 
@@ -298,6 +380,9 @@ export default function (pi: ExtensionAPI) {
     unsubActivity = undefined;
     ui?.setWidget(ACTIVITY_WIDGET_ID, undefined);
     activityWidgetInstalled = false;
+    activityWidgetSuppressed = false;
+    knownActivityIds = new Set();
+    directAutocompleteInstalled = false;
     uiPromptOpen = false;
     ui = undefined;
     const closing = runtime;

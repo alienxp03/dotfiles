@@ -85,11 +85,17 @@ test("down enters only from an empty editor without autocomplete or modal UI", (
   } finally { s.widget.dispose(); }
 });
 
-test("the preview hides while the editor contains a new prompt", () => {
+test("the preview stays visible while composing a prompt", () => {
   const s = setup();
   try {
+    s.text("@");
+    assert.match(s.render(), /agent-1/);
+    s.text("@agent-1");
+    assert.match(s.render(), /agent-1/);
+    s.text("@agent-1 inspect this");
+    assert.match(s.render(), /agent-1/);
     s.text("new prompt");
-    assert.equal(s.render(), "");
+    assert.match(s.render(), /agent-1/);
     s.text("");
     assert.match(s.render(), /agent-1/);
   } finally { s.widget.dispose(); }

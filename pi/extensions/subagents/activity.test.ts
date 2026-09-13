@@ -226,7 +226,7 @@ test("the widget shows the first two active agents and bounded overflow", async 
   const widget = new SubagentActivityWidget(tui, theme, view);
 
   const lines = widget.render(100);
-  assert.equal(lines.length, 4);
+  assert.equal(lines.length, 6);
   assert.match(lines[0], /Subagents · 3 running/);
   assert.match(lines[0], /4 total/);
   assert.match(lines[0], /1m00s wall/);
@@ -237,13 +237,15 @@ test("the widget shows the first two active agents and bounded overflow", async 
     /■\s+│\s+old\s+│\s+codex\s+│\s+gpt-5\.6-sol \(default\)\s+│\s+12k\s+│/,
   );
   assert.match(
-    lines[2],
+    lines[3],
     /■\s+│\s+aside\s+│\s+codex\s+│\s+gpt-5\.6-sol \(default\)\s+│\s+7\.8k\s+│/,
   );
+  assert.match(lines[2], /starting/);
+  assert.match(lines[4], /starting/);
   assert.doesNotMatch(lines[1], /sa-new|btw-recent|running/);
-  assert.doesNotMatch(lines[2], /sa-new|btw-recent|running/);
-  assert.match(lines[3], /\+2 more/);
-  assert.doesNotMatch(lines[3], /\/subagents for details/);
+  assert.doesNotMatch(lines[3], /sa-new|btw-recent|running/);
+  assert.match(lines[5], /\+2 more/);
+  assert.doesNotMatch(lines[5], /\/subagents for details/);
   assert.equal(widget.render(100).some((line) => line.includes("sa-done")), false);
 
   widget.dispose();
@@ -270,7 +272,7 @@ test("the widget keeps the summary after all agents settle", () => {
   const widget = new SubagentActivityWidget(tui, theme, view);
 
   const lines = widget.render(100);
-  assert.equal(lines.length, 3);
+  assert.equal(lines.length, 4);
   assert.match(lines[1], /✓.*finished/);
   assert.match(lines[0], /Subagents · 1 total/);
   assert.doesNotMatch(lines[0], /0 running/);
