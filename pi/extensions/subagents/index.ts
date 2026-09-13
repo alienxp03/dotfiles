@@ -169,10 +169,9 @@ export default function (pi: ExtensionAPI) {
   let managerPromise: Promise<SubagentManagerShape> | undefined;
   let sessionContext: ExtensionContext | undefined;
   let ui: ExtensionUIContext | undefined;
-  let activityManager: SubagentManagerShape | undefined;
   let unsubActivity: (() => void) | undefined;
   let activityWidgetInstalled = false;
-  let activitySummaryDismissed = false;
+  let uiPromptOpen = false;
   const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
 
   const getRuntime = () => (runtime ??= createSubagentRuntime());
@@ -182,8 +181,6 @@ export default function (pi: ExtensionAPI) {
     managerPromise ??= getRuntime()
       .runPromise(SubagentManager)
       .then((manager) => {
-        activityManager = manager;
-        activitySummaryDismissed = false;
         manager.view.setOnSettled(onSettled);
         unsubActivity?.();
         unsubActivity = manager.view.subscribe(() =>
@@ -197,12 +194,7 @@ export default function (pi: ExtensionAPI) {
 
   const updateActivityWidget = (manager: SubagentManagerShape) => {
     if (!ui) return;
-    const hasRunning = manager.view.list().some(
-      (snap) => snap.status === "running",
-    );
-    if (hasRunning) activitySummaryDismissed = false;
-    const shouldShow =
-      hasRunning || (manager.view.size() > 0 && !activitySummaryDismissed);
+    const shouldShow = manager.view.size() > 0;
     if (!shouldShow) {
       if (activityWidgetInstalled) {
         ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
@@ -215,7 +207,13 @@ export default function (pi: ExtensionAPI) {
     const view = manager.view;
     ui.setWidget(
       ACTIVITY_WIDGET_ID,
-      (tui, theme) => new SubagentActivityWidget(tui, theme, view),
+      (tui, theme) => new SubagentActivityWidget(tui, theme, view, {
+        canFocus: () => !uiPromptOpen,
+        open: async (id) => {
+          if (sessionContext) await openSubagentTakeover(sessionContext, view, id);
+        },
+        onError: (error) => ui?.notify(`Could not open subagent: ${String(error)}`, "error"),
+      }),
     );
     activityWidgetInstalled = true;
   };
@@ -288,11 +286,8 @@ export default function (pi: ExtensionAPI) {
     if (ctx.hasUI) ui = ctx.ui;
   });
 
-  pi.on("input", (event) => {
-    if (event.source !== "interactive") return;
-    activitySummaryDismissed = true;
-    if (activityManager) updateActivityWidget(activityManager);
-  });
+  pi.on("ui_prompt_start", () => { uiPromptOpen = true; });
+  pi.on("ui_prompt_end", () => { uiPromptOpen = false; });
 
   pi.on("agent_settled", flushResults);
 
@@ -303,8 +298,7 @@ export default function (pi: ExtensionAPI) {
     unsubActivity = undefined;
     ui?.setWidget(ACTIVITY_WIDGET_ID, undefined);
     activityWidgetInstalled = false;
-    activitySummaryDismissed = false;
-    activityManager = undefined;
+    uiPromptOpen = false;
     ui = undefined;
     const closing = runtime;
     runtime = undefined;

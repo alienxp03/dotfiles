@@ -242,7 +242,7 @@ test("the widget shows the first two active agents and bounded overflow", async 
   );
   assert.doesNotMatch(lines[1], /sa-new|btw-recent|running/);
   assert.doesNotMatch(lines[2], /sa-new|btw-recent|running/);
-  assert.match(lines[3], /\+1 more/);
+  assert.match(lines[3], /\+2 more/);
   assert.doesNotMatch(lines[3], /\/subagents for details/);
   assert.equal(widget.render(100).some((line) => line.includes("sa-done")), false);
 
@@ -254,9 +254,10 @@ test("the widget shows the first two active agents and bounded overflow", async 
 
 test("the widget keeps the summary after all agents settle", () => {
   const snapshots = [snapshot({ status: "done", title: "finished" })];
+  let listener = () => {};
   const view = {
     list: () => snapshots,
-    subscribe: () => () => {},
+    subscribe: (next: () => void) => { listener = next; return () => {}; },
     stats: () => ({
       totalAgents: 1,
       agentTimeMs: 12_000,
@@ -269,10 +270,20 @@ test("the widget keeps the summary after all agents settle", () => {
   const widget = new SubagentActivityWidget(tui, theme, view);
 
   const lines = widget.render(100);
-  assert.equal(lines.length, 2);
+  assert.equal(lines.length, 3);
+  assert.match(lines[1], /✓.*finished/);
   assert.match(lines[0], /Subagents · 1 total/);
   assert.doesNotMatch(lines[0], /0 running/);
   assert.match(lines[0], /2\.4k ctx tokens/);
   assert.doesNotMatch(lines[1], /\/subagents for details/);
+  listener();
+  assert.match(widget.render(100).join("\n"), /finished/);
+  snapshots.push(snapshot({ id: "sa-2", title: "replacement", createdAt: 2000 }));
+  listener();
+  assert.doesNotMatch(widget.render(100).join("\n"), /finished/);
+  assert.match(widget.render(100).join("\n"), /replacement/);
+  snapshots[1] = { ...snapshots[1], status: "error" };
+  listener();
+  assert.match(widget.render(100).join("\n"), /✗.*replacement/);
   widget.dispose();
 });

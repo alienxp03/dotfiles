@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { type Editor, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
   formatElapsed,
   type SubagentSnapshot,
@@ -197,15 +197,18 @@ function formatActivityTableRow(
   theme: Theme,
   snap: SubagentSnapshot,
   width: number,
+  selected = false,
 ) {
   const layout = activityColumnLayout(width);
   const separator = theme.fg("borderMuted", "│");
   const gap = ` ${separator} `;
   const columns = [
-    activityColumn(theme, statusGlyph(theme), layout.marker),
+    activityColumn(theme, selected ? theme.fg("accent", "›") : statusGlyph(theme, snap.status), layout.marker),
     activityColumn(
       theme,
-      theme.fg("text", compactText(snap.title, 80)),
+      selected
+        ? theme.fg("accent", theme.bold(compactText(snap.title, 80)))
+        : theme.fg("text", compactText(snap.title, 80)),
       layout.title,
     ),
     ...(layout.backend === undefined
@@ -243,14 +246,26 @@ function formatActivityTableRow(
   return columns.join(gap);
 }
 
-function padBoxContent(theme: Theme, content: string, width: number) {
+function padBoxContent(
+  theme: Theme,
+  content: string,
+  width: number,
+  selected = false,
+) {
   const innerWidth = Math.max(1, width - 2);
   const visible = truncateToWidth(` ${content}`, innerWidth, "");
+  const body = visible + " ".repeat(Math.max(0, innerWidth - visibleWidth(visible)));
+  const themeWithBackground = theme as Theme & {
+    bg?: (color: string, text: string) => string;
+  };
+  const styledBody =
+    selected && typeof themeWithBackground.bg === "function"
+      ? themeWithBackground.bg("selectedBg", body)
+      : body;
   return (
-    theme.fg("border", "│") +
-    visible +
-    " ".repeat(Math.max(0, innerWidth - visibleWidth(visible))) +
-    theme.fg("border", "│")
+    theme.fg(selected ? "borderAccent" : "border", "│") +
+    styledBody +
+    theme.fg(selected ? "borderAccent" : "border", "│")
   );
 }
 
@@ -271,11 +286,28 @@ function borderBoxLine(
   );
 }
 
-function statusGlyph(theme: Theme) {
+function statusGlyph(theme: Theme, status: SubagentSnapshot["status"]) {
+  if (status === "done") return theme.fg("success", "✓");
+  if (status === "error") return theme.fg("error", "✗");
+  if (status !== "running") return theme.fg("muted", "–");
   return theme.fg("warning", "■");
 }
 
-/** Persistent, read-only activity panel rendered above Pi's editor. */
+function isEditor(component: Component | null | undefined): component is Editor {
+  // Host and extension may load different pi-tui versions; instanceof would
+  // reject the host editor even though its public editor API is compatible.
+  const editor = component as Partial<Editor> | undefined;
+  return typeof editor?.getText === "function" &&
+    typeof editor?.isShowingAutocomplete === "function";
+}
+
+export interface ActivityNavigation {
+  canFocus(): boolean;
+  open(id: string): Promise<void>;
+  onError(error: unknown): void;
+}
+
+/** Persistent activity panel rendered above Pi's editor. */
 export class SubagentActivityWidget implements Component {
   private readonly tui: TUI;
   private readonly theme: Theme;
@@ -284,12 +316,110 @@ export class SubagentActivityWidget implements Component {
   private readonly ticker: ReturnType<typeof setInterval>;
   private renderTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
+  private seenIds = new Set<string>();
+  private previewIds = new Set<string>();
+  private readonly navigation?: ActivityNavigation;
+  private removeInputListener?: () => void;
+  private editor?: Component;
+  private selectedId?: string;
+  private selectedIndex = 0;
+  private opening = false;
+  private escapeGuardUntil = 0;
 
-  constructor(tui: TUI, theme: Theme, view: SubagentReadModel) {
+  private focusedComponent() {
+    // Concrete Pi renderers expose this public method, though TUI's interface
+    // omits it. Disable navigation gracefully on renderers without it.
+    return (this.tui as TUI & { getFocusedComponent?: () => Component | null })
+      .getFocusedComponent?.();
+  }
+
+  private hasPromptDraft() {
+    const focused = this.focusedComponent();
+    return isEditor(focused) && focused.getText().length > 0;
+  }
+
+  private previews() {
+    return this.view.list()
+      .filter((snap) => this.previewIds.has(snap.id) || snap.status === "running")
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  }
+
+  private reconcileSelection(previews = this.previews()) {
+    const index = previews.findIndex((snap) => snap.id === this.selectedId);
+    this.selectedIndex = index >= 0 ? index : Math.max(0, Math.min(this.selectedIndex, previews.length - 1));
+    this.selectedId = previews[this.selectedIndex]?.id;
+  }
+
+  handleInput(data: string): void {
+    if (!this.editor || this.opening) return;
+    if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
+      this.escapeGuardUntil = Date.now() + 500;
+      this.tui.setFocus(this.editor);
+      this.editor = undefined;
+    } else {
+      const previews = this.previews();
+      this.reconcileSelection(previews);
+      if (data === "j" || matchesKey(data, "down")) {
+        this.selectedIndex = Math.min(previews.length - 1, this.selectedIndex + 1);
+        this.selectedId = previews[this.selectedIndex]?.id;
+      } else if (data === "k" || matchesKey(data, "up")) {
+        this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+        this.selectedId = previews[this.selectedIndex]?.id;
+      } else if (matchesKey(data, "enter") && this.selectedId && this.navigation) {
+        this.opening = true;
+        void this.navigation.open(this.selectedId)
+          .catch((error) => this.navigation?.onError(error))
+          .finally(() => {
+            this.opening = false;
+            if (!this.closed) this.tui.requestRender();
+          });
+      }
+    }
+    this.tui.requestRender();
+  }
+
+  private updatePreview() {
+    const snapshots = this.view.list();
+    const added = snapshots.filter((snap) => !this.seenIds.has(snap.id));
+    if (added.length > 0) {
+      // Only a spawn retires settled previews; ordinary updates keep them.
+      this.previewIds = new Set([
+        ...snapshots.filter((snap) => snap.status === "running").map((snap) => snap.id),
+        ...added.map((snap) => snap.id),
+      ]);
+    }
+    for (const snap of snapshots) this.seenIds.add(snap.id);
+  }
+
+  constructor(tui: TUI, theme: Theme, view: SubagentReadModel, navigation?: ActivityNavigation) {
+    this.navigation = navigation;
     this.tui = tui;
     this.theme = theme;
     this.view = view;
-    this.unsubscribe = view.subscribe(() => this.scheduleRender());
+    this.updatePreview();
+    if (navigation) {
+      this.removeInputListener = tui.addInputListener((data) => {
+        if (this.closed || tui.hasOverlay()) return;
+        if (Date.now() < this.escapeGuardUntil && matchesKey(data, "escape")) return { consume: true };
+        const focused = this.focusedComponent();
+        if (
+          matchesKey(data, "down") && isEditor(focused) &&
+          focused.getText() === "" && !focused.isShowingAutocomplete() &&
+          navigation.canFocus() && this.previews().length > 0
+        ) {
+          this.editor = focused;
+          this.reconcileSelection();
+          tui.setFocus(this);
+          tui.requestRender();
+          return { consume: true };
+        }
+        return undefined;
+      });
+    }
+    this.unsubscribe = view.subscribe(() => {
+      this.updatePreview();
+      this.scheduleRender();
+    });
     this.ticker = setInterval(() => {
       if (this.view.list().some((snap) => snap.status === "running")) {
         this.tui.requestRender();
@@ -308,6 +438,9 @@ export class SubagentActivityWidget implements Component {
   private cleanup() {
     if (this.closed) return;
     this.closed = true;
+    this.removeInputListener?.();
+    if (this.editor && this.focusedComponent() === this) this.tui.setFocus(this.editor);
+    this.editor = undefined;
     this.unsubscribe();
     clearInterval(this.ticker);
     if (this.renderTimer) clearTimeout(this.renderTimer);
@@ -319,7 +452,17 @@ export class SubagentActivityWidget implements Component {
   }
 
   render(width: number): string[] {
-    const selection = selectActiveSubagents(this.view.list());
+    // Keep the activity panel out of the way as soon as the user starts a
+    // prompt. The editor handles the key first, then the TUI renders again.
+    if (this.hasPromptDraft()) return [];
+
+    const snapshots = this.view.list();
+    const selection = selectActiveSubagents(snapshots);
+    const previews = this.previews();
+    this.reconcileSelection(previews);
+    const start = this.editor ? Math.max(0, this.selectedIndex - MAX_VISIBLE_ACTIVE_AGENTS + 1) : 0;
+    const visible = previews.slice(start, start + MAX_VISIBLE_ACTIVE_AGENTS);
+    const hiddenCount = previews.length - visible.length;
     const stats = this.view.stats();
     const dot = this.theme.fg("dim", " · ");
     const context =
@@ -353,16 +496,17 @@ export class SubagentActivityWidget implements Component {
         context,
       width,
     );
-    const rows = selection.visible.map((snap) =>
+    const rows = visible.map((snap) =>
       padBoxContent(
         this.theme,
-        formatActivityTableRow(this.theme, snap, Math.max(1, width - 3)),
+        formatActivityTableRow(this.theme, snap, Math.max(1, width - 3), !!this.editor && snap.id === this.selectedId),
         width,
+        !!this.editor && snap.id === this.selectedId,
       ),
     );
     const more =
-      selection.hiddenCount > 0
-        ? this.theme.fg("dim", `+${selection.hiddenCount} more`)
+      hiddenCount > 0
+        ? this.theme.fg("dim", `+${hiddenCount} more`)
         : "";
     return [
       header,
