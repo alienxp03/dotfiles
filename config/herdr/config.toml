@@ -18,8 +18,8 @@ next_tab     = "prefix+]"
 rename_tab   = "prefix+shift+t"
 
 # Cycle through agents.
-previous_agent = "prefix+shift+p"
-next_agent     = "prefix+shift+n"
+previous_agent = "prefix+u"
+next_agent     = "prefix+i"
 
 # The combined rename command below replaces the built-in pane rename.
 rename_pane   = ""
@@ -62,14 +62,6 @@ height      = 5
 
 [[keys.command]]
 key         = "prefix+t"
-type        = "popup"
-command     = "exec \"${SHELL:-sh}\""
-description = "open scratch terminal"
-width       = "80%"
-height      = "80%"
-
-[[keys.command]]
-key         = "prefix+i"
 type        = "popup"
 command     = "tuicr --working-tree"
 description = "review working tree"
