@@ -1,0 +1,6 @@
+node_modules
+.build
+assets/screenshot-ocr
+raycast-env.d.ts
+*.js.map
+plugin.json

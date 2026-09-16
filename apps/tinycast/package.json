@@ -1,0 +1,90 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "screenshot-manager",
+  "title": "Screenshot Manager",
+  "description": "Browse and paste screenshots from a configurable directory.",
+  "categories": [
+    "Productivity"
+  ],
+  "license": "MIT",
+  "author": "local",
+  "icon": "icon.png",
+  "platforms": [
+    "macOS"
+  ],
+  "commands": [
+    {
+      "name": "view-screenshots",
+      "title": "View Screenshots",
+      "description": "Browse screenshots as image previews.",
+      "mode": "view"
+    },
+    {
+      "name": "index-screenshots",
+      "title": "Index Screenshots",
+      "description": "Extract text from screenshots for content search.",
+      "mode": "no-view"
+    },
+    {
+      "name": "delete-old-screenshots",
+      "title": "Delete Old Screenshots",
+      "description": "Delete screenshots older than the configured retention period.",
+      "mode": "no-view"
+    },
+    {
+      "name": "paste-last-screenshot",
+      "title": "Paste Last Screenshot",
+      "description": "Paste the newest screenshot into the focused app.",
+      "mode": "no-view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "screenshotsDirectory",
+      "title": "Screenshots directory",
+      "description": "Directory containing screenshots. Defaults to ~/Desktop.",
+      "type": "directory",
+      "required": false,
+      "default": "~/Desktop"
+    },
+    {
+      "name": "retentionPeriod",
+      "title": "Screenshot retention",
+      "description": "Delete command retention period. Defaults to Unlimited.",
+      "type": "dropdown",
+      "required": false,
+      "default": "unlimited",
+      "data": [
+        {
+          "title": "Unlimited",
+          "value": "unlimited"
+        },
+        {
+          "title": "3 months",
+          "value": "3-months"
+        },
+        {
+          "title": "6 months",
+          "value": "6-months"
+        },
+        {
+          "title": "12 months",
+          "value": "12-months"
+        }
+      ]
+    }
+  ],
+  "scripts": {
+    "build": "swiftc -O -framework CoreGraphics -framework Foundation -framework Vision scripts/ocr.swift -o assets/screenshot-ocr && ray build -e dist -o .build && cp .build/*.js . && rm -rf .build",
+    "dev": "ray develop",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raycast/api": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.2.17",
+    "typescript": "^5.9.2"
+  }
+}

@@ -18,6 +18,7 @@ home/          # files linked directly into $HOME
 config/        # XDG config directories linked under ~/.config
 local/bin/     # user executables linked under ~/.local/bin
 macos/         # macOS-specific app config
+apps/          # standalone app and extension projects
 ```
 
 Key examples:
