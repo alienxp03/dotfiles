@@ -18,8 +18,8 @@ next_tab     = "prefix+]"
 rename_tab   = "prefix+shift+t"
 
 # Cycle through agents.
-previous_agent = "prefix+u"
-next_agent     = "prefix+i"
+previous_agent = "prefix+i"
+next_agent     = "prefix+u"
 
 # The combined rename command below replaces the built-in pane rename.
 rename_pane   = ""
