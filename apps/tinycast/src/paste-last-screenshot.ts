@@ -1,6 +1,7 @@
 import { Clipboard, showToast, Toast } from "@raycast/api";
 import {
   findScreenshots,
+  removeExpiredScreenshots,
   screenshotsDirectory,
   type Screenshot,
 } from "./screenshots";
@@ -10,6 +11,7 @@ export default async function PasteLastScreenshot() {
   let latest: Screenshot | undefined;
 
   try {
+    await removeExpiredScreenshots(directory);
     [latest] = await findScreenshots(directory);
   } catch (error) {
     await showToast({

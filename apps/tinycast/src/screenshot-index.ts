@@ -56,20 +56,6 @@ async function saveIndex(index: StoredIndex): Promise<void> {
   await LocalStorage.setItem(INDEX_KEY, JSON.stringify(index));
 }
 
-export async function getIndexedScreenshots(
-  directory: string,
-): Promise<IndexedScreenshot[]> {
-  const [screenshots, index] = await Promise.all([
-    findScreenshots(directory),
-    loadIndex(directory),
-  ]);
-
-  return screenshots.map((screenshot) => ({
-    ...screenshot,
-    text: index?.files[screenshot.path]?.text ?? "",
-  }));
-}
-
 export async function indexScreenshots(
   directory: string,
   onProgress?: (progress: IndexProgress) => void,

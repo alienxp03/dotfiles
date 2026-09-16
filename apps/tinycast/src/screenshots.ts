@@ -1,5 +1,5 @@
 import { getPreferenceValues } from "@raycast/api";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, stat, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 
@@ -77,6 +77,37 @@ export function retentionCutoff(
   const cutoff = new Date(now);
   cutoff.setMonth(cutoff.getMonth() - RETENTION_MONTHS[period]);
   return cutoff.getTime();
+}
+
+export type CleanupResult = {
+  deleted: number;
+  failed: number;
+};
+
+export async function removeExpiredScreenshots(
+  directory: string,
+  now = new Date(),
+): Promise<CleanupResult> {
+  const cutoff = retentionCutoff(screenshotRetentionPeriod(), now);
+  if (cutoff === undefined) {
+    return { deleted: 0, failed: 0 };
+  }
+
+  const screenshots = await findScreenshots(directory);
+  const expired = screenshots.filter((screenshot) => screenshot.modifiedAt < cutoff);
+  let deleted = 0;
+  let failed = 0;
+
+  for (const screenshot of expired) {
+    try {
+      await unlink(screenshot.path);
+      deleted += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { deleted, failed };
 }
 
 export async function findScreenshots(directory: string): Promise<Screenshot[]> {

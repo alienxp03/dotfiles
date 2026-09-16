@@ -16,20 +16,8 @@
     {
       "name": "view-screenshots",
       "title": "View Screenshots",
-      "description": "Browse screenshots as image previews.",
+      "description": "Browse and search screenshots as image previews.",
       "mode": "view"
-    },
-    {
-      "name": "index-screenshots",
-      "title": "Index Screenshots",
-      "description": "Extract text from screenshots for content search.",
-      "mode": "no-view"
-    },
-    {
-      "name": "delete-old-screenshots",
-      "title": "Delete Old Screenshots",
-      "description": "Delete screenshots older than the configured retention period.",
-      "mode": "no-view"
     },
     {
       "name": "paste-last-screenshot",
@@ -50,7 +38,7 @@
     {
       "name": "retentionPeriod",
       "title": "Screenshot retention",
-      "description": "Delete command retention period. Defaults to Unlimited.",
+      "description": "Automatically remove screenshots older than this period. Defaults to Unlimited.",
       "type": "dropdown",
       "required": false,
       "default": "unlimited",

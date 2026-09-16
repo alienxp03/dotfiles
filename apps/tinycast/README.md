@@ -5,8 +5,6 @@ Raycast-compatible extension for Tinycast.
 ## Commands
 
 - **View Screenshots** — displays image files from the configured directory as a preview grid and searches OCR text.
-- **Index Screenshots** — extracts and caches text from new or changed images.
-- **Delete Old Screenshots** — permanently deletes images older than the configured retention period.
 - **Paste Last Screenshot** — pastes the newest image file into the focused app.
 
 The directory defaults to `~/Desktop` and can be changed under **Tinycast Settings → Extensions → Screenshot Manager → Configure**.
@@ -17,9 +15,9 @@ Configure each command's global shortcut in its command row under **Tinycast Set
 
 ## Build and run
 
-Run **Index Screenshots** once after installing, then again when you want to refresh OCR for new or changed images. The index is stored in Tinycast's extension-local storage; image files are not copied.
+When **View Screenshots** opens, the extension removes expired screenshots and indexes new or changed images. The index is stored in Tinycast's extension-local storage; image files are not copied. **Paste Last Screenshot** also removes expired screenshots before it pastes.
 
-Set **Screenshot retention** to Unlimited, 3, 6, or 12 months in the extension settings. Run **Delete Old Screenshots** to permanently remove screenshots older than that period; Unlimited is the default and never deletes anything.
+Set **Screenshot retention** to Unlimited, 3, 6, or 12 months in the extension settings. Expired screenshots are removed automatically when either command runs; Unlimited is the default and never deletes anything. Maintenance is on demand, with no background process.
 
 Build it from anywhere with one command:
 

@@ -1,7 +1,7 @@
 import { Grid, showToast, Toast } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { getIndexedScreenshots, type IndexedScreenshot } from "./screenshot-index";
-import { screenshotsDirectory } from "./screenshots";
+import { indexScreenshots, type IndexedScreenshot } from "./screenshot-index";
+import { removeExpiredScreenshots, screenshotsDirectory } from "./screenshots";
 
 export default function ViewScreenshots() {
   const [screenshots, setScreenshots] = useState<IndexedScreenshot[]>([]);
@@ -14,13 +14,14 @@ export default function ViewScreenshots() {
 
     setIsLoading(true);
     setErrorMessage(undefined);
-    getIndexedScreenshots(directory)
-      .then((found) => {
+    async function loadScreenshots() {
+      try {
+        await removeExpiredScreenshots(directory);
+        const result = await indexScreenshots(directory);
         if (isCurrent) {
-          setScreenshots(found);
+          setScreenshots(result.screenshots);
         }
-      })
-      .catch(async (error) => {
+      } catch (error) {
         if (!isCurrent) {
           return;
         }
@@ -33,12 +34,14 @@ export default function ViewScreenshots() {
           title: "Could not read screenshots",
           message,
         });
-      })
-      .finally(() => {
+      } finally {
         if (isCurrent) {
           setIsLoading(false);
         }
-      });
+      }
+    }
+
+    void loadScreenshots();
 
     return () => {
       isCurrent = false;
