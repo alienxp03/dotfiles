@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type ThinkingLevel = "low" | "high" | "xhigh";
+type ThinkingLevel = "low" | "medium" | "high" | "xhigh";
 
 type ModelPreset = {
 	label: string;
@@ -11,16 +11,16 @@ type ModelPreset = {
 
 const PRESETS: ModelPreset[] = [
 	{
-		label: "Luna · xhigh",
+		label: "Sol · medium",
 		provider: "openai-codex",
-		modelId: "gpt-5.6-luna",
-		thinkingLevel: "xhigh",
+		modelId: "gpt-6-sol",
+		thinkingLevel: "medium",
 	},
 	{
-		label: "Astra · low",
+		label: "Astra · medium",
 		provider: "openai-codex",
 		modelId: "gpt-6-astra",
-		thinkingLevel: "low",
+		thinkingLevel: "medium",
 	},
 ];
 
@@ -46,7 +46,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerCommand("reload-runtime", {
 		description: "Reload Pi configuration",
-		handler: async (_args, ctx) => {
+		handler: async (_args: any, ctx: { reload: () => any; }) => {
 			await ctx.reload();
 			return;
 		},
@@ -54,7 +54,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.registerShortcut("ctrl+r", {
 		description: "Reload Pi configuration",
-		handler: (ctx) => {
+		handler: (ctx: { isIdle: () => any; }) => {
 			const options = ctx.isIdle()
 				? { expandPromptTemplates: true }
 				: { deliverAs: "followUp" as const, expandPromptTemplates: true };
