@@ -173,7 +173,10 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+e", {
+	// Ctrl+I is the terminal's Tab byte. This is intentional: use it as a
+	// dedicated editor shortcut instead of Ctrl+E, which pi-vim synthesizes
+	// internally for Normal-mode `o`.
+	pi.registerShortcut("ctrl+i", {
 		description: "Open Neovim",
 		handler: async (ctx) => {
 			if (ctx.mode !== "tui") return;
