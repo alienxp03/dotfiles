@@ -1,12 +1,97 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
+import { KeybindingsManager } from "./node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js";
+import { TuiMainScreen, type TUI, type Component, type Terminal } from "@earendil-works/pi-tui";
 import {
   dashboardColumnLayout,
   openSubagentPicker,
+  openSubagentTakeover,
   reconcileDashboardSelection,
   type DashboardColumnLayout,
   type DashboardSelection,
 } from "./src/ui/takeover.ts";
+
+// Use the host input dispatcher and overlay focus stack, not a simulated dispatch.
+function createHostHarness(t: TestContext, keys = new KeybindingsManager()) {
+  const tui = new TuiMainScreen({ rows: 30, columns: 100, hideCursor: () => {} } as Terminal);
+  t.mock.method(tui, "requestRender", () => {});
+  const host = tui as unknown as {
+    handleTerminalInput(data: string): void;
+    requestImmediateRender(): void;
+  };
+  t.mock.method(host, "requestImmediateRender", () => {});
+  const parentInput: string[] = [];
+  tui.setFocus({
+    render: () => [],
+    invalidate: () => {},
+    handleInput: (data) => parentInput.push(data),
+  });
+  const snap = { id: "sa-1", status: "running" };
+  const view = {
+    size: () => 1,
+    list: () => [snap],
+    get: () => snap,
+    subscribe: () => () => {},
+    subscribeTo: () => () => {},
+  } as never;
+  const ctx = {
+    ui: {
+      custom: (factory: (tui: TUI, theme: never, keys: KeybindingsManager, done: () => void) => Component & { dispose?(): void }) =>
+        new Promise<null>((resolve) => {
+          const component = factory(tui, {} as never, keys, () => {
+            tui.hideOverlay();
+            resolve(null);
+            component.dispose?.();
+          });
+          tui.showOverlay(component);
+          t.after(() => component.dispose?.());
+        }),
+    },
+  } as never;
+  return { tui, ctx, view, parentInput, dispatch: (data: string) => host.handleTerminalInput(data) };
+}
+
+for (const direct of [false, true]) {
+  test(`${direct ? "direct takeover" : "dashboard"} consumes every cancel repeat until the guard expires`, async (t) => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"] });
+    const h = createHostHarness(t);
+    const opened = direct
+      ? openSubagentTakeover(h.ctx, h.view, "sa-1")
+      : openSubagentPicker(h.ctx, h.view);
+    h.dispatch("\x1b");
+    assert.equal(h.tui.hasOverlay(), false);
+    assert.deepEqual(h.parentInput, [], "closing key must not be dispatched twice");
+    for (const key of ["\x1b[27;1:3u", "\x1b", "\x1b[27;1:2u", "\x1b"]) {
+      h.dispatch(key);
+    }
+    assert.deepEqual(h.parentInput, [], "release/repeat events must not expose the parent");
+    h.dispatch("a");
+    assert.deepEqual(h.parentInput, ["a"], "normal typing must remain available");
+    t.mock.timers.tick(500);
+    h.dispatch("\x1b");
+    assert.deepEqual(h.parentInput, ["a", "\x1b"], "later intentional interrupt must work");
+    await opened;
+  });
+}
+
+test("direct takeover guards a remapped interrupt without blocking another overlay", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"] });
+  const h = createHostHarness(t, new KeybindingsManager({ "app.interrupt": "ctrl+q" }));
+  const opened = openSubagentTakeover(h.ctx, h.view, "sa-1");
+  h.dispatch("\x11");
+  h.dispatch("\x11");
+  h.dispatch("\x11");
+  assert.deepEqual(h.parentInput, []);
+  const overlayInput: string[] = [];
+  h.tui.showOverlay({ render: () => [], invalidate: () => {}, handleInput: (data) => overlayInput.push(data) });
+  h.dispatch("\x1b");
+  assert.deepEqual(overlayInput, ["\x1b"]);
+  h.tui.hideOverlay();
+  t.mock.timers.tick(500);
+  h.dispatch("\x11");
+  assert.deepEqual(h.parentInput, ["\x11"]);
+  await opened;
+});
 
 function layoutWidth(layout: DashboardColumnLayout) {
   const columns = [

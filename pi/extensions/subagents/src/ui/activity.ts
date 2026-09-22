@@ -404,11 +404,13 @@ export class SubagentActivityWidget implements Component {
     for (const snap of snapshots) this.seenIds.add(snap.id);
   }
 
-  constructor(tui: TUI, theme: Theme, view: SubagentReadModel, navigation?: ActivityNavigation) {
+  constructor(tui: TUI, theme: Theme, view: SubagentReadModel, navigation?: ActivityNavigation, seenIds: ReadonlySet<string> = new Set()) {
     this.navigation = navigation;
     this.tui = tui;
     this.theme = theme;
     this.view = view;
+    // Widget recreation must not treat settled history as new spawns.
+    this.seenIds = new Set(seenIds);
     this.updatePreview();
     if (navigation) {
       this.removeInputListener = tui.addInputListener((data) => {

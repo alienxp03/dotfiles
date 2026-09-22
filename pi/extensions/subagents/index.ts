@@ -213,22 +213,14 @@ export default function (pi: ExtensionAPI) {
     directAutocompleteInstalled = true;
   };
 
-  const hideActivityWidget = () => {
-    activityWidgetSuppressed = true;
-    if (!ui || !activityWidgetInstalled) return;
-    ui.setWidget(ACTIVITY_WIDGET_ID, undefined);
-    activityWidgetInstalled = false;
-  };
-
   const updateActivityWidget = (manager: SubagentManagerShape) => {
     if (!ui) return;
     const snapshots = manager.view.list();
-    const ids = new Set(snapshots.map((snap) => snap.id));
-    const hasNewAgent = [...ids].some((id) => !knownActivityIds.has(id));
-    knownActivityIds = ids;
+    const previousIds = knownActivityIds;
+    knownActivityIds = new Set(snapshots.map((snap) => snap.id));
+    const hasNewAgent = snapshots.some((snap) => !previousIds.has(snap.id));
     if (hasNewAgent) activityWidgetSuppressed = false;
-    if (activityWidgetSuppressed && !hasNewAgent) return;
-
+    if (activityWidgetSuppressed) return;
     const shouldShow = snapshots.length > 0;
     if (!shouldShow) {
       if (activityWidgetInstalled) {
@@ -249,7 +241,7 @@ export default function (pi: ExtensionAPI) {
           if (sessionContext) await openSubagentTakeover(sessionContext, view, id);
         },
         onError: (error) => ui?.notify(`Could not open subagent: ${String(error)}`, "error"),
-      }),
+      }, previousIds),
     );
     activityWidgetInstalled = true;
   };
@@ -324,7 +316,11 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("input", async (event, ctx) => {
     if (event.source !== "interactive") return;
-    hideActivityWidget();
+    activityWidgetSuppressed = true;
+    if (activityWidgetInstalled) {
+      ui?.setWidget(ACTIVITY_WIDGET_ID, undefined);
+      activityWidgetInstalled = false;
+    }
     const direct = parseDirectSubagentPrompt(event.text);
     if (!direct) return;
 
@@ -354,10 +350,6 @@ export default function (pi: ExtensionAPI) {
     const id = resolution.ids[0];
     if (!id) return;
 
-    // A direct @-prompt is still an activity view, so restore it immediately
-    // after removing it for the submitted main-editor input.
-    activityWidgetSuppressed = false;
-    updateActivityWidget(manager);
     try {
       await runTool(getRuntime(), manager.send(id, direct.prompt));
     } catch (error) {

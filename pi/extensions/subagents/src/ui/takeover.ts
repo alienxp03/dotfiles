@@ -36,22 +36,23 @@ function configuredKeys(
 
 const ESCAPE_GUARD_MS = 500;
 
-/** Consume a repeated cancel key after an overlay returns focus to the editor. */
+/** Consume cancel repeats while focus returns to the parent editor. */
 function guardEscapeAfterOverlayClose(
   tui: TUI,
   keybindings: KeybindingsManager,
 ): void {
   const deadline = Date.now() + ESCAPE_GUARD_MS;
   let remove: (() => void) | undefined;
-  const timer = setTimeout(() => remove?.(), ESCAPE_GUARD_MS);
+  setTimeout(() => remove?.(), ESCAPE_GUARD_MS);
   remove = tui.addInputListener((data) => {
     if (
       !tui.hasOverlay() &&
       Date.now() < deadline &&
-      keybindings.matches(data, "tui.select.cancel")
+      (keybindings.matches(data, "tui.select.cancel") ||
+        keybindings.matches(data, "app.interrupt"))
     ) {
-      clearTimeout(timer);
-      remove?.();
+      // TUI listeners run before key-release filtering. A Kitty release can
+      // match cancel too; do not let it disarm protection against repeats.
       return { consume: true };
     }
     return undefined;
@@ -103,7 +104,10 @@ export async function openSubagentTakeover(
   if (!view.get(id)) return;
   await ctx.ui.custom<null>(
     (tui, theme, keybindings, done) =>
-      new TakeoverView(tui, theme, keybindings, id, view, done, options),
+      new TakeoverView(tui, theme, keybindings, id, view, () => {
+        guardEscapeAfterOverlayClose(tui, keybindings);
+        done(null);
+      }, options),
     {
       overlay: true,
       overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%" },
@@ -131,9 +135,8 @@ export async function openSubagentPicker(
         view,
         selection,
         () => {
-          // A terminal can deliver a second Escape inside Pi's 500 ms
-          // double-Escape window. Do not let that repeat reach the editor and
-          // interrupt the parent run after this overlay closes.
+          // Keep repeated cancel events away from the parent editor after
+          // focus returns. One editor Escape can interrupt a running parent.
           guardEscapeAfterOverlayClose(tui, keybindings);
           done(null);
         },
