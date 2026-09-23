@@ -1,0 +1,4 @@
+*/.build/
+*/raycast-env.d.ts
+*/plugin.json
+screenshot-manager/assets/screenshot-ocr

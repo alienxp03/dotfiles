@@ -1,0 +1,117 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "grammar",
+  "title": "Grammar",
+  "description": "Improve clipboard text with Pi or Codex and compare alternatives.",
+  "categories": ["Productivity"],
+  "license": "MIT",
+  "author": "local",
+  "icon": "icon.svg",
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "grammar",
+      "title": "Grammar",
+      "description": "Improve clipboard text with Pi or Codex and choose an answer.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "backend",
+      "title": "AI backend",
+      "description": "Choose which signed-in CLI runs Grammar.",
+      "type": "dropdown",
+      "required": false,
+      "default": "pi",
+      "data": [
+        { "title": "Pi", "value": "pi" },
+        { "title": "Codex", "value": "codex" }
+      ]
+    },
+    {
+      "name": "piPath",
+      "title": "Pi CLI path",
+      "description": "Path to Pi. Defaults to the mise shim on this Mac.",
+      "type": "textfield",
+      "required": false,
+      "default": "~/.local/share/mise/shims/pi",
+      "placeholder": "pi"
+    },
+    {
+      "name": "codexPath",
+      "title": "Codex CLI path",
+      "description": "Path to your signed-in Codex CLI. Defaults to the mise shim on this Mac.",
+      "type": "textfield",
+      "required": false,
+      "default": "~/.local/share/mise/shims/codex",
+      "placeholder": "codex"
+    },
+    {
+      "name": "variantCount",
+      "title": "Answer variants",
+      "description": "How many alternatives the AI should generate for this action.",
+      "type": "dropdown",
+      "required": false,
+      "default": "3",
+      "data": [
+        { "title": "1 answer", "value": "1" },
+        { "title": "2 answers", "value": "2" },
+        { "title": "3 answers", "value": "3" },
+        { "title": "4 answers", "value": "4" },
+        { "title": "5 answers", "value": "5" },
+        { "title": "6 answers", "value": "6" },
+        { "title": "7 answers", "value": "7" },
+        { "title": "8 answers", "value": "8" }
+      ]
+    },
+    {
+      "name": "defaultPrompt",
+      "title": "Initial prompt",
+      "description": "Instruction sent to the AI for clipboard text.",
+      "type": "textfield",
+      "required": false,
+      "default": "Improve the selected text while preserving its meaning and tone. No em dash, or ;. Preserve newlines",
+      "placeholder": "What should the AI do with the clipboard text?"
+    },
+    {
+      "name": "defaultModel",
+      "title": "Default model",
+      "description": "Model used by Grammar.",
+      "type": "dropdown",
+      "required": false,
+      "default": "gpt-6-sol",
+      "data": [
+        { "title": "gpt-6-astra", "value": "gpt-6-astra" },
+        { "title": "gpt-6-sol", "value": "gpt-6-sol" },
+        { "title": "gpt-6-luna", "value": "gpt-6-luna" }
+      ]
+    },
+    {
+      "name": "defaultReasoning",
+      "title": "Default reasoning effort",
+      "description": "Reasoning effort used by Grammar.",
+      "type": "dropdown",
+      "required": false,
+      "default": "low",
+      "data": [
+        { "title": "Low", "value": "low" },
+        { "title": "Medium", "value": "medium" },
+        { "title": "High", "value": "high" },
+        { "title": "Xhigh", "value": "xhigh" }
+      ]
+    }
+  ],
+  "scripts": {
+    "build": "ray build -e dist -o .build && cp .build/*.js . && rm -rf .build",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@raycast/api": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.2.17",
+    "typescript": "^5.9.2"
+  }
+}
