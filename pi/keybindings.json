@@ -1,5 +1,4 @@
 {
-  "app.interrupt": "ctrl+alt+c",
   "tui.input.newLine": ["shift+enter", "alt+enter"],
   "app.message.followUp": ["ctrl+enter"],
   "app.thinking.cycle": ["ctrl+shift+p"],
