@@ -34,11 +34,10 @@ The full mapping is declared in `config/mise/config.toml` under `[dotfiles]`.
 
 ## Kitty Workflow
 
-Kitty is configured with the `tall` layout for Kesh workspaces: the primary
-pane occupies the left side and additional panes stack on the right. Keep
-`tall` first in `enabled_layouts`; Kitty uses the first enabled layout when
-reloading its configuration with `Cmd+R`, and putting `splits` first turns the
-workspace into vertical columns.
+Kitty and Kesh use the `splits` layout for nested right/below panes. Keep
+`enabled_layouts splits,stack` with `splits` first: re-entering `splits` or
+changing its layout options during a config reload can flatten live nested
+split trees. Use `Cmd+D` to split right and `Cmd+Shift+D` to split below.
 
 The first shell opened in a tab sets the tab title from its initial directory.
 Shell title updates are disabled, and windows launched from that tab keep the
