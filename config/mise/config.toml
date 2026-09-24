@@ -125,6 +125,7 @@ package_manager = "npm"
 [dotfiles]
 "~/.config/alacritty"                                        = "~/.dotfiles/config/alacritty"
 "~/.config/atuin"                                            = "~/.dotfiles/config/atuin"
+"~/.config/cmux/cmux.json"                                   = "~/.dotfiles/config/cmux/cmux.json"
 "~/.config/ghostty"                                          = "~/.dotfiles/config/ghostty"
 "~/.config/herdr/config.toml"                                = "~/.dotfiles/config/herdr/config.toml"
 "~/.config/tuicr"                                            = "~/.dotfiles/config/tuicr"

@@ -1,0 +1,68 @@
+{
+  "$schema" : "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion" : 1,
+  "app" : {
+    "minimalMode" : false
+  },
+  "automation" : {
+    "workspaceAutoNaming" : false
+  },
+  "shortcuts" : {
+    "bindings" : {
+      "toggleSplitZoom" : "cmd+shift+f",
+      "findInDirectory" : null,
+      "nextSidebarTab" : "cmd+shift+]",
+      "prevSidebarTab" : "cmd+shift+[",
+      "nextSurface" : null,
+      "prevSurface" : null,
+      "focusDown" : {
+        "first" : {
+          "command" : false,
+          "control" : true,
+          "key" : "j",
+          "keyCode" : 38,
+          "option" : false,
+          "shift" : false
+        }
+      },
+      "focusLeft" : {
+        "first" : {
+          "command" : false,
+          "control" : true,
+          "key" : "h",
+          "keyCode" : 4,
+          "option" : false,
+          "shift" : false
+        }
+      },
+      "focusRight" : {
+        "first" : {
+          "command" : false,
+          "control" : true,
+          "key" : "l",
+          "keyCode" : 37,
+          "option" : false,
+          "shift" : false
+        }
+      },
+      "focusUp" : {
+        "first" : {
+          "command" : false,
+          "control" : true,
+          "key" : "k",
+          "keyCode" : 40,
+          "option" : false,
+          "shift" : false
+        }
+      }
+    }
+  },
+  "sidebar" : {
+    "showBranchDirectory" : false,
+    "showLog" : false,
+    "showNotificationMessage" : false
+  },
+  "browser" : {
+    "openTerminalLinksInCmuxBrowser" : false
+  }
+}
