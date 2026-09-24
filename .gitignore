@@ -23,5 +23,9 @@ node_modules/
 # Local cmux session lock
 /pi/extensions/.cmux-session.lock
 
+# Generated Tinycast files outside extension directories
+/apps/tinycast/assets/screenshot-ocr
+/apps/tinycast/raycast-env.d.ts
+
 !config/just/
 !config/just/justfile

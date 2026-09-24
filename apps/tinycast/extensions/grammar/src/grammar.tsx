@@ -88,6 +88,17 @@ export default function Grammar() {
           detail={<List.Item.Detail markdown={preserveMarkdownLineBreaks(answer)} />}
           actions={
             <ActionPanel>
+              <Action
+                title="Copy and Paste Answer"
+                onAction={async () => {
+                  await Clipboard.copy(answer);
+                  try {
+                    await Clipboard.paste(answer);
+                  } catch {
+                    // The answer stays on the clipboard for manual paste.
+                  }
+                }}
+              />
               <Action.CopyToClipboard title="Copy Answer" content={answer} />
             </ActionPanel>
           }

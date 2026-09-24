@@ -1,6 +1,6 @@
 # Grammar for Tinycast
 
-Copy text in any app, then run **Grammar** to immediately generate a configurable number of Pi or Codex alternatives. Answers appear directly in a list; copy the one you want.
+Copy text in any app, then run **Grammar** to immediately generate a configurable number of Pi or Codex alternatives. Answers appear directly in a list. Press Enter to copy the selected answer and paste it into the previous app. If paste fails, the answer stays on the clipboard for manual paste. Use **Copy Answer** to copy without pasting.
 
 ## Requirements
 
