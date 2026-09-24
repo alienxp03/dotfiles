@@ -52,9 +52,13 @@ test("prompts hide the preview until a new spawn, without restoring settled hist
       if (factory) installs++;
     },
   };
-  const ctx = { hasUI: true, ui, cwd: process.cwd(), isProjectTrusted: () => true };
+  const ctx = { mode: "tui", hasUI: true, ui, cwd: process.cwd(), isProjectTrusted: () => true };
+  const reportedRunning: number[] = [];
   extension({
     on: (name: string, handler: any) => events.set(name, handler),
+    events: { emit: (name: string, data: { running: number }) => {
+      if (name === "kesh:subagents") reportedRunning.push(data.running);
+    } },
     registerTool: (tool: any) => tools.set(tool.name, tool),
     registerCommand: () => {}, registerMessageRenderer: () => {}, registerEntryRenderer: () => {},
     getThinkingLevel: () => "medium",
@@ -66,6 +70,7 @@ test("prompts hide the preview until a new spawn, without restoring settled hist
     await events.get("session_start")!({}, ctx);
     await spawn("first-old");
     await spawn("second-old");
+    assert.deepEqual(reportedRunning, [0, 1, 2]);
     await events.get("input")!({ source: "interactive", text: "follow up", streamingBehavior: "followUp" }, ctx);
     assert.equal(widget, undefined);
     notify();
@@ -73,8 +78,10 @@ test("prompts hide the preview until a new spawn, without restoring settled hist
     for (let i = 0; i < snapshots.length; i++) snapshots[i] = { ...snapshots[i], status: "done" };
     notify();
     assert.equal(widget, undefined, "settlement must not restore the preview");
+    assert.deepEqual(reportedRunning, [0, 1, 2, 0]);
     await events.get("input")!({ source: "interactive", text: "next task" }, ctx);
     await spawn("new-agent");
+    assert.deepEqual(reportedRunning, [0, 1, 2, 0, 1]);
     assert.equal(installs, 2);
     const rendered = widget!.render(100).join("\n");
     assert.match(rendered, /new-agent/);

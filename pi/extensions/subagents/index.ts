@@ -182,6 +182,7 @@ export default function (pi: ExtensionAPI) {
   let knownActivityIds = new Set<string>();
   let uiPromptOpen = false;
   let directAutocompleteInstalled = false;
+  let reportedRunningCount = -1;
   const resultDelivery = createDeferredResultDelivery<SubagentSnapshot>();
 
   const getRuntime = () => (runtime ??= createSubagentRuntime());
@@ -214,8 +215,13 @@ export default function (pi: ExtensionAPI) {
   };
 
   const updateActivityWidget = (manager: SubagentManagerShape) => {
-    if (!ui) return;
     const snapshots = manager.view.list();
+    const runningCount = snapshots.filter((snap) => snap.status === "running").length;
+    if (sessionContext?.mode === "tui" && runningCount !== reportedRunningCount) {
+      reportedRunningCount = runningCount;
+      pi.events.emit("kesh:subagents", { running: runningCount });
+    }
+    if (!ui) return;
     const previousIds = knownActivityIds;
     knownActivityIds = new Set(snapshots.map((snap) => snap.id));
     const hasNewAgent = snapshots.some((snap) => !previousIds.has(snap.id));
