@@ -21,37 +21,37 @@ ruby   = "4.0.7"
 rust   = "1.98.1"
 
 # JavaScript package managers
-pnpm           = "12.5.1"
-"npm:prettier" = "3.9.8"
+pnpm           = "12.6.0"
+"npm:prettier" = "3.9.9"
 
 # Diagram rendering
 "npm:@mermaid-js/mermaid-cli" = "11.17.0"
 
 # AI agents
 "npm:ccusage"                        = "20.0.24"
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.280", npm_args = "--ignore-scripts=false" }
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.281", npm_args = "--ignore-scripts=false" }
 "npm:@earendil-works/pi-coding-agent" = "0.87.1"
-"npm:@openai/codex"                   = "0.155.1"
-"npm:happy"                           = { version = "1.2.4", npm_args = "--ignore-scripts=false" }
+"npm:@openai/codex"                   = "0.156.1"
+"npm:happy"                           = { version = "1.2.5", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.18.32", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.3.0"
 
 # Python tooling
 "pipx:httpie" = "3.2.4"
-uv            = "0.12.17"
+uv            = "0.12.18"
 
 # Infrastructure as code
 opentofu       = "1.12.6"
-terraform      = "1.16.3"
+terraform      = "1.16.4"
 terraform-docs = "0.24.0"
 terragrunt     = "1.1.6"
 tflint         = "0.64.0"
 tfsec          = "1.28.14"
 
 # Cloud / Kubernetes
-aws-cli     = { version = "2.37.0", symlink_bins = "true" }
+aws-cli     = { version = "2.37.1", symlink_bins = "true" }
 cloudflared = "2026.9.1"
-gcloud      = "585.0.0"
+gcloud      = "586.0.0"
 helm        = "4.3.0"
 k9s         = "0.51.0"
 kubectl     = "1.37.0"
@@ -60,7 +60,7 @@ kubectx     = "0.11.0"
 minikube    = "1.39.0"
 
 # Git / shell / developer workflow
-atuin                     = "18.22.0"
+atuin                     = "18.23.0"
 delta                     = "0.19.2"
 direnv                    = "2.37.1"
 fzf                       = "0.74.4"
@@ -89,7 +89,7 @@ eza                                  = "0.23.5"
 fd                                   = "10.5.0"
 ffmpeg                               = "9.0.2"
 glow                                 = "3.0.0"
-"go:github.com/jorgerojas26/lazysql" = "v0.5.7"
+"go:github.com/jorgerojas26/lazysql" = "v0.5.9"
 jd                                   = "2.5.0"
 jq                                   = "1.8.2"
 ripgrep                              = "15.2.0"

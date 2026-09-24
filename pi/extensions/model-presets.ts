@@ -14,6 +14,12 @@ type ModelPreset = {
 
 const PRESETS: ModelPreset[] = [
   {
+    label: "Luna · xhigh",
+    provider: "openai-codex",
+    modelId: "gpt-6-luna",
+    thinkingLevel: "xhigh",
+  },
+  {
     label: "Sol · high",
     provider: "openai-codex",
     modelId: "gpt-6-sol",
