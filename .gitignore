@@ -20,5 +20,8 @@ config/kesh/config.yaml
 # Local JavaScript dependencies
 node_modules/
 
+# Local cmux session lock
+/pi/extensions/.cmux-session.lock
+
 !config/just/
 !config/just/justfile
