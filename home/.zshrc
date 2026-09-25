@@ -209,16 +209,6 @@ _zsh_deferred_init() {
 	# bun completions
 	[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
-	# mise initial hook (sets up tool paths for current dir)
-	(($+functions[_mise_hook])) && _mise_hook
-
-	# Mise can alter PATH after the initial direnv export, causing direnv to
-	# reload during the first prompt. Synchronize it silently so Powerlevel10k's
-	# instant prompt does not detect console output during initialization.
-	if (($+functions[_direnv_hook])); then
-		_direnv_hook 2>/dev/null
-	fi
-
 	precmd_functions=(${precmd_functions:#_zsh_deferred_init})
 	unfunction _zsh_deferred_init
 }
@@ -231,6 +221,12 @@ _zsh_deferred_init() {
 if command -v direnv >/dev/null 2>&1; then
 	unfunction _direnv_hook 2>/dev/null || true
 	eval "$(direnv hook zsh)"
+fi
+
+# Update mise before direnv on the first and subsequent prompts.
+if (($+functions[_mise_hook_precmd])); then
+	precmd_functions=(${precmd_functions:#_mise_hook_precmd})
+	precmd_functions=(_mise_hook_precmd ${precmd_functions[@]})
 fi
 
 precmd_functions=(_herdr_auto_name_pane _zsh_deferred_init ${precmd_functions[@]})
