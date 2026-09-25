@@ -1,7 +1,7 @@
 {
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6-sol",
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "high",
   "lastChangelogVersion": "0.87.1",
   "collapseChangelog": true,
   "packages": [
@@ -12,10 +12,7 @@
     "git:https://github.com/hasit/pi-community-themes",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
-  "skills": [
-    "~/.codex/skills",
-    "-skills/grill-me"
-  ],
+  "skills": ["~/.codex/skills", "-skills/grill-me"],
   "images": {
     "showImages": false
   },
