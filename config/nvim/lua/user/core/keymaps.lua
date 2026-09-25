@@ -75,9 +75,9 @@ local function explorer_target()
 
   path = vim.fn.fnamemodify(path, ":p")
   if vim.fn.isdirectory(path) == 1 then
-    return path, nil
+    return vim.fn.getcwd(), nil
   end
-  return vim.fs.dirname(path), path
+  return vim.fn.getcwd(), path
 end
 
 vim.keymap.set("n", "<leader>e", function()
