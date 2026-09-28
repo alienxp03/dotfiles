@@ -173,6 +173,22 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerShortcut("ctrl+t", {
+		description: "Review working tree in tuicr",
+		handler: async (ctx) => {
+			if (ctx.mode !== "tui") return;
+			await runInteractiveCommand("tuicr --working-tree", ctx);
+		},
+	});
+
+	pi.registerShortcut("ctrl+shift+t", {
+		description: "Review current PR in tuicr",
+		handler: async (ctx) => {
+			if (ctx.mode !== "tui") return;
+			await runInteractiveCommand('tuicr pr "$(gh pr view --json number --jq .number)"', ctx);
+		},
+	});
+
 	// Ctrl+Q is unused by Pi on macOS and avoids Ctrl+I's terminal Tab byte.
 	pi.registerShortcut("ctrl+q", {
 		description: "Open Neovim",
