@@ -12,7 +12,10 @@
     "git:https://github.com/hasit/pi-community-themes",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
-  "skills": ["~/.codex/skills", "-skills/grill-me"],
+  "skills": [
+    "~/.codex/skills",
+    "-skills/grill-me"
+  ],
   "images": {
     "showImages": false
   },
