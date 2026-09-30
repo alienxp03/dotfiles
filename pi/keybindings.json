@@ -3,6 +3,7 @@
   "app.message.followUp": ["ctrl+enter"],
   "app.thinking.cycle": ["ctrl+shift+p"],
   "app.thinking.toggle": "ctrl+alt+t",
+  "app.tree.filter.noTools": [],
   "app.model.select": [],
   "app.model.cycleBackward": [],
   "app.session.rename": [],
