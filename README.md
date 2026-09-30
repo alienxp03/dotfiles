@@ -86,12 +86,12 @@ make test
 MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise test
 ```
 
-Update the full development environment (Homebrew, mise, and all mise-managed tools):
+Update the full development environment (Homebrew, including auto-updating and latest casks, mise, and all mise-managed tools):
 
 ```bash
-make dev-update
+make update-all
 # or
-MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise run dev-update
+MISE_GLOBAL_CONFIG_FILE="$PWD/config/mise/config.toml" mise run update-all
 ```
 
 ## Local-Only Configuration Boundaries

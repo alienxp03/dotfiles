@@ -1,6 +1,6 @@
 ---
 name: subagents
-description: invoke this skill when the user asks you to use subagents
+description: invoke this skill when the user asks you or you want to use subagents
 ---
 
 # Subagents
@@ -12,14 +12,12 @@ description: invoke this skill when the user asks you to use subagents
 
 **Harness:** `pi`
 **Prompt nicknames:** “pi”, “pi agent”, “pi subagent”
-**Best default:** Use when the user does not request another harness. It inherits the parent model and thinking level when `model` or `reasoning_effort` is omitted.
-
-Do not use models from the Anthropic provider even if one appears in the model list.
+**Best default:** Use when the user does not request another harness. It inherits the parent model and thinking level when `model` or `reasoning_effort` is omitted. Almost never use Astra model unless user specifically asks for it, or approved by the user.
 
 Pi can use any model shown by `pi --list-models`. Prefer `provider/model-id`; a bare model id only works when unambiguous. Common picks in this environment:
 
-| Model                       | Recommended effort |
-| --------------------------- | ------------------ |
+| Model                     | Recommended effort |
+| ------------------------- | ------------------ |
 | `openai-codex/gpt-6-luna` | `xhigh`            |
 | `openai-codex/gpt-6-sol`  | `high`             |
 
@@ -31,8 +29,8 @@ Pi can use any model shown by `pi --list-models`. Prefer `provider/model-id`; a 
 **Prompt nicknames:** “codex”, “Codex CLI”, “codex agent”, “codex subagent”
 **Best default:** `gpt-6-luna` with `xhigh` effort for coding work. Do not use anything other than sol unless the user specifically asks for it.
 
-| Model          | Recommended effort |
-| -------------- | ------------------ |
+| Model        | Recommended effort |
+| ------------ | ------------------ |
 | `gpt-6-luna` | `xhigh`            |
 | `gpt-6-sol`  | `high`             |
 

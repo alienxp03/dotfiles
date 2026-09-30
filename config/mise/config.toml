@@ -180,7 +180,7 @@ run = [
 description = "Update development environment"
 run = [
   "brew update",
-  "brew upgrade -y",
+  "brew upgrade --greedy -y",
   "mise self-update -y",
   "mise install",
   "mise upgrade --bump --yes",

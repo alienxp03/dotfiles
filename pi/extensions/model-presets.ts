@@ -22,7 +22,7 @@ const PRESETS: ModelPreset[] = [
   {
     label: "Sol · high",
     provider: "openai-codex",
-    modelId: "gpt-6-sol",
+    modelId: "gpt-6.1-sol",
     thinkingLevel: "high",
   },
   {

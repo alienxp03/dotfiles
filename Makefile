@@ -14,7 +14,7 @@ LUA_FILES := config/nvim
 SHFMT_FILES := config/zsh/*.zsh home/.zshrc home/.p10k.mise.zsh home/.p10k.zsh local/bin/tmux-sesh
 TOML_FILES := '**/*.toml'
 
-.PHONY: help install setup setup-linux tools test dev-update fmt lint mise-tasks
+.PHONY: help install setup setup-linux tools test update-all dev-update fmt lint mise-tasks
 
 help:
 	@printf 'Targets:\n'
@@ -23,7 +23,7 @@ help:
 	@printf '  setup-linux Bootstrap a remote Linux host (HOST=user@host or make setup-linux user@host)\n'
 	@printf '  tools       Install mise-managed tools\n'
 	@printf '  test        Run TOML, shell, mise, and Neovim checks\n'
-	@printf '  dev-update  Update Homebrew, mise, and mise-managed tools\n'
+	@printf '  update-all  Update Homebrew (all casks), mise, and mise-managed tools\n'
 	@printf '  fmt         Format TOML and shell files\n'
 	@printf '  lint        Run format/lint checks only\n'
 
@@ -42,8 +42,10 @@ tools:
 test: lint
 	$(MISE_RUN) run test
 
-dev-update:
-	$(MISE_RUN) run dev-update
+update-all:
+	$(MISE_RUN) run update-all
+
+dev-update: update-all
 
 fmt:
 	$(MISE_RUN) exec stylua -- stylua $(LUA_FILES)
