@@ -78,6 +78,13 @@ function ide() {
 	fi
 }
 
+# Fuzzy-find a file and open it in Neovim
+ff() {
+	local file
+	file=$(fd --type f --hidden --exclude .git | fzf) || return
+	[[ -n "$file" ]] && nvim -- "$file"
+}
+
 # Docker exec into running container with fzf
 dex() {
 	local container
