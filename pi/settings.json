@@ -2,7 +2,7 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6-sol",
   "defaultThinkingLevel": "high",
-  "lastChangelogVersion": "0.99.1",
+  "lastChangelogVersion": "1.0.0",
   "collapseChangelog": true,
   "packages": [
     "npm:pi-mcp-adapter",
@@ -30,5 +30,8 @@
     "openai-codex/gpt-6-luna"
   ],
   "hideThinkingBlock": false,
-  "doubleEscapeAction": "none"
+  "doubleEscapeAction": "none",
+  "extensions": [
+    "-builtin:mcp"
+  ]
 }

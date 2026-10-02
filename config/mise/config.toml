@@ -16,32 +16,32 @@ deno   = "2.9.7"
 go     = "1.27.1"
 lua    = "5.5.1"
 node   = "26.10.0"
-python = "3.14.7"
+python = "3.14.8"
 ruby   = "4.0.7"
 rust   = "1.98.1"
 
 # JavaScript package managers
-pnpm           = "12.6.0"
+pnpm           = "12.8.1"
 "npm:prettier" = "3.9.9"
 
 # Diagram rendering
-"npm:@mermaid-js/mermaid-cli" = "11.17.0"
+"npm:@mermaid-js/mermaid-cli" = "12.0.0"
 
 # AI agents
-"npm:ccusage"                        = "20.0.24"
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.285", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "0.99.1"
-"npm:@openai/codex"                   = "0.159.2"
+"npm:ccusage"                        = "20.0.26"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.287", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "1.0.0"
+"npm:@openai/codex"                   = "0.160.0"
 "npm:happy"                           = { version = "1.2.5", npm_args = "--ignore-scripts=false" }
-"npm:opencode-ai"                     = { version = "1.18.33", npm_args = "--ignore-scripts=false" }
+"npm:opencode-ai"                     = { version = "1.18.34", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.3.0"
 
 # Python tooling
 "pipx:httpie" = "3.2.4"
-uv            = "0.12.18"
+uv            = "0.12.21"
 
 # Infrastructure as code
-opentofu       = "1.12.6"
+opentofu       = "1.13.0"
 terraform      = "1.16.4"
 terraform-docs = "0.24.0"
 terragrunt     = "1.1.6"
@@ -49,12 +49,12 @@ tflint         = "0.64.0"
 tfsec          = "1.28.14"
 
 # Cloud / Kubernetes
-aws-cli     = { version = "2.37.1", symlink_bins = "true" }
-cloudflared = "2026.9.1"
-gcloud      = "586.0.0"
+aws-cli     = { version = "2.37.8", symlink_bins = "true" }
+cloudflared = "2026.9.3"
+gcloud      = "587.0.0"
 helm        = "4.3.0"
 k9s         = "0.51.0"
-kubectl     = "1.37.0"
+kubectl     = "1.37.1"
 kubecolor   = "0.8.0"
 kubectx     = "0.11.0"
 minikube    = "1.39.0"
@@ -64,12 +64,12 @@ atuin                     = "18.23.0"
 delta                     = "0.19.2"
 direnv                    = "2.37.1"
 fzf                       = "0.74.4"
-gh                        = "2.101.0"
+gh                        = "2.102.0"
 "github:joshmedeski/sesh" = "2.31.0"
 just                      = "1.58.0"
 lazydocker                = "0.25.2"
 lazygit                   = "0.65.1"
-prek                      = "0.5.3"
+prek                      = "0.5.4"
 shellcheck                = "0.11.0"
 shfmt                     = "3.14.1"
 tmux                      = "3.7c"
@@ -95,8 +95,8 @@ jq                                   = "1.8.2"
 ripgrep                              = "15.2.0"
 sqlite                               = "3.53.4"
 yazi                                 = "26.9.1"
-yq                                   = "4.53.6"
-herdr                                = "0.9.1"
+yq                                   = "4.54.1"
+herdr                                = "0.9.3"
 "github:agavra/tuicr" = "latest"
 
 [settings]
