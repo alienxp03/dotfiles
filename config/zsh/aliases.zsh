@@ -145,4 +145,3 @@ alias happy-codex='happy codex --dangerously-bypass-approvals-and-sandbox'
 alias pi-langfuse='LANGFUSE_PUBLIC_KEY="$DEV_LANGFUSE_PUBLIC_KEY" LANGFUSE_SECRET_KEY="$DEV_LANGFUSE_SECRET_KEY" LANGFUSE_BASE_URL="$DEV_LANGFUSE_BASE_URL" LANGFUSE_PRIVACY_PRESET="$DEV_LANGFUSE_PRIVACY_PRESET" pi --approve'
 alias pix='mise x node@26 -- pi'
 
-alias js='just'

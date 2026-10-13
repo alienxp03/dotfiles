@@ -1,3 +1,11 @@
+lh-npm-auth:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "$HOME"
+  gcloud auth login
+  gcloud auth application-default login
+  pnpm dlx google-artifactregistry-auth --repo-config "$HOME/.npmrc" --credential-config "$HOME/.npmrc"
+
 # Run with: jg llama-qwen3.8-27b
 llama-qwen3-8-27b:
   @llama serve -hf ggml-org/Qwen3.8-27B-GGUF:Q4_K_M -hfd ggml-org/Qwen3.8-27B-GGUF:Q4_0 --spec-default --spec-type draft-mtp --reasoning-preserve

@@ -1,5 +1,8 @@
+# Clear any old alias before defining the global just command.
+unalias js 2>/dev/null
+
 # Run global just recipes. Keep the public command name dotted for convenience.
-jg() {
+js() {
 	if [[ "$1" == "llama-qwen3.8-27b" ]]; then
 		shift
 		just --global-justfile llama-qwen3-8-27b "$@"
@@ -8,14 +11,15 @@ jg() {
 	fi
 }
 
-_jg() {
+_js() {
 	local -a recipes
 	recipes=(
 		'llama-qwen3.8-27b:Serve Qwen 3.8 27B with llama'
+		'lh-npm-auth:Refresh loveholidays npm credentials'
 	)
 	_describe 'global just recipe' recipes
 }
-compdef _jg jg
+compdef _js js
 
 # Setup a 3-pane workspace in a new window
 function ide_tmux() {
