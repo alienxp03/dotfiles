@@ -24,7 +24,8 @@ local function findChromeTabToggle(element)
 	local description = axAttribute(element, "AXDescription")
 	if
 		role == "AXButton"
-		and (description == "Collapse tabs" or description == "Expand tabs")
+		and type(description) == "string"
+		and (description:match("^Collapse tabs") or description:match("^Expand tabs"))
 	then
 		return element
 	end
