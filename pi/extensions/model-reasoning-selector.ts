@@ -23,7 +23,7 @@ import {
 
 type ThinkingLevel = Parameters<ExtensionAPI["setThinkingLevel"]>[0];
 
-const MODEL_SELECTOR_SHORTCUT = "ctrl+shift+m" as const;
+const MODEL_SELECTOR_SHORTCUT = "ctrl+alt+o" as const;
 
 const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
   off: "No reasoning",
