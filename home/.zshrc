@@ -89,7 +89,7 @@ if [[ -f "$_zcompdump" ]]; then
 else
 	_zcompdump_stale=1
 fi
-if ((!_zcompdump_stale && _zcompdump_mtime > EPOCHSECONDS - 86400)); then
+if ((! _zcompdump_stale && _zcompdump_mtime > EPOCHSECONDS - 86400)); then
 	compinit -C
 else
 	compinit

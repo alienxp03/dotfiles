@@ -28,12 +28,12 @@ pnpm           = "12.8.1"
 "npm:@mermaid-js/mermaid-cli" = "12.0.0"
 
 # AI agents
-"npm:ccusage"                        = "20.0.26"
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.291", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "1.0.4"
-"npm:@openai/codex"                   = "0.160.1"
+"npm:ccusage"                         = "20.0.26"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.296", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "1.2.0"
+"npm:@openai/codex"                   = "0.162.1"
 "npm:happy"                           = { version = "1.2.5", npm_args = "--ignore-scripts=false" }
-"npm:opencode-ai"                     = { version = "1.18.34", npm_args = "--ignore-scripts=false" }
+"npm:opencode-ai"                     = { version = "1.19.0", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.3.0"
 
 # Python tooling
@@ -97,7 +97,7 @@ sqlite                               = "3.53.4"
 yazi                                 = "26.9.1"
 yq                                   = "4.54.1"
 herdr                                = "0.9.3"
-"github:agavra/tuicr" = "latest"
+"github:agavra/tuicr"                = "latest"
 
 [settings]
 experimental = true
