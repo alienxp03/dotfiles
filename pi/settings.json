@@ -2,14 +2,13 @@
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "medium",
-  "lastChangelogVersion": "1.0.4",
+  "lastChangelogVersion": "1.2.0",
   "collapseChangelog": true,
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     "npm:@ff-labs/pi-fff",
     "npm:pi-vim",
-    "git:https://github.com/hasit/pi-community-themes",
     "npm:@juicesharp/rpiv-ask-user-question"
   ],
   "skills": [
