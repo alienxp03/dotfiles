@@ -24,7 +24,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-	getDefaultSessionDir,
+	SessionManager,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
 	type ExtensionContext,
@@ -206,7 +206,7 @@ export default function (pi: ExtensionAPI) {
 				if (!newDir) return;
 				const confirmed = await ctx.ui.confirm(
 					"Move this session?",
-					`From: ${ctx.cwd}\nTo: ${newDir}\nKeep the conversation and session ID. Reload project rules and tools in the new folder.`,
+					`From: ${ctx.cwd}\nTo: ${newDir}`,
 				);
 				if (!confirmed) return;
 				if (!ctx.isIdle() || ctx.hasPendingMessages()) {
@@ -218,7 +218,9 @@ export default function (pi: ExtensionAPI) {
 					ctx.ui.notify("No saved session file. Send a message first, then try again.", "warning");
 					return;
 				}
-				const move = prepareSessionMove(source, getDefaultSessionDir(newDir), newDir);
+				// Creating this manager computes Pi's default store without writing a session file.
+				const targetDir = SessionManager.create(newDir).getSessionDir();
+				const move = prepareSessionMove(source, targetDir, newDir);
 				// Use only the fresh context after replacement. Keep both files on errors.
 				const result = await ctx.switchSession(move.target, {
 					withSession: async (next) => {
