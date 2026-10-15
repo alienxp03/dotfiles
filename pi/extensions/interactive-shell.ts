@@ -21,6 +21,8 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 // Default interactive commands - editors, pagers, git ops, TUIs
@@ -128,7 +130,11 @@ function isInteractiveCommand(command: string): boolean {
 	return false;
 }
 
-async function runInteractiveCommand(command: string, ctx: ExtensionContext): Promise<number | null> {
+async function runInteractiveCommand(
+	command: string,
+	ctx: ExtensionContext,
+	env: NodeJS.ProcessEnv = process.env,
+): Promise<number | null> {
 	return ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
 		// Stop TUI to release terminal
 		tui.stop();
@@ -140,7 +146,8 @@ async function runInteractiveCommand(command: string, ctx: ExtensionContext): Pr
 		const shell = process.env.SHELL || "/bin/sh";
 		const result = spawnSync(shell, ["-c", command], {
 			stdio: "inherit",
-			env: process.env,
+			cwd: ctx.cwd,
+			env,
 		});
 
 		// Restart TUI
@@ -155,12 +162,43 @@ async function runInteractiveCommand(command: string, ctx: ExtensionContext): Pr
 	});
 }
 
+function shellQuote(value: string): string {
+	return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function runLazyGit(ctx: ExtensionContext): Promise<number | null> {
+	const auxDir = join(ctx.cwd, "aux");
+	mkdirSync(auxDir, { recursive: true });
+	const tempDir = mkdtempSync(join(auxDir, "pi-lazygit-"));
+	const newDirFile = join(tempDir, "newdir");
+
+	try {
+		const exitCode = await runInteractiveCommand("lazygit", ctx, {
+			...process.env,
+			LAZYGIT_NEW_DIR_FILE: newDirFile,
+		});
+		if (!existsSync(newDirFile)) return exitCode;
+
+		const newDir = readFileSync(newDirFile, "utf8").replace(/[\r\n]+$/, "");
+		if (!newDir || !statSync(newDir).isDirectory()) return exitCode;
+		if (realpathSync(newDir) === realpathSync(ctx.cwd)) return exitCode;
+
+		ctx.ui.notify(
+			`Lazygit moved to ${newDir}. Pi still uses ${ctx.cwd}.\nExit Pi, then run:\ncd ${shellQuote(newDir)} && pi`,
+			"warning",
+		);
+		return exitCode;
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
 export default function (pi: ExtensionAPI) {
 	pi.registerShortcut("ctrl+g", {
 		description: "Open LazyGit",
 		handler: async (ctx) => {
 			if (ctx.mode !== "tui") return;
-			await runInteractiveCommand("lazygit", ctx);
+			await runLazyGit(ctx);
 		},
 	});
 
