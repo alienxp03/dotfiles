@@ -23,7 +23,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+	getDefaultSessionDir,
+	type ExtensionAPI,
+	type ExtensionCommandContext,
+	type ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+import { prepareSessionMove } from "./interactive-shell/session-move.ts";
 
 // Default interactive commands - editors, pagers, git ops, TUIs
 const DEFAULT_INTERACTIVE_COMMANDS = [
@@ -162,11 +168,7 @@ async function runInteractiveCommand(
 	});
 }
 
-function shellQuote(value: string): string {
-	return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-async function runLazyGit(ctx: ExtensionContext): Promise<number | null> {
+async function runLazyGit(ctx: ExtensionCommandContext): Promise<string | undefined> {
 	const auxDir = join(ctx.cwd, "aux");
 	mkdirSync(auxDir, { recursive: true });
 	const tempDir = mkdtempSync(join(auxDir, "pi-lazygit-"));
@@ -177,28 +179,69 @@ async function runLazyGit(ctx: ExtensionContext): Promise<number | null> {
 			...process.env,
 			LAZYGIT_NEW_DIR_FILE: newDirFile,
 		});
-		if (!existsSync(newDirFile)) return exitCode;
+		if (exitCode !== 0 || !existsSync(newDirFile)) return undefined;
 
 		const newDir = readFileSync(newDirFile, "utf8").replace(/[\r\n]+$/, "");
-		if (!newDir || !statSync(newDir).isDirectory()) return exitCode;
-		if (realpathSync(newDir) === realpathSync(ctx.cwd)) return exitCode;
-
-		ctx.ui.notify(
-			`Lazygit moved to ${newDir}. Pi still uses ${ctx.cwd}.\nExit Pi, then run:\ncd ${shellQuote(newDir)} && pi`,
-			"warning",
-		);
-		return exitCode;
+		if (!newDir || !statSync(newDir).isDirectory()) return undefined;
+		if (realpathSync(newDir) === realpathSync(ctx.cwd)) return undefined;
+		return realpathSync(newDir);
 	} finally {
 		rmSync(tempDir, { recursive: true, force: true });
 	}
 }
 
 export default function (pi: ExtensionAPI) {
+	let lazyGitOpen = false;
+	pi.registerCommand("lazygit-session", {
+		description: "Open LazyGit and offer to move this session to its selected worktree",
+		handler: async (_args, ctx) => {
+			if (ctx.mode !== "tui" || lazyGitOpen) return;
+			if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+				ctx.ui.notify("Wait for Pi to finish before switching worktrees.", "warning");
+				return;
+			}
+			lazyGitOpen = true;
+			try {
+				const newDir = await runLazyGit(ctx);
+				if (!newDir) return;
+				const confirmed = await ctx.ui.confirm(
+					"Move this session?",
+					`From: ${ctx.cwd}\nTo: ${newDir}\nKeep the conversation and session ID. Reload project rules and tools in the new folder.`,
+				);
+				if (!confirmed) return;
+				if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+					ctx.ui.notify("Pi is busy. Session was not moved.", "warning");
+					return;
+				}
+				const source = ctx.sessionManager.getSessionFile();
+				if (!source || !existsSync(source)) {
+					ctx.ui.notify("No saved session file. Send a message first, then try again.", "warning");
+					return;
+				}
+				const move = prepareSessionMove(source, getDefaultSessionDir(newDir), newDir);
+				// Use only the fresh context after replacement. Keep both files on errors.
+				const result = await ctx.switchSession(move.target, {
+					withSession: async (next) => {
+						try {
+							move.complete();
+							next.ui.notify(`Session moved to ${newDir}.`, "info");
+						} catch (error) {
+							next.ui.notify(`Session loaded. Could not remove the old file: ${String(error)}`, "warning");
+						}
+					},
+				});
+				if (result.cancelled) move.cancel();
+			} finally {
+				lazyGitOpen = false;
+			}
+		},
+	});
+
 	pi.registerShortcut("ctrl+g", {
 		description: "Open LazyGit",
 		handler: async (ctx) => {
 			if (ctx.mode !== "tui") return;
-			await runLazyGit(ctx);
+			pi.sendUserMessage("/lazygit-session", { expandPromptTemplates: true });
 		},
 	});
 
