@@ -46,17 +46,5 @@ function _zsh_bind_partial_accept() {
 }
 zvm_after_init_commands+=(_zsh_bind_partial_accept)
 
-# Keep Kitty shell integration active after reloading with `exec zsh`.
-if [[ -n "$KITTY_INSTALLATION_DIR" ]]; then
-	export KITTY_SHELL_INTEGRATION="no-title"
-	autoload -Uz -- "$KITTY_INSTALLATION_DIR"/shell-integration/zsh/kitty-integration
-	kitty-integration
-	unfunction kitty-integration
-
-	# Name each Kitty tab once, using the directory of its first shell.
-	# The exported marker is inherited by windows launched from this tab.
-	if [[ -z ${KITTY_TAB_TITLE_INITIALIZED:-} ]]; then
-		kitty @ set-tab-title "${PWD:t}" >/dev/null 2>&1
-		export KITTY_TAB_TITLE_INITIALIZED=1
-	fi
-fi
+# Kitty shell integration and the tab-title call live in ~/.zshrc: integration
+# wraps the first prompt (phase 1), the `kitty @` subprocess defers to phase 2.
