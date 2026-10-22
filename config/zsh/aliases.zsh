@@ -72,7 +72,7 @@ alias sub=subl
 
 # tmux/nvim
 alias tx='tmux attach-session'
-alias tn="tmux new -s $(pwd | sed 's/.*\///g')"
+alias tn='tmux new -s "${PWD:t}"'
 
 # Resume Pi in a project-scoped tmux session. The global tmux status
 # configuration applies to these sessions too.

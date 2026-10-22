@@ -1,3 +1,17 @@
+# Kitty skips system rc files. Load their PATH and UTF-8 settings with builtins
+# instead of starting path_helper and locale for each split.
+if [[ ! -o globalrcs ]]; then
+	export LANG="${LANG:-C.UTF-8}"
+	setopt combiningchars
+	disable log
+	typeset -a _zsh_system_paths
+	for _zsh_path_file in /etc/paths /etc/paths.d/*(N); do
+		[[ ! -r $_zsh_path_file ]] || _zsh_system_paths+=("${(@f)$(<"$_zsh_path_file")}")
+	done
+	path=("${_zsh_system_paths[@]}" "${path[@]}")
+	unset _zsh_system_paths _zsh_path_file
+fi
+
 # Hardcoded brew shellenv (avoids ~55ms subprocess)
 export HOMEBREW_PREFIX="/opt/homebrew"
 export HOMEBREW_CELLAR="/opt/homebrew/Cellar"
