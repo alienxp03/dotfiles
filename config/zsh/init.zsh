@@ -38,7 +38,7 @@ if [[ -n "$KITTY_INSTALLATION_DIR" ]]; then
 	# Name each Kitty tab once, using the directory of its first shell.
 	# The exported marker is inherited by windows launched from this tab.
 	if [[ -z ${KITTY_TAB_TITLE_INITIALIZED:-} ]]; then
-		(kitty @ set-tab-title "${PWD:t}" >/dev/null 2>&1 &!)
+		(kitty @ set-tab-title "${PWD:t}" >/dev/null 2>&1 &|)
 		export KITTY_TAB_TITLE_INITIALIZED=1
 	fi
 fi
@@ -73,5 +73,5 @@ if [[ -n ${HERDR_ACTIVE_PANE_ID:-${HERDR_PANE_ID:-}} ]]; then
 		herdr pane rename "$pane_id" "${workspace_label}-${pane_number}" >/dev/null 2>&1 || return
 		_HERDR_PANE_NAMED=1
 	}
-	(_herdr_auto_name_pane >/dev/null 2>&1 &!)
+	(_herdr_auto_name_pane >/dev/null 2>&1 &|)
 fi

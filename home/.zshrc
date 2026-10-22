@@ -12,7 +12,7 @@ fpath=("$HOME/.zsh/completions" $fpath)
 # Load completions on the first Tab. An absent or old dump cannot delay
 # a new shell.
 typeset -ga _zsh_compdefs=()
-compdef() { _zsh_compdefs+=("${(j: :)${(q)@}}") }
+compdef() { _zsh_compdefs+=("${(j: :)${(q)@}}"); }
 _zsh_complete() {
 	unfunction compdef
 	autoload -Uz compinit
@@ -34,7 +34,8 @@ _zsh_complete() {
 	local fzf_tab="$plugin_root/https-COLON--SLASH--SLASH-github.com-SLASH-Aloxaf-SLASH-fzf-tab/fzf-tab.plugin.zsh"
 	[[ ! -r $fzf_tab ]] || source "$fzf_tab"
 	[[ ! -s $HOME/.bun/_bun ]] || source "$HOME/.bun/_bun"
-	if (( $+widgets[fzf-tab-complete] )); then
+	local completion_widget=fzf-tab-complete
+	if (($+widgets[$completion_widget])); then
 		zle fzf-tab-complete
 	else
 		zle expand-or-complete
@@ -42,8 +43,7 @@ _zsh_complete() {
 }
 zle -N _zsh_complete
 
-# Source definitions only. Generate integrations when first used, never on
-# startup. Existing caches contain shell functions and completion definitions.
+# Reuse generated integration definitions until their executable changes.
 _cached_source() {
 	local cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/$1.zsh" bin=$2
 	shift 2
@@ -63,6 +63,9 @@ RPROMPT=''
 # Native vi mode avoids a plugin callback on every input character.
 bindkey -v
 KEYTIMEOUT=1
+# Let Backspace cross newlines and the point where insert mode started.
+bindkey -M viins '^?' backward-delete-char
+bindkey -M viins '^H' backward-delete-char
 bindkey -M viins '^[f' forward-word
 bindkey -M viins '^[b' backward-word
 bindkey -M viins '^I' _zsh_complete
@@ -78,7 +81,7 @@ unset _atuin_bin
 
 # Load Atuin's own integration on the first command or history action. Its
 # session UUID and search index do not need to delay the first prompt.
-if (( $+commands[atuin] )); then
+if (($+commands[atuin])); then
 	export ATUIN_TMUX_POPUP=false
 	setopt interactivecomments
 	_atuin_init() {
@@ -86,7 +89,8 @@ if (( $+commands[atuin] )); then
 		cache_id=${cache_id//\//_}
 		_cached_source "atuin-$cache_id" "$commands[atuin]" atuin init zsh || return
 		# Older Atuin versions can omit optional widgets such as AI search.
-		if [[ $widgets[self-atuin-ai-question-mark] == user:_atuin_widget_init ]]; then
+		local ai_widget=self-atuin-ai-question-mark
+		if [[ ${widgets[$ai_widget]} == user:_atuin_widget_init ]]; then
 			zle -A self-insert self-atuin-ai-question-mark
 		fi
 		unfunction _atuin_init
@@ -128,23 +132,19 @@ if (( $+commands[atuin] )); then
 	bindkey -M emacs '?' self-atuin-ai-question-mark
 fi
 
-# Load Worktrunk on its first command, including its directory-change wrapper.
-if (( $+commands[wt] )); then
-	wt() {
-		unfunction wt
-		eval "$(command wt config shell init zsh)"
-		wt "$@"
-	}
+# Load Worktrunk's cached directory-change wrapper before the first command.
+if (($+commands[wt])); then
+	_cached_source worktrunk "$commands[wt]" command wt config shell init zsh
 fi
 
 _zsh_just_complete() {
 	_cached_source just "$commands[just]" env JUST_COMPLETE=zsh "$commands[just]" || return
 	_clap_dynamic_completer_just "$@"
 }
-(( ! $+commands[just] )) || compdef _zsh_just_complete just js
+((! $+commands[just])) || compdef _zsh_just_complete just js
 
 # Zoxide records directory changes, with no process at the first prompt.
-if (( $+commands[zoxide] )); then
+if (($+commands[zoxide])); then
 	if [[ -r ${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide.zsh ]]; then
 		source "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zoxide.zsh"
 	else
@@ -161,9 +161,9 @@ if (( $+commands[zoxide] )); then
 	fi
 fi
 
-# Load Fzf only when its file or directory picker is requested.
-_zsh_fzf() {
-	local widget=$1 vi_tab emacs_tab vi_history emacs_history
+# Load cached Fzf pickers without replacing lazy Tab or Atuin search.
+_zsh_fzf_init() {
+	local vi_tab emacs_tab vi_history emacs_history
 	vi_tab=$(bindkey -M viins '^I')
 	emacs_tab=$(bindkey -M emacs '^I')
 	vi_history=$(bindkey -M viins '^R')
@@ -173,25 +173,18 @@ _zsh_fzf() {
 	eval "bindkey -M emacs $emacs_tab"
 	eval "bindkey -M viins $vi_history"
 	eval "bindkey -M emacs $emacs_history"
-	zle "$widget"
 }
-_zsh_fzf_file() { _zsh_fzf fzf-file-widget }
-_zsh_fzf_cd() { _zsh_fzf fzf-cd-widget }
-if (( $+commands[fzf] )); then
-	zle -N _zsh_fzf_file
-	zle -N _zsh_fzf_cd
-	bindkey -M viins '^T' _zsh_fzf_file
-	bindkey -M emacs '^T' _zsh_fzf_file
-	bindkey -M viins '^[c' _zsh_fzf_cd
-	bindkey -M emacs '^[c' _zsh_fzf_cd
+if (($+commands[fzf])); then
+	_zsh_fzf_init
 fi
+unfunction _zsh_fzf_init
 
 _zsh_kubectl_complete() {
 	_cached_source kubectl "$commands[kubectl]" kubectl completion zsh || return
 	compdef _kubectl kubectl k
 	_kubectl "$@"
 }
-(( ! $+commands[kubectl] )) || compdef _zsh_kubectl_complete kubectl k
+((! $+commands[kubectl])) || compdef _zsh_kubectl_complete kubectl k
 
 # Run direnv only in a directory tree with .envrc, or when unloading an old
 # environment. Plain directories require only file checks.
@@ -205,12 +198,12 @@ _direnv_hook() {
 	fi
 	eval "$(command direnv export zsh)"
 }
-if (( $+commands[direnv] )); then
+if (($+commands[direnv])); then
 	precmd_functions=(${precmd_functions:#_direnv_hook} _direnv_hook)
 	chpwd_functions=(${chpwd_functions:#_direnv_hook} _direnv_hook)
 fi
 
-# Add installed completion definitions without loading input plugins.
+# Use installed plugin files directly, without a plugin manager at startup.
 if [[ $OSTYPE == darwin* ]]; then
 	_zsh_plugin_root="${XDG_CACHE_HOME:-$HOME/Library/Caches}/antidote"
 else
@@ -218,6 +211,10 @@ else
 fi
 _zsh_plugin_root+=/https-COLON--SLASH--SLASH-github.com-SLASH-zsh-users-SLASH-
 [[ ! -r ${_zsh_plugin_root}zsh-completions/src ]] || fpath+=("${_zsh_plugin_root}zsh-completions/src")
-unset _zsh_plugin_root
 
 source "$HOME/.config/zsh/git-prompt.zsh"
+
+[[ ! -r ${_zsh_plugin_root}zsh-autosuggestions/zsh-autosuggestions.zsh ]] || source "${_zsh_plugin_root}zsh-autosuggestions/zsh-autosuggestions.zsh"
+# Syntax highlighting must load after widgets and other input plugins.
+[[ ! -r ${_zsh_plugin_root}zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] || source "${_zsh_plugin_root}zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+unset _zsh_plugin_root

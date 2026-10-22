@@ -1,9 +1,9 @@
 # Read HEAD with shell builtins. No Git process or file-status scan is needed.
-(( ! $+functions[gitstatus_stop] )) || gitstatus_stop DOTFILES
+((! $+functions[gitstatus_stop])) || gitstatus_stop DOTFILES
 
 _zsh_git_precmd() {
 	local exit_status=$?
-	if (( exit_status )); then
+	if ((exit_status)); then
 		_zsh_prompt_arrow='%F{red}❯%f '
 	else
 		_zsh_prompt_arrow='%F{green}❯%f '
