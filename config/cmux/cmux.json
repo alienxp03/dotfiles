@@ -17,6 +17,7 @@
   },
   "shortcuts" : {
     "bindings" : {
+      "clearScreenKeepScrollback" : "cmd+k",
       "toggleSplitZoom" : "cmd+shift+f",
       "findInDirectory" : null,
       "nextSidebarTab" : "cmd+shift+]",
