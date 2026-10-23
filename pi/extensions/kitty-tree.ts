@@ -189,6 +189,39 @@ async function cloneInKitty(
 	return {};
 }
 
+function shellQuote(value: string): string {
+	return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+async function cloneInCmux(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	direction: Direction,
+	sessionPath: string,
+): Promise<CloneResult> {
+	const command = `cd -- ${shellQuote(ctx.sessionManager.getCwd())} && pi --session ${shellQuote(sessionPath)}`;
+	const split = await pi.exec(
+		process.env.CMUX_PI_CMUX_BIN || process.env.CMUX_BUNDLED_CLI_PATH || "cmux",
+		[
+			"new-split",
+			direction === "top" ? "up" : direction === "bottom" ? "down" : direction,
+			"--workspace",
+			process.env.CMUX_WORKSPACE_ID!,
+			"--surface",
+			process.env.CMUX_SURFACE_ID!,
+			"--command",
+			command,
+			"--focus",
+			"true",
+		],
+		{ timeout: 5000 },
+	);
+	if (split.code !== 0) {
+		throw new Error(split.stderr.trim() || split.stdout.trim() || "cmux split failed");
+	}
+	return {};
+}
+
 async function cloneInHerdr(
 	pi: ExtensionAPI,
 	ctx: ExtensionCommandContext,
@@ -273,8 +306,13 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.notify("/kclone could not find the current Herdr pane", "error");
 			return;
 		}
-		if (!herdr && !process.env.KITTY_WINDOW_ID) {
-			ctx.ui.notify("/kclone requires Kitty or Herdr", "error");
+		const cmux = !herdr && Boolean(process.env.CMUX_WORKSPACE_ID || process.env.CMUX_SURFACE_ID);
+		if (cmux && (!process.env.CMUX_WORKSPACE_ID || !process.env.CMUX_SURFACE_ID)) {
+			ctx.ui.notify("/kclone could not find the current cmux workspace and surface", "error");
+			return;
+		}
+		if (!herdr && !cmux && !process.env.KITTY_WINDOW_ID) {
+			ctx.ui.notify("/kclone requires Kitty, Herdr, or cmux", "error");
 			return;
 		}
 
@@ -291,13 +329,15 @@ export default function (pi: ExtensionAPI) {
 		try {
 			cloneResult = herdr
 				? await cloneInHerdr(pi, ctx, direction, sessionPath)
-				: await cloneInKitty(pi, ctx, direction, sessionPath);
+				: cmux
+					? await cloneInCmux(pi, ctx, direction, sessionPath)
+					: await cloneInKitty(pi, ctx, direction, sessionPath);
 		} catch (error) {
-			// Herdr may leave a pane running when agent startup times out.
+			// Herdr or cmux may leave a pane running when startup times out.
 			// Keep its session file available in that case.
-			if (!herdr) await rm(sessionPath, { force: true });
+			if (!herdr && !cmux) await rm(sessionPath, { force: true });
 			ctx.ui.notify(
-				`Could not open ${herdr ? "Herdr" : "Kitty"} pane: ${getErrorMessage(error)}`,
+				`Could not open ${herdr ? "Herdr" : cmux ? "cmux" : "Kitty"} pane: ${getErrorMessage(error)}`,
 				"error",
 			);
 			return;
@@ -320,7 +360,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const command = {
-		description: "Clone the current conversation into a Kitty or Herdr pane",
+		description: "Clone the current conversation into a Kitty, Herdr, or cmux pane",
 		getArgumentCompletions: getDirectionCompletions,
 		handler: cloneHandler,
 	};
