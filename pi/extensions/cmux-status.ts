@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type HookRecord = {
@@ -20,6 +21,53 @@ export default function (pi: ExtensionAPI) {
   let generation = 0;
   let queue = Promise.resolve();
   const blocked = new Set<string>();
+  let completedAt: number | undefined;
+  let completionAcknowledged = false;
+  let runStarted = false;
+  let runFailed = false;
+  let focusWatcher: ReturnType<typeof spawn> | undefined;
+
+  const cmuxExecutable = () => process.env.CMUX_PI_CMUX_BIN || process.env.CMUX_BUNDLED_CLI_PATH || "cmux";
+
+  function watchFocus() {
+    if (!context || focusWatcher) return;
+    const epoch = generation;
+    const child = spawn(cmuxExecutable(), [
+      "events", "--name", "workspace.selected", "--name", "surface.focused",
+      "--name", "pane.focused", "--reconnect", "--no-heartbeat",
+    ], { stdio: ["ignore", "pipe", "ignore"] });
+    focusWatcher = child;
+    const lines = createInterface({ input: child.stdout! });
+    lines.on("line", (line) => {
+      if (epoch !== generation || completedAt === undefined) return;
+      try {
+        const event = JSON.parse(line);
+        const occurredAt = Date.parse(event.occurred_at);
+        if (event.type !== "event" || !Number.isFinite(occurredAt) || occurredAt < completedAt
+          || event.workspace_id !== process.env.CMUX_WORKSPACE_ID) return;
+        const selectedWorkspace = event.name === "workspace.selected";
+        const focusedPane = ["surface.focused", "pane.focused"].includes(event.name)
+          && event.surface_id === process.env.CMUX_SURFACE_ID;
+        if (!selectedWorkspace && !focusedPane) return;
+        completedAt = undefined;
+        completionAcknowledged = true;
+        reconcile();
+      } catch {
+        // Ignore malformed stream frames; never treat them as acknowledgment.
+      }
+    });
+    const closed = () => {
+      lines.close();
+      if (focusWatcher === child) focusWatcher = undefined;
+    };
+    child.on("error", closed);
+    child.on("close", closed);
+  }
+
+  function stopFocusWatcher() {
+    focusWatcher?.kill();
+    focusWatcher = undefined;
+  }
 
   const enabled = () => process.env.CMUX_PI_HOOKS_DISABLED !== "1"
     && !!process.env.CMUX_SURFACE_ID
@@ -54,10 +102,10 @@ export default function (pi: ExtensionAPI) {
     await run(args, input);
   }
 
-  async function inputColor() {
+  async function setStatus(label: string, icon: string, color: string, priority = "0") {
     await run([
-      "set-status", "pi", "Pi needs input",
-      "--icon", "bell.fill", "--color", "#FF9F0A", "--priority", "100",
+      "set-status", "pi", label,
+      "--icon", icon, "--color", color, "--priority", priority,
       "--workspace", process.env.CMUX_WORKSPACE_ID!,
       "--panel", process.env.CMUX_SURFACE_ID!,
     ]);
@@ -66,7 +114,7 @@ export default function (pi: ExtensionAPI) {
   async function run(args: string[], input?: string) {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(
-        process.env.CMUX_PI_CMUX_BIN || process.env.CMUX_BUNDLED_CLI_PATH || "cmux",
+        cmuxExecutable(),
         args,
         { timeout: 5000, stdio: ["pipe", "ignore", "ignore"] },
       );
@@ -90,9 +138,11 @@ export default function (pi: ExtensionAPI) {
     pending = true;
     queue = queue.then(async () => {
       if (epoch !== generation || !enabled()) return;
+      watchFocus();
       const record = await recordFor(ctx);
       if (!record || epoch !== generation) return;
       if (blocked.size > 0) {
+        completedAt = undefined;
         if (record.runtimeStatus !== "needsInput") {
           await send(ctx, "notification", record, {
             hook_event_name: "questionAsked",
@@ -101,7 +151,7 @@ export default function (pi: ExtensionAPI) {
             notification: { type: "question" },
           });
         }
-        await inputColor();
+        await setStatus("Pi needs input", "bell.fill", "#FF9F0A", "100");
       } else if (ctx.isIdle() && record.runtimeStatus === "running") {
         // No completion toast for a fresh pane or a missed idle transition.
         // Match the stored turn so a delayed repair cannot finish a newer prompt.
@@ -110,9 +160,15 @@ export default function (pi: ExtensionAPI) {
         await send(ctx, "approval-response", record, { cmux_pi_idle_dialog: ctx.isIdle() });
         resumePending = false;
       } else if (record.runtimeStatus === "needsInput") {
+        completedAt = undefined;
         // Also color standard dialogs and final questions reported by the native hook.
         // Reapply on ticks because native hooks use blue for both working and input.
-        await inputColor();
+        await setStatus("Pi needs input", "bell.fill", "#FF9F0A", "100");
+      } else if (ctx.isIdle() && completedAt !== undefined) {
+        await setStatus("Done", "checkmark.circle.fill", "#30D158");
+      } else if (ctx.isIdle() && completionAcknowledged) {
+        await setStatus("Idle", "pause.circle.fill", "#8E8E93");
+        completionAcknowledged = false;
       } else if (record.runtimeStatus === "running" || ctx.isIdle()) {
         resumePending = false;
       }
@@ -124,10 +180,16 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     if (timer) clearInterval(timer);
     generation += 1;
+    stopFocusWatcher();
+    completedAt = undefined;
+    completionAcknowledged = false;
+    runStarted = false;
+    runFailed = false;
     blocked.clear();
     resumePending = false;
     context = ctx.mode === "tui" && enabled() ? ctx : undefined;
     if (!context) return;
+    watchFocus();
     // Native session registration is detached. Poll instead of racing its startup hook.
     timer = setInterval(() => reconcile(), 2000);
     timer.unref();
@@ -143,9 +205,29 @@ export default function (pi: ExtensionAPI) {
     reconcile(!event.active);
   });
 
-  pi.on("agent_settled", () => reconcile());
+  pi.on("agent_start", () => {
+    if (!context) return;
+    completedAt = undefined;
+    completionAcknowledged = false;
+    runStarted = true;
+    runFailed = false;
+  });
+  pi.on("agent_end", (event) => {
+    const assistant = event.messages.findLast((message) => message.role === "assistant");
+    runFailed = assistant?.role === "assistant"
+      && (assistant.stopReason === "error" || assistant.stopReason === "aborted");
+  });
+  pi.on("agent_settled", (event, ctx) => {
+    if (context && ctx.isIdle() && runStarted && !runFailed && !event.aborted) {
+      completedAt = Date.now();
+      completionAcknowledged = false;
+    }
+    runStarted = false;
+    reconcile();
+  });
   pi.on("session_shutdown", async () => {
     generation += 1;
+    stopFocusWatcher();
     if (timer) clearInterval(timer);
     timer = undefined;
     context = undefined;
