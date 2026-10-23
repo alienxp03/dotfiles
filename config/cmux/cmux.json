@@ -6,6 +6,11 @@
     "tabBarVisibility" : "multiple-tabs",
     "reorderOnNotification" : false
   },
+  "integrations" : {
+    "claudeCode" : {
+      "hooksEnabled" : false
+    }
+  },
   "automation" : {
     "workspaceAutoNaming" : false
   },
