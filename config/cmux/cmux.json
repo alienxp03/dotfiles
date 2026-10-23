@@ -2,10 +2,17 @@
   "$schema" : "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
   "schemaVersion" : 1,
   "app" : {
-    "minimalMode" : false
+    "minimalMode" : false,
+    "reorderOnNotification" : false
   },
   "automation" : {
     "workspaceAutoNaming" : false
+  },
+  "notifications" : {
+    "sound" : "none",
+    "agentPermissionPrompt" : true,
+    "agentTurnComplete" : "never",
+    "agentIdleReminder" : true
   },
   "shortcuts" : {
     "bindings" : {
