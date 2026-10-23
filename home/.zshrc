@@ -63,6 +63,19 @@ RPROMPT=''
 # Native vi mode avoids a plugin callback on every input character.
 bindkey -v
 KEYTIMEOUT=1
+
+# cmux: steady bar while typing, steady block in vi normal mode.
+if [[ -n ${CMUX_SURFACE_ID:-} ]]; then
+	_zsh_cmux_cursor() {
+		case $KEYMAP in
+		vicmd) printf '\e[2 q' ;;
+		*) printf '\e[6 q' ;;
+		esac
+	}
+	autoload -Uz add-zle-hook-widget
+	add-zle-hook-widget line-init _zsh_cmux_cursor
+	add-zle-hook-widget keymap-select _zsh_cmux_cursor
+fi
 # Let Backspace cross newlines and the point where insert mode started.
 bindkey -M viins '^?' backward-delete-char
 bindkey -M viins '^H' backward-delete-char
