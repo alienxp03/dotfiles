@@ -3,6 +3,7 @@
   "schemaVersion" : 1,
   "app" : {
     "minimalMode" : false,
+    "tabBarVisibility" : "multiple-tabs",
     "reorderOnNotification" : false
   },
   "automation" : {
