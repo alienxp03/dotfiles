@@ -29,7 +29,5 @@
   ],
   "hideThinkingBlock": false,
   "doubleEscapeAction": "none",
-  "extensions": [
-    "-builtin:mcp"
-  ]
+  "extensions": []
 }
