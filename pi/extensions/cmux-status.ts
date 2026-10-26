@@ -13,7 +13,21 @@ type HookRecord = {
   workspaceId?: string;
   runtimeStatus?: string;
   activePromptTurnId?: string;
+  turnSettled?: boolean;
+  hookEventName?: string;
 };
+
+function isCompletedResponse(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const message = value as { role?: unknown; stopReason?: unknown; content?: unknown };
+  if (message.role !== "assistant" || !["stop", "length"].includes(String(message.stopReason))) return false;
+  const text = typeof message.content === "string" ? message.content
+    : Array.isArray(message.content) ? message.content
+      .filter((block) => block?.type === "text" && typeof block.text === "string")
+      .map((block) => block.text).join("\n") : "";
+  // Match the generated hook's final-question rule, not cmux's keyword classifier.
+  return !/[?？]\s*$/.test(text.trim());
+}
 
 export default function (pi: ExtensionAPI) {
   let context: ExtensionContext | undefined;
@@ -25,6 +39,7 @@ export default function (pi: ExtensionAPI) {
   let completionAcknowledged = false;
   let runStarted = false;
   let runFailed = false;
+  let completedResponse = false;
   let focusWatcher: ReturnType<typeof spawn> | undefined;
 
   const cmuxExecutable = () => process.env.CMUX_PI_CMUX_BIN || process.env.CMUX_BUNDLED_CLI_PATH || "cmux";
@@ -159,8 +174,23 @@ export default function (pi: ExtensionAPI) {
       } else if (resumePending && record.runtimeStatus === "needsInput") {
         await send(ctx, "approval-response", record, { cmux_pi_idle_dialog: ctx.isIdle() });
         resumePending = false;
+      } else if (record.runtimeStatus === "needsInput" && ctx.isIdle() && completedResponse
+        && record.turnSettled === true && !record.activePromptTurnId
+        && record.hookEventName?.toLowerCase() === "stop") {
+        // cmux can classify completion prose (for example, “approved refactor”)
+        // as an approval request. Repair only a settled Stop, never a live dialog.
+        await send(ctx, "approval-response", record, { cmux_pi_idle_dialog: true });
+        if (epoch === generation && ctx.isIdle() && blocked.size === 0) {
+          await setStatus(completedAt === undefined ? "Idle" : "Done",
+            completedAt === undefined ? "pause.circle.fill" : "checkmark.circle.fill",
+            completedAt === undefined ? "#8E8E93" : "#30D158");
+        }
       } else if (record.runtimeStatus === "needsInput") {
-        completedAt = undefined;
+        // A completion Notification can arrive before its Stop. Retain Done
+        // until that boundary lets us verify and repair a misclassification.
+        if (!completedResponse || record.hookEventName?.toLowerCase() !== "notification") {
+          completedAt = undefined;
+        }
         // Also color standard dialogs and final questions reported by the native hook.
         // Reapply on ticks because native hooks use blue for both working and input.
         await setStatus("Pi needs input", "bell.fill", "#FF9F0A", "100");
@@ -185,10 +215,15 @@ export default function (pi: ExtensionAPI) {
     completionAcknowledged = false;
     runStarted = false;
     runFailed = false;
+    completedResponse = false;
     blocked.clear();
     resumePending = false;
     context = ctx.mode === "tui" && enabled() ? ctx : undefined;
     if (!context) return;
+    const lastAssistant = ctx.sessionManager.getBranch().findLast((entry) =>
+      entry.type === "message" && entry.message.role === "assistant");
+    completedResponse = ctx.isIdle() && lastAssistant?.type === "message"
+      && isCompletedResponse(lastAssistant.message);
     watchFocus();
     // Native session registration is detached. Poll instead of racing its startup hook.
     timer = setInterval(() => reconcile(), 2000);
@@ -211,14 +246,17 @@ export default function (pi: ExtensionAPI) {
     completionAcknowledged = false;
     runStarted = true;
     runFailed = false;
+    completedResponse = false;
   });
   pi.on("agent_end", (event) => {
     const assistant = event.messages.findLast((message) => message.role === "assistant");
+    completedResponse = isCompletedResponse(assistant);
     runFailed = assistant?.role === "assistant"
       && (assistant.stopReason === "error" || assistant.stopReason === "aborted");
   });
   pi.on("agent_settled", (event, ctx) => {
-    if (context && ctx.isIdle() && runStarted && !runFailed && !event.aborted) {
+    if (event.aborted) completedResponse = false;
+    if (context && ctx.isIdle() && runStarted && completedResponse && !runFailed && !event.aborted) {
       completedAt = Date.now();
       completionAcknowledged = false;
     }

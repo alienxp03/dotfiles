@@ -15,14 +15,14 @@ process.env.CMUX_SURFACE_ID = "surface-test";
 process.env.CMUX_WORKSPACE_ID = "workspace-test";
 delete process.env.CMUX_PI_HOOKS_DISABLED;
 
-async function harness(t, { idle = true, mode = "tui", status = "running", registered = true } = {}) {
+async function harness(t, { idle = true, mode = "tui", status = "running", registered = true, branch = [], recordState = {} } = {}) {
   const handlers = new Map();
   const events = new Map();
   const calls = [];
   const statusCalls = [];
   const watchers = [];
   let tick;
-  let record = { surfaceId: "surface-test", workspaceId: "workspace-test", runtimeStatus: status, activePromptTurnId: "turn-test" };
+  let record = { surfaceId: "surface-test", workspaceId: "workspace-test", runtimeStatus: status, activePromptTurnId: "turn-test", ...recordState };
   const save = () => writeFileSync(`${directory}/pi-hook-sessions.json`, JSON.stringify({ sessions: registered ? { "session-test": record } : {} }));
   save();
   t.mock.method(globalThis, "setInterval", (fn) => { tick = fn; return { unref() {} }; });
@@ -42,7 +42,8 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
       } else {
         const payload = JSON.parse(input);
         calls.push({ action: args[2], args, payload });
-        record.runtimeStatus = args[2] === "stop" ? "idle" : args[2] === "notification" ? "needsInput" : "running";
+        record.runtimeStatus = args[2] === "stop" || payload.cmux_pi_idle_dialog === true ? "idle"
+          : args[2] === "notification" ? "needsInput" : "running";
         save();
       }
       queueMicrotask(() => child.emit("close", 0));
@@ -51,7 +52,7 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
   });
   syncBuiltinESMExports();
   install({ on: (name, fn) => handlers.set(name, fn), events: { on: (name, fn) => events.set(name, fn) } });
-  const ctx = { mode, isIdle: () => idle, cwd: "/test", sessionManager: { getSessionId: () => "session-test" } };
+  const ctx = { mode, isIdle: () => idle, cwd: "/test", sessionManager: { getSessionId: () => "session-test", getBranch: () => branch } };
   const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
   handlers.get("session_start")({}, ctx);
   await flush();
@@ -60,9 +61,9 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
     type: "event", name: "workspace.selected", workspace_id: "workspace-test",
     occurred_at: new Date().toISOString(), ...event,
   })}\n`);
-  const complete = async (event = {}) => {
+  const complete = async (event = {}, text = "Done") => {
     handlers.get("agent_start")({}, ctx);
-    handlers.get("agent_end")({ messages: [{ role: "assistant", stopReason: "stop" }] }, ctx);
+    handlers.get("agent_end")({ messages: [{ role: "assistant", stopReason: "stop", content: [{ type: "text", text }] }] }, ctx);
     idle = true;
     handlers.get("agent_settled")({ aborted: false, ...event }, ctx);
     await flush();
@@ -127,11 +128,75 @@ test("aborted and failed runs do not show Done", async t => {
   await h.flush(); h.tick(); await h.flush();
   assert.equal(h.statusCalls.length, 0);
 });
-test("needs-input takes precedence over Done", async t => {
-  const h = await harness(t, { status: "needsInput", idle: false });
-  await h.complete();
+test("a final question takes precedence over Done", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: true, hookEventName: "Stop", activePromptTurnId: undefined } });
+  await h.complete({}, "Shall I continue?");
   assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
   assert.ok(!h.statusCalls.some(args => args[2] === "Done"));
+});
+test("repairs a completion misclassified as an approval request", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: true, hookEventName: "Stop", activePromptTurnId: undefined } });
+  await h.complete({}, "Also completed the approved CodeScene refactor.");
+  assert.equal(h.calls[0].action, "approval-response");
+  assert.equal(h.calls[0].payload.cmux_pi_idle_dialog, true);
+  assert.equal(h.record.runtimeStatus, "idle");
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
+});
+test("retains Done when the misclassified Notification arrives before Stop", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: false, hookEventName: "Notification", activePromptTurnId: undefined } });
+  await h.complete({}, "Approved refactor completed.");
+  assert.equal(h.calls.length, 0);
+  Object.assign(h.record, { turnSettled: true, hookEventName: "Stop" });
+  h.setRegistered(); h.tick(); await h.flush();
+  assert.equal(h.calls[0].action, "approval-response");
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
+});
+test("reload repairs stale completed input state without announcing a new completion", async t => {
+  const h = await harness(t, { status: "needsInput",
+    recordState: { turnSettled: true, hookEventName: "Stop", activePromptTurnId: undefined },
+    branch: [{ type: "message", message: { role: "assistant", stopReason: "stop", content: "Approved changes completed." } }] });
+  assert.equal(h.calls[0].action, "approval-response");
+  assert.equal(h.record.runtimeStatus, "idle");
+  assert.equal(h.statusCalls.at(-1)[2], "Idle");
+});
+test("a live native dialog is not mistaken for a completed approval", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: true, hookEventName: "questionAsked", activePromptTurnId: undefined } });
+  await h.complete();
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
+});
+test("an unsettled turn is not repaired even when Pi reports idle", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: false, hookEventName: "Stop", activePromptTurnId: undefined } });
+  await h.complete();
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
+});
+test("an active prompt is not repaired", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: true, hookEventName: "Stop" } });
+  await h.complete();
+  assert.equal(h.calls.length, 0);
+});
+test("an open custom questionnaire is not repaired", async t => {
+  const h = await harness(t, { status: "needsInput", idle: false,
+    recordState: { turnSettled: true, hookEventName: "Stop", activePromptTurnId: undefined } });
+  h.events.get("rpiv:ask-user:blocked")({ active: true, toolCallId: "open-question" });
+  await h.flush();
+  await h.complete();
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
+});
+test("reload preserves a genuine final question", async t => {
+  const h = await harness(t, { status: "needsInput",
+    recordState: { turnSettled: true, hookEventName: "Stop", activePromptTurnId: undefined },
+    branch: [{ type: "message", message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Proceed？" }] } }] });
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
 });
 test("shutdown closes the focus subscription", async t => {
   const h = await harness(t);
