@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import install from "../extensions/cmux-status.ts";
+import { CmuxSidebarState } from "../extensions/cmux-status/sidebar-state.ts";
 
 const directory = resolve("aux/cmux-debug/state");
 mkdirSync(directory, { recursive: true });
@@ -31,6 +32,7 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
     const child = new EventEmitter();
     if (args[0] === "events") {
       child.stdout = new PassThrough();
+      child.args = args;
       child.kill = () => { child.stdout.end(); child.emit("close", 0); };
       watchers.push(child);
       return child;
@@ -53,12 +55,13 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
   syncBuiltinESMExports();
   install({ on: (name, fn) => handlers.set(name, fn), events: { on: (name, fn) => events.set(name, fn) } });
   const ctx = { mode, isIdle: () => idle, cwd: "/test", sessionManager: { getSessionId: () => "session-test", getBranch: () => branch } };
-  const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(r => setImmediate(r)); };
+  const flush = async () => { await tick?.(); };
   handlers.get("session_start")({}, ctx);
   await flush();
   t.after(async () => { await handlers.get("session_shutdown")(); t.mock.restoreAll(); syncBuiltinESMExports(); });
+  let sequence = 0;
   const focus = (event = {}) => watchers.at(-1).stdout.write(`${JSON.stringify({
-    type: "event", name: "workspace.selected", workspace_id: "workspace-test",
+    seq: ++sequence, type: "event", name: "workspace.selected", workspace_id: "workspace-test",
     occurred_at: new Date().toISOString(), ...event,
   })}\n`);
   const complete = async (event = {}, text = "Done") => {
@@ -72,6 +75,60 @@ async function harness(t, { idle = true, mode = "tui", status = "running", regis
   return { calls, statusCalls, watchers, focus, complete, handlers, events, ctx, flush, tick: () => tick?.(), setIdle: (v) => { idle = v; }, setRegistered: () => { registered = true; save(); }, record };
 }
 
+async function sibling(t, phase) {
+  const state = new CmuxSidebarState({
+    stateDirectory: directory, workspaceId: "workspace-test", surfaceId: "left-sibling",
+    sessionId: "left-parent", pid: process.pid,
+  });
+  t.after(() => state.remove());
+  await state.publish(phase);
+  return state;
+}
+
+test("a right-pane completion and click cannot erase its working left sibling", async t => {
+  const h = await harness(t, { idle: false });
+  const left = await sibling(t, "running");
+  await h.complete();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+  h.focus(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+  await left.publish("done");
+  h.tick(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
+});
+test("a busy parent repairs a native row erased by a child completion", async t => {
+  const h = await harness(t, { idle: false });
+  h.record.runtimeStatus = "idle";
+  h.setRegistered(); h.tick(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+});
+test("parent subagent counts keep Running until all background children settle", async t => {
+  const h = await harness(t, { idle: false });
+  h.events.get("kesh:subagents")({ running: 2 }); await h.flush();
+  await h.complete();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+  h.focus(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+  h.events.get("kesh:subagents")({ running: 1 }); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
+  h.events.get("kesh:subagents")({ running: 0 }); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
+  h.focus(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Idle");
+});
+test("a real native error is not replaced with Idle", async t => {
+  const h = await harness(t, { status: "error" });
+  assert.equal(h.statusCalls.at(-1)[2], "Pi error");
+  assert.ok(h.statusCalls.at(-1).includes("#FF453A"));
+});
+
+test("a real wait in one pane stays amber while its sibling is running", async t => {
+  const h = await harness(t, { idle: false });
+  await sibling(t, "waiting");
+  h.tick(); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
+});
+
 test("Done stays green until the workspace is selected", async t => {
   const h = await harness(t, { idle: false });
   await h.complete();
@@ -82,51 +139,47 @@ test("Done stays green until the workspace is selected", async t => {
   h.focus(); await h.flush();
   assert.equal(h.statusCalls.at(-1)[2], "Idle");
   assert.ok(h.statusCalls.at(-1).includes("#8E8E93"));
-  const count = h.statusCalls.length;
   h.tick(); await h.flush();
-  assert.equal(h.statusCalls.length, count);
+  assert.equal(h.statusCalls.at(-1)[2], "Idle");
 });
 test("only this pane or workspace acknowledges completion", async t => {
   const h = await harness(t, { idle: false });
   await h.complete();
-  const count = h.statusCalls.length;
   h.focus({ workspace_id: "other-workspace" });
   h.focus({ name: "surface.focused", surface_id: "other-surface" });
   h.focus({ name: "surface.selected", surface_id: "surface-test" });
   await h.flush();
-  assert.equal(h.statusCalls.length, count);
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
   h.focus({ name: "pane.focused", surface_id: "surface-test" }); await h.flush();
   assert.equal(h.statusCalls.at(-1)[2], "Idle");
 });
 test("replayed focus and malformed events cannot clear Done", async t => {
   const h = await harness(t, { idle: false });
   await h.complete();
-  const count = h.statusCalls.length;
   h.focus({ occurred_at: "2000-01-01T00:00:00Z" });
   h.focus({ occurred_at: "invalid" });
   h.focus({ type: "ack" });
   h.watchers.at(-1).stdout.write("not-json\n");
   await h.flush();
-  assert.equal(h.statusCalls.length, count);
+  assert.equal(h.statusCalls.at(-1)[2], "Done");
 });
 test("a new run clears pending Done", async t => {
   const h = await harness(t, { idle: false });
   await h.complete();
   h.setIdle(false);
   h.handlers.get("agent_start")({}, h.ctx);
-  const count = h.statusCalls.length;
   h.focus(); h.tick(); await h.flush();
-  assert.equal(h.statusCalls.length, count);
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
 });
 test("aborted and failed runs do not show Done", async t => {
   const h = await harness(t, { idle: false });
   await h.complete({ aborted: true });
-  assert.equal(h.statusCalls.length, 0);
+  assert.ok(!h.statusCalls.some(args => args[2] === "Done"));
   h.handlers.get("agent_start")({}, h.ctx);
   h.handlers.get("agent_end")({ messages: [{ role: "assistant", stopReason: "error" }] }, h.ctx);
   h.handlers.get("agent_settled")({ aborted: false }, h.ctx);
   await h.flush(); h.tick(); await h.flush();
-  assert.equal(h.statusCalls.length, 0);
+  assert.ok(!h.statusCalls.some(args => args[2] === "Done"));
 });
 test("a final question takes precedence over Done", async t => {
   const h = await harness(t, { status: "needsInput", idle: false,
@@ -198,6 +251,19 @@ test("reload preserves a genuine final question", async t => {
   assert.equal(h.calls.length, 0);
   assert.equal(h.statusCalls.at(-1)[2], "Pi needs input");
 });
+test("brief focus polls resume from their last sequence without occupying a worker", async t => {
+  const h = await harness(t);
+  const first = h.watchers[0];
+  assert.ok(!first.args.includes("--reconnect"));
+  assert.equal(first.args[first.args.indexOf("--timeout") + 1], "0.25");
+  first.stdout.write(`${JSON.stringify({ type: "ack", boot_id: "boot-test", replay_count: 0, resume: { latest_seq: 120 } })}\n`);
+  first.kill(); h.tick(); await h.flush();
+  const next = h.watchers.at(-1);
+  assert.equal(next.args[next.args.indexOf("--after") + 1], "120");
+  await h.complete();
+  h.focus({ seq: 121 }); await h.flush();
+  assert.equal(h.statusCalls.at(-1)[2], "Idle");
+});
 test("shutdown closes the focus subscription", async t => {
   const h = await harness(t);
   await h.handlers.get("session_shutdown")();
@@ -235,16 +301,16 @@ test("custom questionnaire waits for all answers before resuming", async t => {
   blocked({ active: true, toolCallId: "a" }); await h.flush();
   assert.equal(h.calls[0].action, "notification");
   assert.equal(h.calls[0].payload.hook_event_name, "questionAsked");
-  assert.ok(h.statusCalls[0].includes("#FF9F0A"));
-  assert.deepEqual(h.statusCalls[0].slice(-4), ["--workspace", "workspace-test", "--panel", "surface-test"]);
+  assert.ok(h.statusCalls.at(-1).includes("#FF9F0A"));
+  assert.deepEqual(h.statusCalls.at(-1).slice(-2), ["--workspace", "workspace-test"]);
+  assert.ok(!h.statusCalls.at(-1).includes("--panel"));
   blocked({ active: true, toolCallId: "b" }); await h.flush();
   blocked({ active: false, toolCallId: "a" }); await h.flush();
   assert.equal(h.calls.length, 1);
   blocked({ active: false, toolCallId: "b" }); await h.flush();
   assert.equal(h.calls[1].action, "approval-response");
-  const count = h.statusCalls.length;
   h.tick(); await h.flush();
-  assert.equal(h.statusCalls.length, count);
+  assert.equal(h.statusCalls.at(-1)[2], "Running");
 });
 test("idle questionnaire returns to idle after the answer", async t => {
   const h = await harness(t);
