@@ -196,14 +196,14 @@ export default function (pi: ExtensionAPI) {
 		description: "Open LazyGit and offer to move this session to its selected worktree",
 		handler: async (_args, ctx) => {
 			if (ctx.mode !== "tui" || lazyGitOpen) return;
-			if (!ctx.isIdle() || ctx.hasPendingMessages()) {
-				ctx.ui.notify("Wait for Pi to finish before switching worktrees.", "warning");
-				return;
-			}
 			lazyGitOpen = true;
 			try {
 				const newDir = await runLazyGit(ctx);
 				if (!newDir) return;
+				if (!ctx.isIdle() || ctx.hasPendingMessages()) {
+					ctx.ui.notify("Pi is busy. Session was not moved.", "warning");
+					return;
+				}
 				const confirmed = await ctx.ui.confirm(
 					"Move this session?",
 					`From: ${ctx.cwd}\nTo: ${newDir}`,
