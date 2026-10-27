@@ -36,6 +36,7 @@ import type {
 } from "../domain.ts";
 import { SendError, SpawnError } from "../domain.ts";
 import { createToolCallTimeoutGuard } from "../tool-call-timeout.ts";
+import { childExtensionsOverride } from "../child-extensions.ts";
 
 const CHILD_SHUTDOWN_TIMEOUT_MS = 5_000;
 
@@ -101,7 +102,12 @@ async function createChildResources(cwd: string, projectTrusted: boolean) {
   const settingsManager = SettingsManager.create(cwd, agentDir, {
     projectTrusted,
   });
-  const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+  const loader = new DefaultResourceLoader({
+    cwd,
+    agentDir,
+    settingsManager,
+    extensionsOverride: childExtensionsOverride(agentDir),
+  });
   await loader.reload();
   return { loader, settingsManager };
 }
