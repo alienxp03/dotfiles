@@ -29,46 +29,10 @@
       "prevSidebarTab" : "cmd+shift+[",
       "nextSurface" : null,
       "prevSurface" : null,
-      "focusDown" : {
-        "first" : {
-          "command" : false,
-          "control" : true,
-          "key" : "j",
-          "keyCode" : 38,
-          "option" : false,
-          "shift" : false
-        }
-      },
-      "focusLeft" : {
-        "first" : {
-          "command" : false,
-          "control" : true,
-          "key" : "h",
-          "keyCode" : 4,
-          "option" : false,
-          "shift" : false
-        }
-      },
-      "focusRight" : {
-        "first" : {
-          "command" : false,
-          "control" : true,
-          "key" : "l",
-          "keyCode" : 37,
-          "option" : false,
-          "shift" : false
-        }
-      },
-      "focusUp" : {
-        "first" : {
-          "command" : false,
-          "control" : true,
-          "key" : "k",
-          "keyCode" : 40,
-          "option" : false,
-          "shift" : false
-        }
-      }
+      "focusDown" : "ctrl+j",
+      "focusLeft" : "ctrl+h",
+      "focusRight" : "ctrl+l",
+      "focusUp" : "ctrl+k"
     }
   },
   "sidebar" : {
