@@ -193,6 +193,38 @@ function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
+async function cloneInRex(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	direction: Direction,
+	sessionPath: string,
+): Promise<CloneResult> {
+	const split = await pi.exec(
+		"rex",
+		[
+			"split",
+			"-s",
+			process.env.REX_SESSION!,
+			"-b",
+			process.env.REX_BLOCK!,
+			`--split=${direction === "top" ? "above" : direction === "bottom" ? "below" : direction}`,
+			"--ratio",
+			"35",
+			"-c",
+			ctx.sessionManager.getCwd(),
+			"--",
+			"pi",
+			"--session",
+			sessionPath,
+		],
+		{ timeout: 5000 },
+	);
+	if (split.code !== 0) {
+		throw new Error(split.stderr.trim() || split.stdout.trim() || "Rex split failed");
+	}
+	return {};
+}
+
 async function cloneInCmux(
 	pi: ExtensionAPI,
 	ctx: ExtensionCommandContext,
@@ -301,18 +333,23 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const herdr = process.env.HERDR_ENV === "1";
+		const rex = Boolean(process.env.REX_SESSION || process.env.REX_BLOCK);
+		if (rex && (!process.env.REX_SESSION || !process.env.REX_BLOCK)) {
+			ctx.ui.notify("/kclone could not find the current Rex session and block", "error");
+			return;
+		}
+		const herdr = !rex && process.env.HERDR_ENV === "1";
 		if (herdr && !process.env.HERDR_PANE_ID) {
 			ctx.ui.notify("/kclone could not find the current Herdr pane", "error");
 			return;
 		}
-		const cmux = !herdr && Boolean(process.env.CMUX_WORKSPACE_ID || process.env.CMUX_SURFACE_ID);
+		const cmux = !rex && !herdr && Boolean(process.env.CMUX_WORKSPACE_ID || process.env.CMUX_SURFACE_ID);
 		if (cmux && (!process.env.CMUX_WORKSPACE_ID || !process.env.CMUX_SURFACE_ID)) {
 			ctx.ui.notify("/kclone could not find the current cmux workspace and surface", "error");
 			return;
 		}
-		if (!herdr && !cmux && !process.env.KITTY_WINDOW_ID) {
-			ctx.ui.notify("/kclone requires Kitty, Herdr, or cmux", "error");
+		if (!rex && !herdr && !cmux && !process.env.KITTY_WINDOW_ID) {
+			ctx.ui.notify("/kclone requires Kitty, Herdr, cmux, or Rex", "error");
 			return;
 		}
 
@@ -327,17 +364,19 @@ export default function (pi: ExtensionAPI) {
 
 		let cloneResult: CloneResult;
 		try {
-			cloneResult = herdr
-				? await cloneInHerdr(pi, ctx, direction, sessionPath)
-				: cmux
-					? await cloneInCmux(pi, ctx, direction, sessionPath)
-					: await cloneInKitty(pi, ctx, direction, sessionPath);
+			cloneResult = rex
+				? await cloneInRex(pi, ctx, direction, sessionPath)
+				: herdr
+					? await cloneInHerdr(pi, ctx, direction, sessionPath)
+					: cmux
+						? await cloneInCmux(pi, ctx, direction, sessionPath)
+						: await cloneInKitty(pi, ctx, direction, sessionPath);
 		} catch (error) {
-			// Herdr or cmux may leave a pane running when startup times out.
+			// Rex, Herdr, or cmux may leave a pane running when startup times out.
 			// Keep its session file available in that case.
-			if (!herdr && !cmux) await rm(sessionPath, { force: true });
+			if (!rex && !herdr && !cmux) await rm(sessionPath, { force: true });
 			ctx.ui.notify(
-				`Could not open ${herdr ? "Herdr" : cmux ? "cmux" : "Kitty"} pane: ${getErrorMessage(error)}`,
+				`Could not open ${rex ? "Rex" : herdr ? "Herdr" : cmux ? "cmux" : "Kitty"} pane: ${getErrorMessage(error)}`,
 				"error",
 			);
 			return;
@@ -360,7 +399,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const command = {
-		description: "Clone the current conversation into a Kitty, Herdr, or cmux pane",
+		description: "Clone the current conversation into a Kitty, Herdr, cmux, or Rex pane",
 		getArgumentCompletions: getDirectionCompletions,
 		handler: cloneHandler,
 	};
