@@ -9,5 +9,8 @@ rex.bind("ctrl+l", "pane.focus.right")
 -- Preserve terminal Ctrl+L (clear/redraw) on a shifted shortcut.
 rex.bind("ctrl+shift+l", "pane.send_key", { key = "ctrl+l" })
 
+-- Toggle the sidebar.
+rex.bind("cmd+b", "client.sidebar.toggle")
+
 -- Toggle zoom on the focused pane.
 rex.bind("cmd+shift+f", "pane.zoom")
