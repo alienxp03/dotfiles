@@ -3,7 +3,7 @@
 -- Raptor plugin logic lives in its own repository; keep local bindings here.
 require("raptor").setup{}
 rex.bind("shift+cmd+o", "raptor")
-rex.bind("shift+ctrl+w", "raptor_wt")
+rex.bind("shift+cmd+t", "raptor_wt")
 
 -- Move between panes with the Neovim-style home row.
 -- Leave Ctrl+J/K unbound so terminal apps (including raptor) receive them.
