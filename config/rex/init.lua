@@ -1,10 +1,10 @@
 -- Keep Cmd+K unbound here so Rex's default session-switch shortcut remains.
 
--- sesh-style zoxide picker (see zpick.lua)
-require("zpick")
+-- sesh-style zoxide picker (see raptor.lua)
+require("raptor")
 
 -- Move between panes with the Neovim-style home row.
--- Leave Ctrl+J/K unbound so terminal apps (including zpick) receive them.
+-- Leave Ctrl+J/K unbound so terminal apps (including raptor) receive them.
 rex.bind("ctrl+h", "pane.focus.left")
 rex.bind("ctrl+alt+j", "pane.focus.down")
 rex.bind("ctrl+alt+k", "pane.focus.up")
