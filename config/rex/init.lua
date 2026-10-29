@@ -1,5 +1,8 @@
 -- Keep Cmd+K unbound here so Rex's default session-switch shortcut remains.
 
+-- sesh-style zoxide picker (see zpick.lua)
+require("zpick")
+
 -- Move between panes with the Neovim-style home row.
 rex.bind("ctrl+h", "pane.focus.left")
 rex.bind("ctrl+j", "pane.focus.down")
