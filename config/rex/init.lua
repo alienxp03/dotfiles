@@ -4,9 +4,10 @@
 require("zpick")
 
 -- Move between panes with the Neovim-style home row.
+-- Leave Ctrl+J/K unbound so terminal apps (including zpick) receive them.
 rex.bind("ctrl+h", "pane.focus.left")
-rex.bind("ctrl+j", "pane.focus.down")
-rex.bind("ctrl+k", "pane.focus.up")
+rex.bind("ctrl+alt+j", "pane.focus.down")
+rex.bind("ctrl+alt+k", "pane.focus.up")
 rex.bind("ctrl+l", "pane.focus.right")
 
 -- Preserve terminal Ctrl+L (clear/redraw) on a shifted shortcut.
