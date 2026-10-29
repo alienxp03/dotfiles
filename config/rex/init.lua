@@ -4,6 +4,7 @@
 require("raptor").setup{}
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_wt")
+rex.bind("cmd+p", "raptor_last_pane")
 
 -- Move between panes with the Neovim-style home row.
 -- Leave Ctrl+J/K unbound so terminal apps (including raptor) receive them.
