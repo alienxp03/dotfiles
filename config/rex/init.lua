@@ -5,12 +5,20 @@ rex.bind("shift+cmd+k", "session.switch")
 -- raptor: START
 require("raptor").setup({
 	-- ui = "terminal",
+	-- ui = "gui",
 	ui = "auto",
 })
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_worktree_list")
 rex.bind("ctrl+n", "raptor_worktree_new")
 rex.bind("cmd+p", "raptor_pane_last")
+
+-- Test iOS onscreen modifier combinations; all open the Raptor picker.
+rex.bind("ctrl+o", "raptor")
+rex.bind("ctrl+shift+o", "raptor")
+rex.bind("alt+o", "raptor")
+rex.bind("alt+shift+o", "raptor")
+rex.bind("ctrl+alt+o", "raptor")
 
 -- raptor: END
 
