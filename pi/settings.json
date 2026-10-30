@@ -22,6 +22,7 @@
   "theme": "github-dark-default",
   "quietStartup": true,
   "tuiMode": "regular",
+  "showHardwareCursor": true,
   "enabledModels": [
     "openai-codex/gpt-6-astra",
     "openai-codex/gpt-6.1-sol",
