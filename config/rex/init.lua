@@ -1,4 +1,6 @@
--- Keep Cmd+K unbound here so Rex's default session-switch shortcut remains.
+-- Move Rex's session switcher; let Cmd+K reach the terminal.
+rex.unbind("cmd+k")
+rex.bind("shift+cmd+k", "session.switch")
 
 -- Raptor plugin logic lives in its own repository; keep local bindings here.
 require("raptor").setup{}
@@ -7,10 +9,9 @@ rex.bind("shift+cmd+t", "raptor_wt")
 rex.bind("cmd+p", "raptor_last_pane")
 
 -- Move between panes with the Neovim-style home row.
--- Leave Ctrl+J/K unbound so terminal apps (including raptor) receive them.
 rex.bind("ctrl+h", "pane.focus.left")
-rex.bind("ctrl+alt+j", "pane.focus.down")
-rex.bind("ctrl+alt+k", "pane.focus.up")
+rex.bind("ctrl+j", "pane.focus.down")
+rex.bind("ctrl+k", "pane.focus.up")
 rex.bind("ctrl+l", "pane.focus.right")
 
 -- Preserve terminal Ctrl+L (clear/redraw) on a shifted shortcut.
