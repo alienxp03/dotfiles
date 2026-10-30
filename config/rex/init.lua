@@ -2,15 +2,17 @@
 rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
--- Raptor plugin logic lives in its own repository; keep local bindings here.
+-- raptor: START
 require("raptor").setup({
-	ui = "terminal",
-	-- ui = "auto",
+	-- ui = "terminal",
+	ui = "auto",
 })
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_wt")
 rex.bind("ctrl+n", "raptor_create")
 rex.bind("cmd+p", "raptor_last_pane")
+
+-- raptor: END
 
 -- Move between panes with the Neovim-style home row.
 rex.bind("ctrl+h", "pane.focus.left")
