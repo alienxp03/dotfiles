@@ -3,7 +3,10 @@ rex.unbind("cmd+k")
 rex.bind("shift+cmd+k", "session.switch")
 
 -- Raptor plugin logic lives in its own repository; keep local bindings here.
-require("raptor").setup{}
+require("raptor").setup({
+	-- ui = "terminal",
+	ui = "auto",
+})
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_wt")
 rex.bind("cmd+p", "raptor_last_pane")
