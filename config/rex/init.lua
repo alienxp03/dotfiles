@@ -8,9 +8,9 @@ require("raptor").setup({
 	ui = "auto",
 })
 rex.bind("shift+cmd+o", "raptor")
-rex.bind("shift+cmd+t", "raptor_wt")
-rex.bind("ctrl+n", "raptor_create")
-rex.bind("cmd+p", "raptor_last_pane")
+rex.bind("shift+cmd+t", "raptor_worktree_list")
+rex.bind("ctrl+n", "raptor_worktree_new")
+rex.bind("cmd+p", "raptor_pane_last")
 
 -- raptor: END
 
