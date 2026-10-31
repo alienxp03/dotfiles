@@ -1,0 +1,2 @@
+# Keep the open-target picker compact; omit left and above splits.
+targets = ["tab", "session", "here", "pane", "pane_below"]
