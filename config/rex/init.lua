@@ -3,6 +3,9 @@ rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
 -- raptor: START
+-- Keep modules discoverable when tools validate this symlink's dotfiles target.
+local config_home = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
+package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;" .. package.path
 require("raptor").setup({
 	-- ui = "terminal",
 	-- ui = "gui",
@@ -53,3 +56,9 @@ rex.bind("cmd+b", "client.sidebar.toggle")
 
 -- Toggle zoom on the focused pane.
 rex.bind("cmd+shift+f", "pane.zoom")
+
+-- >>> resh >>>
+dofile("/Users/azuan/Library/Application Support/resh/resh.lua")
+rex.exec.start({ "/Users/azuan/Library/Application Support/resh/resh", "service", "start" },
+  { detach = true, stdout = false, stderr = false })
+-- <<< resh <<<
