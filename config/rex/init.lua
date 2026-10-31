@@ -19,6 +19,11 @@ rex.bind("ctrl+n", function(ctx, ev)
     rex.invoke("raptor_worktree_new")
     return true
 end)
+-- Experimental two-stage path → action launcher.
+rex.bind("ctrl+m", function(ctx, ev)
+    rex.invoke("raptor_launcher")
+    return true
+end)
 rex.bind("cmd+p", "raptor_pane_last")
 
 -- Additional iOS modifier combinations for testing.
