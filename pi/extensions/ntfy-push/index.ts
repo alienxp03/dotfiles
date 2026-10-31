@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { isAttendingRex } from "./attention.ts";
 
 // Only fixed status messages leave this machine; never prompts or tool output.
 export default function (pi: ExtensionAPI) {
@@ -12,8 +13,19 @@ export default function (pi: ExtensionAPI) {
   let lastStatus = "";
   const waiting = new Set<string>();
   const requests = new Set<AbortController>();
+  let generation = 0;
+  let notificationVersion = 0;
+  let doneTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function cancelDone() {
+    if (doneTimer) clearTimeout(doneTimer);
+    doneTimer = undefined;
+  }
 
   function reset() {
+    cancelDone();
+    generation++;
+    notificationVersion++;
     active = false;
     outcome = "completed";
     finalText = "";
@@ -24,6 +36,11 @@ export default function (pi: ExtensionAPI) {
   async function push(status: string) {
     if (!url || status === lastStatus) return;
     lastStatus = status;
+    const currentGeneration = generation;
+    const version = ++notificationVersion;
+    const attending = await isAttendingRex(pi.exec.bind(pi));
+    // Attention probes can outlive a question, run, reload, or session switch.
+    if (!url || currentGeneration !== generation || version !== notificationVersion || attending) return;
     const controller = new AbortController();
     requests.add(controller);
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -41,7 +58,7 @@ export default function (pi: ExtensionAPI) {
     } catch (error) {
       // Don't fail the agent or log the private topic URL.
       console.error(`[ntfy-push] Could not send ${status}`);
-      if (lastStatus === status) lastStatus = "";
+      if (generation === currentGeneration && version === notificationVersion) lastStatus = "";
     } finally {
       clearTimeout(timer);
       requests.delete(controller);
@@ -52,8 +69,14 @@ export default function (pi: ExtensionAPI) {
     const wasWaiting = waiting.size > 0;
     if (enabled) waiting.add(key);
     else waiting.delete(key);
-    if (!wasWaiting && waiting.size) void push("Input needed");
-    if (wasWaiting && !waiting.size) lastStatus = "";
+    if (!wasWaiting && waiting.size) {
+      cancelDone();
+      void push("Input needed");
+    }
+    if (wasWaiting && !waiting.size) {
+      notificationVersion++;
+      lastStatus = "";
+    }
   }
 
   pi.on("session_start", () => {
@@ -106,7 +129,18 @@ export default function (pi: ExtensionAPI) {
     const blocked = outcome === "error" || /(?:^|\n)\s*(?:blocked\b|(?:i(?:'m| am) )?(?:cannot|can't|unable to) (?:proceed|continue)\b)/i.test(finalText);
     // Plain-text questions have no dedicated lifecycle event; this is a fallback.
     const question = /\?\s*$/.test(finalText.trim());
-    await push(blocked ? "Blocked" : waiting.size || question ? "Input needed" : "Done");
+    cancelDone();
+    if (blocked || waiting.size || question) {
+      await push(blocked ? "Blocked" : "Input needed");
+    } else {
+      // Let the user return to Rex before deciding whether a push is useful.
+      const currentGeneration = generation;
+      doneTimer = setTimeout(() => {
+        doneTimer = undefined;
+        if (generation === currentGeneration) void push("Done");
+      }, 10_000);
+      doneTimer.unref();
+    }
   });
 
   pi.on("session_shutdown", () => {
