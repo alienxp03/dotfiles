@@ -35,7 +35,6 @@ import { prepareSessionMove } from "./interactive-shell/session-move.ts";
 const DEFAULT_INTERACTIVE_COMMANDS = [
 	// Editors
 	"vim",
-	"nvim",
 	"vi",
 	"nano",
 	"emacs",
@@ -79,7 +78,6 @@ const DEFAULT_INTERACTIVE_COMMANDS = [
 	"vifm",
 	// Git TUIs
 	"tig",
-	"lazygit",
 	"gitui",
 	// Fuzzy finders
 	"fzf",
@@ -286,20 +284,39 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	let tuicrOpen = false;
+	async function openTuicr(ctx: ExtensionContext, pr: boolean) {
+		if (ctx.mode !== "tui" || tuicrOpen) return;
+		tuicrOpen = true;
+		try {
+			if (process.env.REX_SESSION && process.env.REX_BLOCK) {
+				let command = ["tuicr", "--working-tree"];
+				if (pr) {
+					const result = await pi.exec("gh", ["pr", "view", "--json", "number", "--jq", ".number"], { cwd: ctx.cwd });
+					const number = result.stdout.trim();
+					if (result.code !== 0 || !/^\d+$/.test(number)) {
+						throw new Error(result.stderr || "Could not find the current PR.");
+					}
+					command = ["tuicr", "pr", number];
+				}
+				await runRexTerminal(pi, ctx, command, pr ? "tuicr PR" : "tuicr working tree");
+			} else {
+				await runInteractiveCommand(pr ? 'tuicr pr "$(gh pr view --json number --jq .number)"' : "tuicr --working-tree", ctx);
+			}
+		} catch (error) {
+			ctx.ui.notify(`tuicr: ${String(error)}`, "error");
+		} finally {
+			tuicrOpen = false;
+		}
+	}
 	pi.registerShortcut("ctrl+t", {
 		description: "Review working tree in tuicr",
-		handler: async (ctx) => {
-			if (ctx.mode !== "tui") return;
-			await runInteractiveCommand("tuicr --working-tree", ctx);
-		},
+		handler: async (ctx) => openTuicr(ctx, false),
 	});
 
 	pi.registerShortcut("ctrl+shift+t", {
 		description: "Review current PR in tuicr",
-		handler: async (ctx) => {
-			if (ctx.mode !== "tui") return;
-			await runInteractiveCommand('tuicr pr "$(gh pr view --json number --jq .number)"', ctx);
-		},
+		handler: async (ctx) => openTuicr(ctx, true),
 	});
 
 	// Ctrl+Q is unused by Pi on macOS and avoids Ctrl+I's terminal Tab byte.

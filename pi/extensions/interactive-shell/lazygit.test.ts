@@ -18,7 +18,7 @@ const hook = registerHooks({
 const { default: install } = await import("../interactive-shell.ts");
 hook.deregister();
 
-function harness(t, { idle = true, pending = false, changeWorktree = false, confirm = true, busyOnConfirm = false, rex = false, rexFailure = false, waitCode = 0 } = {}) {
+function harness(t, { idle = true, pending = false, changeWorktree = false, confirm = true, busyOnConfirm = false, rex = false, rexFailure = false, waitCode = 0, ghCode = 0 } = {}) {
 	const savedEnv = { ...process.env };
 	if (rex) {
 		process.env.REX_SESSION = "session:test";
@@ -43,6 +43,7 @@ function harness(t, { idle = true, pending = false, changeWorktree = false, conf
 	const commands = new Map();
 	const shortcuts = new Map();
 	const messages = [];
+	const events = new Map();
 	t.mock.method(SessionManager, "create", () => ({ getSessionDir: () => targetDir }));
 	t.mock.method(childProcess.default, "spawnSync", (shell, args, options) => {
 		calls.push({ shell, args, options });
@@ -61,6 +62,7 @@ function harness(t, { idle = true, pending = false, changeWorktree = false, conf
 	install({
 		exec: async (command, args, options) => {
 			rexCalls.push({ command, args, options });
+			if (command === "gh") return { code: ghCode, stdout: "42\n", stderr: ghCode ? "No current PR" : "" };
 			assert.equal(command, "rex");
 			if (rexFailure) return { code: 1, stderr: "Rex unavailable", stdout: "" };
 			if (args[0] === "block") return { code: 0, stdout: JSON.stringify({ block: { window_id: "window:pi" } }) };
@@ -74,7 +76,7 @@ function harness(t, { idle = true, pending = false, changeWorktree = false, conf
 		registerCommand: (name, command) => commands.set(name, command),
 		registerShortcut: (name, shortcut) => shortcuts.set(name, shortcut),
 		sendUserMessage: (text) => messages.push(text),
-		on() {},
+		on: (name, handler) => events.set(name, handler),
 	});
 	const ctx = {
 		mode: "tui", cwd: root,
@@ -95,7 +97,9 @@ function harness(t, { idle = true, pending = false, changeWorktree = false, conf
 	return { calls, rexCalls, notices, confirmations, switches, messages, source, selected,
 		run: () => commands.get("lazygit-session").handler("", ctx),
 		shortcut: () => shortcuts.get("ctrl+g").handler(ctx),
-		neovim: () => shortcuts.get("ctrl+q").handler(ctx) };
+		neovim: () => shortcuts.get("ctrl+q").handler(ctx),
+		tuicr: (pr = false) => shortcuts.get(pr ? "ctrl+shift+t" : "ctrl+t").handler(ctx),
+		bash: command => events.get("user_bash")({ command }, ctx) };
 }
 
 test("Ctrl+G dispatches LazyGit while Pi is busy", async t => {
@@ -223,6 +227,49 @@ test("Neovim reports Rex errors and allows retry", async t => {
 	await h.neovim();
 	assert.equal(h.notices.length, 2);
 	assert.match(h.notices[0].message, /Neovim:.*Rex unavailable/);
+	assert.equal(h.calls.length, 0);
+});
+
+test("both tuicr shortcuts use Rex floats", async t => {
+	const h = harness(t, { rex: true, idle: false });
+	await h.tuicr();
+	await h.tuicr(true);
+	assert.equal(h.calls.length, 0);
+	const layers = h.rexCalls.filter(call => call.args.includes("session.new_layer"));
+	assert.equal(layers.length, 2);
+	assert.deepEqual(JSON.parse(layers[0].args.at(-1)).layout.block.options.command, ["tuicr", "--working-tree"]);
+	assert.deepEqual(JSON.parse(layers[1].args.at(-1)).layout.block.options.command, ["tuicr", "pr", "42"]);
+});
+
+test("tuicr shortcuts preserve inline behavior outside Rex", async t => {
+	const h = harness(t);
+	await h.tuicr();
+	await h.tuicr(true);
+	assert.equal(h.rexCalls.length, 0);
+	assert.deepEqual(h.calls.map(call => call.args), [
+		["-c", "tuicr --working-tree"],
+		["-c", 'tuicr pr "$(gh pr view --json number --jq .number)"'],
+	]);
+});
+
+test("tuicr rejects failed PR lookup without opening a float", async t => {
+	const h = harness(t, { rex: true, ghCode: 1 });
+	await h.tuicr(true);
+	assert.equal(h.rexCalls.length, 1);
+	assert.match(h.notices[0].message, /No current PR/);
+});
+
+test("tuicr shortcuts share a duplicate-open guard", async t => {
+	const h = harness(t, { rex: true });
+	await Promise.all([h.tuicr(), h.tuicr(true)]);
+	assert.equal(h.rexCalls.filter(call => call.args.includes("session.new_layer")).length, 1);
+});
+
+test("bang nvim and lazygit no longer receive automatic interactive handling", async t => {
+	const h = harness(t);
+	assert.equal(await h.bash("nvim"), undefined);
+	assert.equal(await h.bash("nvim file.ts"), undefined);
+	assert.equal(await h.bash("lazygit"), undefined);
 	assert.equal(h.calls.length, 0);
 });
 

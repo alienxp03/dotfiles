@@ -17,6 +17,9 @@ tmp/
 config/kesh/config.yaml
 /pi/models.json
 
+# Generated resh configuration backups
+/config/rex/*.resh-backup-*
+
 # Local JavaScript dependencies
 node_modules/
 
