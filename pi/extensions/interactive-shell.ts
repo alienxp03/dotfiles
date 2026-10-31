@@ -168,17 +168,54 @@ async function runInteractiveCommand(
 	});
 }
 
-async function runLazyGit(ctx: ExtensionCommandContext): Promise<string | undefined> {
+async function runRexTerminal(pi: ExtensionAPI, ctx: ExtensionContext, command: string[], label: string): Promise<number> {
+	const session = process.env.REX_SESSION!;
+	const rex = async (args: string[]) => pi.exec("rex", args, { cwd: ctx.cwd });
+	const inspect = await rex(["block", "inspect", process.env.REX_BLOCK!, "-s", session, "--json"]);
+	if (inspect.code !== 0) throw new Error(inspect.stderr || "Could not locate the Rex pane.");
+	const windowId = JSON.parse(inspect.stdout).block?.window_id;
+	if (!windowId) throw new Error("The Rex pane has no window.");
+	const created = await rex(["api", "call", "-s", session, "session.new_layer", JSON.stringify({
+		window_id: windowId,
+		bounds: [0.05, 0.05, 0.9, 0.9],
+		focus: true,
+		layout: { block: {
+			flavor: "com.superlogical.terminal.shell",
+			label,
+			options: {
+				cwd: ctx.cwd,
+				command,
+				// Keep the block until wait observes its exit, including fast failures.
+				exit: { on_completion: false },
+			},
+		} },
+	})]);
+	if (created.code !== 0) throw new Error(created.stderr || "Could not open a Rex floating terminal.");
+	const layer = JSON.parse(created.stdout);
+	try {
+		const result = await rex(["wait", layer.block_ids[0], "-s", session, "--json"]);
+		if (result.code !== 0) ctx.ui.notify(result.stderr || `${label} closed or exited unsuccessfully.`, "warning");
+		return result.code;
+	} finally {
+		// Also safe when the user already closed the floating terminal.
+		await rex(["api", "call", "-s", session, "session.close_layer", JSON.stringify({ layer_id: layer.layer_id })]);
+	}
+}
+
+async function runLazyGit(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<string | undefined> {
 	const auxDir = join(ctx.cwd, "aux");
 	mkdirSync(auxDir, { recursive: true });
 	const tempDir = mkdtempSync(join(auxDir, "pi-lazygit-"));
 	const newDirFile = join(tempDir, "newdir");
 
 	try {
-		const exitCode = await runInteractiveCommand("lazygit", ctx, {
-			...process.env,
-			LAZYGIT_NEW_DIR_FILE: newDirFile,
-		});
+		const inRex = Boolean(process.env.REX_SESSION && process.env.REX_BLOCK);
+		const exitCode = inRex
+			? await runRexTerminal(pi, ctx, ["env", `LAZYGIT_NEW_DIR_FILE=${newDirFile}`, "lazygit"], "LazyGit")
+			: await runInteractiveCommand("lazygit", ctx, {
+				...process.env,
+				LAZYGIT_NEW_DIR_FILE: newDirFile,
+			});
 		if (exitCode !== 0 || !existsSync(newDirFile)) return undefined;
 
 		const newDir = readFileSync(newDirFile, "utf8").replace(/[\r\n]+$/, "");
@@ -198,7 +235,7 @@ export default function (pi: ExtensionAPI) {
 			if (ctx.mode !== "tui" || lazyGitOpen) return;
 			lazyGitOpen = true;
 			try {
-				const newDir = await runLazyGit(ctx);
+				const newDir = await runLazyGit(pi, ctx);
 				if (!newDir) return;
 				if (!ctx.isIdle() || ctx.hasPendingMessages()) {
 					ctx.ui.notify("Pi is busy. Session was not moved.", "warning");
@@ -233,6 +270,8 @@ export default function (pi: ExtensionAPI) {
 					},
 				});
 				if (result.cancelled) move.cancel();
+			} catch (error) {
+				ctx.ui.notify(`LazyGit: ${String(error)}`, "error");
 			} finally {
 				lazyGitOpen = false;
 			}
@@ -264,11 +303,23 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// Ctrl+Q is unused by Pi on macOS and avoids Ctrl+I's terminal Tab byte.
+	let neovimOpen = false;
 	pi.registerShortcut("ctrl+q", {
 		description: "Open Neovim",
 		handler: async (ctx) => {
-			if (ctx.mode !== "tui") return;
-			await runInteractiveCommand("nvim", ctx);
+			if (ctx.mode !== "tui" || neovimOpen) return;
+			neovimOpen = true;
+			try {
+				if (process.env.REX_SESSION && process.env.REX_BLOCK) {
+					await runRexTerminal(pi, ctx, ["nvim"], "Neovim");
+				} else {
+					await runInteractiveCommand("nvim", ctx);
+				}
+			} catch (error) {
+				ctx.ui.notify(`Neovim: ${String(error)}`, "error");
+			} finally {
+				neovimOpen = false;
+			}
 		},
 	});
 
