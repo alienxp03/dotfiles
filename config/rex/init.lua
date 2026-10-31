@@ -19,6 +19,11 @@ rex.bind("ctrl+n", function(ctx, ev)
     rex.invoke("raptor_worktree_new")
     return true
 end)
+-- Instant task: auto-named worktree → new tab → fresh, empty Pi.
+rex.bind("ctrl+shift+n", function(ctx, ev)
+    rex.invoke("raptor_task_new")
+    return true
+end)
 -- Experimental two-stage path → action launcher.
 rex.bind("ctrl+m", function(ctx, ev)
     rex.invoke("raptor_launcher")
