@@ -11,18 +11,17 @@ require("raptor").setup({
 })
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_worktree_list")
-rex.bind("ctrl+n", function(ctx, ev)
+rex.bind("ctrl+o", function(ctx, ev)
     rex.invoke("raptor")
     return true
 end)
-rex.bind("ctrl+m", function(ctx, ev)
+rex.bind("ctrl+n", function(ctx, ev)
     rex.invoke("raptor_worktree_new")
     return true
 end)
 rex.bind("cmd+p", "raptor_pane_last")
 
--- Test iOS onscreen modifier combinations; all open the Raptor picker.
-rex.bind("ctrl+o", "raptor")
+-- Additional iOS modifier combinations for testing.
 rex.bind("ctrl+shift+o", "raptor")
 rex.bind("alt+o", "raptor")
 rex.bind("alt+shift+o", "raptor")
