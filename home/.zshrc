@@ -14,26 +14,31 @@ fpath=("$HOME/.zsh/completions" $fpath)
 typeset -ga _zsh_compdefs=()
 compdef() { _zsh_compdefs+=("${(j: :)${(q)@}}"); }
 _zsh_complete() {
-	unfunction compdef
-	autoload -Uz compinit
-	compinit
-	local definition
-	for definition in "${_zsh_compdefs[@]}"; do
-		eval "compdef $definition"
-	done
-	unset _zsh_compdefs
+	if ((${+_zsh_compdefs})); then
+		unfunction compdef
+		autoload -Uz compinit
+		compinit
+		local definition
+		for definition in "${_zsh_compdefs[@]}"; do
+			eval "compdef $definition"
+		done
+		unset _zsh_compdefs
 
-	bindkey -M viins '^I' expand-or-complete
-	bindkey -M emacs '^I' expand-or-complete
-	local plugin_root
-	if [[ $OSTYPE == darwin* ]]; then
-		plugin_root="${XDG_CACHE_HOME:-$HOME/Library/Caches}/antidote"
-	else
-		plugin_root="${XDG_CACHE_HOME:-$HOME/.cache}/antidote"
+		bindkey -M viins '^I' expand-or-complete
+		bindkey -M emacs '^I' expand-or-complete
+		local plugin_root
+		if [[ $OSTYPE == darwin* ]]; then
+			plugin_root="${XDG_CACHE_HOME:-$HOME/Library/Caches}/antidote"
+		else
+			plugin_root="${XDG_CACHE_HOME:-$HOME/.cache}/antidote"
+		fi
+		local fzf_tab="$plugin_root/https-COLON--SLASH--SLASH-github.com-SLASH-Aloxaf-SLASH-fzf-tab/fzf-tab.plugin.zsh"
+		[[ ! -r $fzf_tab ]] || source "$fzf_tab"
+		[[ ! -s $HOME/.bun/_bun ]] || source "$HOME/.bun/_bun"
+		# fzf-tab changes Tab when loaded. Keep our suggestion-first binding.
+		bindkey -M viins '^I' _zsh_suggest_or_complete
+		bindkey -M emacs '^I' _zsh_suggest_or_complete
 	fi
-	local fzf_tab="$plugin_root/https-COLON--SLASH--SLASH-github.com-SLASH-Aloxaf-SLASH-fzf-tab/fzf-tab.plugin.zsh"
-	[[ ! -r $fzf_tab ]] || source "$fzf_tab"
-	[[ ! -s $HOME/.bun/_bun ]] || source "$HOME/.bun/_bun"
 	local completion_widget=fzf-tab-complete
 	if (($+widgets[$completion_widget])); then
 		zle fzf-tab-complete
@@ -42,6 +47,15 @@ _zsh_complete() {
 	fi
 }
 zle -N _zsh_complete
+
+_zsh_suggest_or_complete() {
+	if [[ -n $POSTDISPLAY ]] && ((CURSOR == ${#BUFFER})); then
+		zle emacs-forward-word
+	else
+		zle _zsh_complete
+	fi
+}
+zle -N _zsh_suggest_or_complete
 
 # Reuse generated integration definitions until their executable changes.
 _cached_source() {
@@ -81,8 +95,10 @@ bindkey -M viins '^?' backward-delete-char
 bindkey -M viins '^H' backward-delete-char
 bindkey -M viins '^[f' forward-word
 bindkey -M viins '^[b' backward-word
-bindkey -M viins '^I' _zsh_complete
-bindkey -M emacs '^I' _zsh_complete
+bindkey -M viins '^I' _zsh_suggest_or_complete
+bindkey -M emacs '^I' _zsh_suggest_or_complete
+bindkey -M viins '^[[Z' _zsh_complete
+bindkey -M emacs '^[[Z' _zsh_complete
 
 # Use Mise's global Atuin executable directly. Its stable symlink follows
 # upgrades and avoids running the Mise shim for each history operation.
