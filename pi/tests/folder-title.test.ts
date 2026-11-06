@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import install from "../extensions/folder-title.ts";
 
-function harness(t, { mode = "tui", cwd = "/test/.dotfiles" } = {}) {
+function harness(t, { mode = "tui", cwd = "/test/.dotfiles", name = undefined } = {}) {
   const handlers = new Map();
   const titles = [];
   const cleared = [];
@@ -14,12 +14,20 @@ function harness(t, { mode = "tui", cwd = "/test/.dotfiles" } = {}) {
   });
   t.mock.method(globalThis, "clearInterval", (timer) => cleared.push(timer));
   install({ on: (name, handler) => handlers.set(name, handler) });
-  const ctx = { mode, cwd, ui: { setTitle: (title) => titles.push(title) } };
+  const ctx = {
+    mode, cwd, name,
+    sessionManager: { getSessionName: () => ctx.name },
+    ui: { setTitle: (title) => titles.push(title) },
+  };
   const start = () => handlers.get("session_start")({}, ctx);
   const stop = () => handlers.get("session_shutdown")();
   start();
   t.after(() => { stop(); t.mock.restoreAll(); });
-  return { titles, timers, cleared, start, stop, ctx, tick: () => timers.at(-1)?.fn() };
+  return {
+    titles, timers, cleared, start, stop, ctx,
+    tick: () => timers.at(-1)?.fn(),
+    rename: () => handlers.get("session_info_changed")({}, ctx),
+  };
 }
 
 test("uses the plain folder title at startup and on periodic updates", (t) => {
@@ -31,6 +39,25 @@ test("uses the plain folder title at startup and on periodic updates", (t) => {
   h.ctx.cwd = "/test/another-project";
   h.tick();
   assert.equal(h.titles.at(-1), "another-project");
+});
+
+test("includes an existing session name at startup and on periodic updates", (t) => {
+  const h = harness(t, { name: "custom-name" });
+  assert.deepEqual(h.titles, [".dotfiles — custom-name"]);
+  h.ctx.name = "updated-name";
+  h.tick();
+  assert.equal(h.titles.at(-1), ".dotfiles — updated-name");
+});
+
+test("updates immediately when the session name changes or is cleared", (t) => {
+  const h = harness(t);
+  h.ctx.name = "custom-name";
+  // Emit through the same API used by /name.
+  h.rename();
+  assert.equal(h.titles.at(-1), ".dotfiles — custom-name");
+  h.ctx.name = undefined;
+  h.rename();
+  assert.equal(h.titles.at(-1), ".dotfiles");
 });
 
 test("cleans up the timer across session replacement and shutdown", (t) => {
@@ -51,6 +78,7 @@ test("falls back to the full path for the filesystem root", (t) => {
 
 test("does not write titles or start a timer in RPC mode", (t) => {
   const h = harness(t, { mode: "rpc" });
+  h.rename();
   assert.deepEqual(h.titles, []);
   assert.deepEqual(h.timers, []);
 });

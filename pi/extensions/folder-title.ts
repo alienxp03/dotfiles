@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
 	let timer: ReturnType<typeof setInterval> | undefined;
@@ -9,16 +9,23 @@ export default function (pi: ExtensionAPI) {
 		timer = undefined;
 	}
 
+	function update(ctx: ExtensionContext) {
+		if (ctx.mode !== "tui") return;
+		const folder = basename(ctx.cwd) || ctx.cwd;
+		const name = ctx.sessionManager.getSessionName();
+		ctx.ui.setTitle(name ? `${folder} — ${name}` : folder);
+	}
+
 	pi.on("session_start", (_event, ctx) => {
 		stop();
 		if (ctx.mode !== "tui") return;
 
-		const update = () => ctx.ui.setTitle(basename(ctx.cwd) || ctx.cwd);
-		update();
+		update(ctx);
 		// Pi resets its title after startup, reload, and session-name changes.
-		timer = setInterval(update, 1000);
+		timer = setInterval(() => update(ctx), 1000);
 		timer.unref();
 	});
 
+	pi.on("session_info_changed", (_event, ctx) => update(ctx));
 	pi.on("session_shutdown", stop);
 }
