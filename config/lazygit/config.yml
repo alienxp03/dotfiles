@@ -1,14 +1,14 @@
 gui:
   sidePanelWidth: 0.2
-  # Use one light author color so names stay readable instead of cycling through
-  # random colors that become backgrounds when the row is selected.
-  authorColors:
-    "*": "#e4e4e8"
   theme:
     # Keep the selected row dark and bold so author names remain legible.
     selectedLineBgColor:
       - "#1c1c1c"
       - bold
+    # Use one light author color so names stay readable instead of cycling through
+    # random colors that become backgrounds when the row is selected.
+    authorColors:
+      "*": "#e4e4e8"
   # Favor readable author names over commit hashes in the narrow commits panel.
   commitAuthorShortLength: 10
   commitHashLength: 4
