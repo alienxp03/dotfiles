@@ -7,22 +7,21 @@ rex.bind("shift+cmd+k", "session.switch")
 local config_home = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
 package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;" .. package.path
 require("raptor").setup({
-	-- ui = "terminal",
-	-- ui = "gui",
+	bin = os.getenv("HOME") .. "/.local/bin/raptor",
+	app = os.getenv("HOME") .. "/Applications/Raptor.app",
 	ui = "auto",
 	mobile_bounds = { x = 0.08, y = 0.15, w = 0.84, h = 0.60 },
 })
-rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_worktree_list")
-rex.bind("ctrl+o", function(ctx, ev)
+rex.bind("cmd+shift+o", function(ctx, ev)
 	rex.invoke("raptor")
 	return true
 end)
-rex.bind("ctrl+n", function(ctx, ev)
-	rex.invoke("raptor_worktree_new")
+rex.bind("cmd+shift+a", function(ctx, ev)
+	rex.invoke("raptor_agents")
 	return true
 end)
--- Instant task: auto-named worktree → new tab → fresh, empty Pi.
+-- Create an auto-named worktree and start fresh Pi without a picker.
 rex.bind("ctrl+shift+n", function(ctx, ev)
 	rex.invoke("raptor_task_new")
 	return true
@@ -34,12 +33,6 @@ rex.bind("ctrl+m", function(ctx, ev)
 end)
 rex.bind("cmd+p", "raptor_pane_last")
 
--- Additional iOS modifier combinations for testing.
-rex.bind("ctrl+shift+o", "raptor")
-rex.bind("alt+o", "raptor")
-rex.bind("alt+shift+o", "raptor")
-rex.bind("ctrl+alt+o", "raptor")
-
 -- raptor: END
 
 -- Move between panes with the Neovim-style home row.
@@ -48,8 +41,8 @@ rex.bind("ctrl+j", "pane.focus.down")
 rex.bind("ctrl+k", "pane.focus.up")
 rex.bind("ctrl+l", "pane.focus.right")
 
--- Preserve terminal Ctrl+L (clear/redraw) on a shifted shortcut.
-rex.bind("cmd+shift+l", "pane.send_key", { key = "ctrl+l" })
+-- Open Activity in the quick switcher.
+rex.bind("cmd+shift+.", "pane.view_activity")
 
 -- Toggle the sidebar.
 rex.bind("cmd+b", "client.sidebar.toggle")
@@ -58,9 +51,21 @@ rex.bind("cmd+b", "client.sidebar.toggle")
 rex.bind("cmd+shift+f", "pane.zoom")
 
 -- >>> resh >>>
-dofile("/Users/azuan/Library/Application Support/resh/resh.lua")
-rex.exec.start(
-	{ "/Users/azuan/Library/Application Support/resh/resh", "service", "start" },
-	{ detach = true, stdout = false, stderr = false }
-)
+local resh_dir = os.getenv("HOME") .. "/Library/Application Support/resh"
+local resh_lua = io.open(resh_dir .. "/resh.lua", "r")
+local resh_bin = io.open(resh_dir .. "/resh", "r")
+if resh_lua then
+	resh_lua:close()
+end
+if resh_bin then
+	resh_bin:close()
+end
+-- Resh is optional; not every machine has it installed.
+if resh_lua and resh_bin then
+	dofile(resh_dir .. "/resh.lua")
+	rex.exec.start(
+		{ resh_dir .. "/resh", "service", "start" },
+		{ detach = true, stdout = false, stderr = false }
+	)
+end
 -- <<< resh <<<
