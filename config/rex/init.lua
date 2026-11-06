@@ -15,22 +15,22 @@ require("raptor").setup({
 rex.bind("shift+cmd+o", "raptor")
 rex.bind("shift+cmd+t", "raptor_worktree_list")
 rex.bind("ctrl+o", function(ctx, ev)
-    rex.invoke("raptor")
-    return true
+	rex.invoke("raptor")
+	return true
 end)
 rex.bind("ctrl+n", function(ctx, ev)
-    rex.invoke("raptor_worktree_new")
-    return true
+	rex.invoke("raptor_worktree_new")
+	return true
 end)
 -- Instant task: auto-named worktree → new tab → fresh, empty Pi.
 rex.bind("ctrl+shift+n", function(ctx, ev)
-    rex.invoke("raptor_task_new")
-    return true
+	rex.invoke("raptor_task_new")
+	return true
 end)
 -- Experimental two-stage path → action launcher.
 rex.bind("ctrl+m", function(ctx, ev)
-    rex.invoke("raptor_launcher")
-    return true
+	rex.invoke("raptor_launcher")
+	return true
 end)
 rex.bind("cmd+p", "raptor_pane_last")
 
@@ -59,6 +59,8 @@ rex.bind("cmd+shift+f", "pane.zoom")
 
 -- >>> resh >>>
 dofile("/Users/azuan/Library/Application Support/resh/resh.lua")
-rex.exec.start({ "/Users/azuan/Library/Application Support/resh/resh", "service", "start" },
-  { detach = true, stdout = false, stderr = false })
+rex.exec.start(
+	{ "/Users/azuan/Library/Application Support/resh/resh", "service", "start" },
+	{ detach = true, stdout = false, stderr = false }
+)
 -- <<< resh <<<
