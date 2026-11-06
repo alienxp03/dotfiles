@@ -9,7 +9,7 @@ package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;"
 require("raptor").setup({
 	bin = os.getenv("HOME") .. "/.local/bin/raptor",
 	app = os.getenv("HOME") .. "/Applications/Raptor.app",
-	ui = "auto",
+	ui = "terminal",
 	mobile_bounds = { x = 0.08, y = 0.15, w = 0.84, h = 0.60 },
 })
 rex.bind("shift+cmd+t", "raptor_worktree_list")
@@ -63,9 +63,6 @@ end
 -- Resh is optional; not every machine has it installed.
 if resh_lua and resh_bin then
 	dofile(resh_dir .. "/resh.lua")
-	rex.exec.start(
-		{ resh_dir .. "/resh", "service", "start" },
-		{ detach = true, stdout = false, stderr = false }
-	)
+	rex.exec.start({ resh_dir .. "/resh", "service", "start" }, { detach = true, stdout = false, stderr = false })
 end
 -- <<< resh <<<
