@@ -9,7 +9,7 @@ package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;"
 require("raptor").setup({
 	bin = os.getenv("HOME") .. "/.local/bin/raptor",
 	app = os.getenv("HOME") .. "/Applications/Raptor.app",
-	ui = "terminal",
+	ui = "auto",
 	mobile_bounds = { x = 0.08, y = 0.15, w = 0.84, h = 0.60 },
 })
 rex.bind("shift+cmd+t", "raptor_worktree_list")
@@ -19,6 +19,10 @@ rex.bind("cmd+shift+o", function(ctx, ev)
 end)
 rex.bind("cmd+shift+a", function(ctx, ev)
 	rex.invoke("raptor_agents")
+	return true
+end)
+rex.bind("cmd+shift+s", function(ctx, ev)
+	rex.invoke("raptor_sessions")
 	return true
 end)
 -- Create an auto-named worktree and start fresh Pi without a picker.
