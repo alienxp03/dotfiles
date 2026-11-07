@@ -287,14 +287,14 @@ return {
     {
       "<leader>gg",
       function()
-        Snacks.lazygit()
+        require("user.util.lazygit").open()
       end,
       desc = "Toggle Lazygit",
     },
     {
       "<c-g>",
       function()
-        Snacks.lazygit()
+        require("user.util.lazygit").open()
       end,
       desc = "Toggle Lazygit",
     },

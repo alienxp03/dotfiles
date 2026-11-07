@@ -49,7 +49,27 @@ git-delete-merged-branches() {
 }
 alias gtree="git log --graph --abbrev-commit --decorate --date=relative --format=format:'\''%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)'\'' --all'''"
 alias gpl='git pull && git-delete-merged-branches'
-alias lz='lazygit'
+unalias lz 2>/dev/null
+function lz() {
+	local window payload
+	if [[ -n "${REX_SESSION:-}" && -n "${REX_BLOCK:-}" ]] &&
+		(( $+commands[rex] && $+commands[jq] )); then
+		payload=$(jq -nc --arg block "$REX_BLOCK" '{block_id: $block}')
+		window=$(command rex --autostart=false api call -s "$REX_SESSION" session.describe_block "$payload" |
+			jq -er '.block.window_id // empty')
+		if [[ -n "$window" ]]; then
+			payload=$(jq -nc --arg window "$window" --arg cwd "$PWD" --args '
+				{window_id: $window, bounds: [0.025, 0.025, 0.95, 0.95], focus: true,
+				 layout: {block: {flavor: "com.superlogical.terminal.shell", label: "LazyGit",
+				 options: {command: (["lazygit"] + $ARGS.positional), cwd: $cwd}}}}' -- "$@")
+			if command rex --autostart=false api call -s "$REX_SESSION" session.new_layer "$payload" >/dev/null; then
+				return 0
+			fi
+		fi
+		print -u2 'Rex LazyGit unavailable; running locally'
+	fi
+	command lazygit "$@"
+}
 alias lr='lazydocker'
 alias lq='lazysql'
 # alias greset="git reset $(git merge-base master $(git rev-parse --abbrev-ref HEAD)) " # reset all commits in branch
