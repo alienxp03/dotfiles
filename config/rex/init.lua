@@ -6,7 +6,11 @@ rex.bind("shift+cmd+k", "session.switch")
 -- Keep modules discoverable when tools validate this symlink's dotfiles target.
 local config_home = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
 package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;" .. package.path
-require("raptor").setup({
+-- The server's Lua state caches requires across config reloads; bust it so a
+-- freshly installed module version (new entry points included) always loads.
+package.loaded["raptor"] = nil
+local raptor = require("raptor")
+raptor.setup({
 	bin = os.getenv("HOME") .. "/.local/bin/raptor",
 	app = os.getenv("HOME") .. "/Applications/Raptor.app",
 	ui = "auto",
