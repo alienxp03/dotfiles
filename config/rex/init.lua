@@ -41,6 +41,22 @@ rex.bind("ctrl+m", function(ctx, ev)
 end)
 rex.bind("cmd+p", "raptor_pane_last")
 
+-- Mobile clients have no cmd key; duplicate raptor keys with ctrl.
+rex.bind("ctrl+shift+t", "raptor_worktree_list")
+rex.bind("ctrl+shift+o", function(ctx, ev)
+	rex.invoke("raptor")
+	return true
+end)
+rex.bind("ctrl+shift+a", function(ctx, ev)
+	rex.invoke("raptor_agents")
+	return true
+end)
+rex.bind("ctrl+shift+s", function(ctx, ev)
+	rex.invoke("raptor_sessions")
+	return true
+end)
+rex.bind("ctrl+p", "raptor_pane_last")
+
 -- raptor: END
 
 -- Move between panes with the Neovim-style home row.
