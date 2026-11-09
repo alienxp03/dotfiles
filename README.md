@@ -111,6 +111,29 @@ Before committing, verify local-only files are still untracked:
 git status --short --untracked-files=all
 ```
 
+### Pi startup models and push notifications
+
+The zsh `pi` wrapper reads `~/.dotfiles/pi/startup-models.local.json`
+(or `$DOTFILES/pi/startup-models.local.json`). This ignored file replaces the
+shared startup model selection through `--models`:
+
+```json
+["openai-codex/gpt-6-astra", "openai-codex/gpt-6.1-sol", "openai-codex/gpt-6-luna"]
+```
+
+Without this file, shared settings apply. Explicit `pi --models ...` takes
+priority. Requires `jq`. Run `source ~/.config/zsh/functions.zsh` after setup.
+Direct executable calls (`command pi`, `mise exec -- pi`, and app launchers)
+bypass this shell wrapper. Model shortcut presets are separate.
+
+To disable push notifications on one machine, create `~/.pi/agent/ntfy.json`:
+
+```json
+{"enabled": false}
+```
+
+Use `$PI_CODING_AGENT_DIR/ntfy.json` if you set a custom agent directory.
+
 ## Repository Hygiene
 
 Remove Finder metadata files:

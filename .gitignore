@@ -17,6 +17,7 @@ tmp/
 config/kesh/config.yaml
 /pi/models.json
 /pi/model-presets.local.json
+/pi/startup-models.local.json
 
 # Generated resh configuration backups
 /config/rex/*.resh-backup-*

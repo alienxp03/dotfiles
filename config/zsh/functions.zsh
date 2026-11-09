@@ -1,3 +1,19 @@
+# Apply machine-local model selection before Pi loads shared settings.
+pi() {
+	emulate -L zsh
+	local config="${DOTFILES:-$HOME/.dotfiles}/pi/startup-models.local.json" models
+	local -a model_args=()
+	if [[ -e "$config" ]]; then
+		models=$(command jq -er '
+			if type == "array" and length > 0 and
+				all(.[]; type == "string" and test("^[^,[:space:]]+$"))
+			then join(",") else error("expected a non-empty array of model patterns") end
+		' "$config") || return 1
+		model_args=(--models "$models")
+	fi
+	command pi "${model_args[@]}" "$@"
+}
+
 # Clear any old alias before defining the global just command.
 unalias js 2>/dev/null
 
