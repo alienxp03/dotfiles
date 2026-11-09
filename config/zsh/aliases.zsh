@@ -53,7 +53,7 @@ unalias lz 2>/dev/null
 function lz() {
 	local window payload
 	if [[ -n "${REX_SESSION:-}" && -n "${REX_BLOCK:-}" ]] &&
-		(( $+commands[rex] && $+commands[jq] )); then
+		(($+commands[rex] && $+commands[jq])); then
 		payload=$(jq -nc --arg block "$REX_BLOCK" '{block_id: $block}')
 		window=$(command rex --autostart=false api call -s "$REX_SESSION" session.describe_block "$payload" |
 			jq -er '.block.window_id // empty')
