@@ -3,59 +3,13 @@ rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
 -- raptor: START
--- Keep modules discoverable when tools validate this symlink's dotfiles target.
-local config_home = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
-package.path = config_home .. "/rex/?.lua;" .. config_home .. "/rex/?/init.lua;" .. package.path
--- The server's Lua state caches requires across config reloads; bust it so a
--- freshly installed module version (new entry points included) always loads.
-package.loaded["raptor"] = nil
-local raptor = require("raptor")
-raptor.setup({
-	bin = os.getenv("HOME") .. "/.local/bin/raptor",
-	app = os.getenv("HOME") .. "/Applications/Raptor.app",
-	ui = "auto",
-	mobile_bounds = { x = 0.08, y = 0.15, w = 0.84, h = 0.60 },
-})
-rex.bind("shift+cmd+t", "raptor_worktree_list")
-rex.bind("cmd+shift+o", function(ctx, ev)
-	rex.invoke("raptor")
-	return true
-end)
-rex.bind("cmd+shift+a", function(ctx, ev)
-	rex.invoke("raptor_agents")
-	return true
-end)
-rex.bind("cmd+shift+s", function(ctx, ev)
-	rex.invoke("raptor_sessions")
-	return true
-end)
--- Create an auto-named worktree and start fresh Pi without a picker.
-rex.bind("ctrl+shift+n", function(ctx, ev)
-	rex.invoke("raptor_task_new")
-	return true
-end)
--- Experimental two-stage path → action launcher.
-rex.bind("ctrl+m", function(ctx, ev)
-	rex.invoke("raptor_launcher")
-	return true
-end)
-rex.bind("cmd+p", "raptor_pane_last")
+dofile(os.getenv("HOME") .. "/.config/rex/raptor/init.lua").setup({})
+rex.bind("cmd+shift+o", "raptor")
+rex.bind("ctrl+shift+n", "raptor_worktree_agent")
+rex.bind("cmd+p", "raptor_session_last")
 
 -- Mobile clients have no cmd key; duplicate raptor keys with ctrl.
-rex.bind("ctrl+shift+t", "raptor_worktree_list")
-rex.bind("ctrl+shift+o", function(ctx, ev)
-	rex.invoke("raptor")
-	return true
-end)
-rex.bind("ctrl+shift+a", function(ctx, ev)
-	rex.invoke("raptor_agents")
-	return true
-end)
-rex.bind("ctrl+shift+s", function(ctx, ev)
-	rex.invoke("raptor_sessions")
-	return true
-end)
-rex.bind("ctrl+p", "raptor_pane_last")
+rex.bind("ctrl+shift+o", "raptor")
 
 -- raptor: END
 
