@@ -9,9 +9,26 @@ rex.bind("shift+cmd+n", "raptor_worktree_new")
 rex.bind("ctrl+shift+n", "raptor_worktree_agent")
 rex.bind("cmd+p", "raptor_session_last")
 
--- Mobile clients have no cmd key; duplicate raptor keys with ctrl.
-rex.bind("ctrl+shift+o", "raptor")
-rex.bind("ctrl+shift+t", "raptor_worktree_new")
+-- Only iOS clients get the Ctrl alternatives to Raptor's Cmd shortcuts.
+local function ios_bind(key, action)
+	rex.bind(key, function(ctx)
+		if not ctx.client_id then
+			return false
+		end
+
+		local result = rex.call("client.inspect", { client_id = ctx.client_id })
+		local info = result and result.client and result.client.info
+		if not info or info.platform ~= "ios" then
+			return false
+		end
+
+		rex.invoke(action)
+		return true
+	end)
+end
+
+ios_bind("ctrl+shift+o", "raptor")
+ios_bind("ctrl+shift+t", "raptor_worktree_new")
 
 -- raptor: END
 
