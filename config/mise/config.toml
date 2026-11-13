@@ -13,25 +13,25 @@
 # Languages / runtimes
 bun    = "1.4.4"
 deno   = "2.9.8"
-go     = "1.27.3"
+go     = "1.27.4"
 lua    = "5.5.1"
-node   = "26.13.0"
+node   = "26.13.1"
 python = "3.15.2"
 ruby   = "4.0.9"
 rust   = "1.99.1"
 
 # JavaScript package managers
 pnpm           = "12.18.0"
-"npm:prettier" = "3.9.10"
+"npm:prettier" = "3.10.1"
 
 # Diagram rendering
 "npm:@mermaid-js/mermaid-cli" = "12.2.0"
 
 # AI agents
-"npm:ccusage"                         = "20.0.48"
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.319", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "1.5.0"
-"npm:@openai/codex"                   = "0.167.0"
+"npm:ccusage"                         = "20.0.50"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.323", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "1.5.2"
+"npm:@openai/codex"                   = "0.169.0"
 "npm:happy"                           = { version = "1.2.6", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.19.5", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.3.0"
@@ -41,17 +41,17 @@ pnpm           = "12.18.0"
 uv            = "0.13.7"
 
 # Infrastructure as code
-opentofu       = "1.13.8"
-terraform      = "1.17.1"
+opentofu       = "1.13.9"
+terraform      = "1.17.2"
 terraform-docs = "0.24.0"
-terragrunt     = "1.2.1"
-tflint         = "0.65.0"
+terragrunt     = "1.2.2"
+tflint         = "0.66.0"
 tfsec          = "1.28.14"
 
 # Cloud / Kubernetes
-aws-cli     = { version = "2.39.4", symlink_bins = "true" }
+aws-cli     = { version = "2.40.1", symlink_bins = "true" }
 cloudflared = "2026.10.7"
-gcloud      = "592.0.0"
+gcloud      = "593.0.0"
 helm        = "4.3.1"
 k9s         = "0.51.0"
 kubectl     = "1.37.2"
@@ -60,33 +60,33 @@ kubectx     = "0.11.0"
 minikube    = "1.39.0"
 
 # Git / shell / developer workflow
-atuin                     = "18.24.5"
+atuin                     = "18.24.6"
 delta                     = "0.20.1"
 direnv                    = "2.38.2"
-fzf                       = "0.74.5"
+fzf                       = "0.75.0"
 gh                        = "2.103.3"
 "github:joshmedeski/sesh" = "2.34.0"
 just                      = "1.59.0"
 lazydocker                = "0.25.2"
-lazygit                   = "0.66.2"
+lazygit                   = "0.66.3"
 prek                      = "0.5.10"
 shellcheck                = "0.11.0"
 shfmt                     = "3.14.1"
-tmux                      = "3.7c"
+tmux                      = "3.8"
 zoxide                    = "0.10.0"
 
 # Editors / code tooling
 neovim      = "0.12.6"
 stylua      = "2.6.0"
 taplo       = "0.10.0"
-tree-sitter = "0.27.1"
+tree-sitter = "0.27.2"
 yamlfmt     = "0.21.0"
 
 # CLI utilities
 bat                                  = "0.26.1"
 cmake                                = "4.4.5"
 eza                                  = "0.23.5"
-fd                                   = "10.5.1"
+fd                                   = "10.5.2"
 ffmpeg                               = "9.0.2"
 glow                                 = "3.0.0"
 "go:github.com/jorgerojas26/lazysql" = "v0.7.0"
@@ -95,7 +95,7 @@ jq                                   = "1.8.2"
 ripgrep                              = "15.2.0"
 sqlite                               = "3.54.1"
 yazi                                 = "26.9.1"
-yq                                   = "4.54.1"
+yq                                   = "4.54.3"
 herdr                                = "0.9.5"
 "github:agavra/tuicr"                = "latest"
 
