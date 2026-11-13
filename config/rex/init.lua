@@ -28,7 +28,8 @@ local function ios_bind(key, action)
 end
 
 ios_bind("ctrl+shift+o", "raptor")
-ios_bind("ctrl+shift+t", "raptor_worktree_new")
+-- ctrl+shift+t is bound below to tuicr's PR review, which dispatches to
+-- raptor_worktree_new on iOS clients.
 
 -- raptor: END
 
@@ -46,6 +47,74 @@ rex.bind("cmd+b", "client.sidebar.toggle")
 
 -- Toggle zoom on the focused pane.
 rex.bind("cmd+shift+f", "pane.zoom")
+
+-- Review code with tuicr in a floating pane over the active window
+-- (ported from herdr's prefix+t / prefix+shift+i popups).
+local function tuicr_layer(ctx, command)
+	-- Start in the focused pane's working directory, like herdr's popups.
+	local cwd
+	if ctx.block_id then
+		local ok, proc = pcall(rex.call, "block.method", {
+			session_id = ctx.session_id,
+			block_id = ctx.block_id,
+			method = "process",
+		})
+		if ok and type(proc) == "table" and proc.foreground and proc.foreground.cwd then
+			cwd = proc.foreground.cwd
+		end
+	end
+
+	local options = {
+		command = command,
+		-- An interactive shell reads ~/.zshrc, which puts mise's shims on PATH.
+		interactive = true,
+	}
+	if cwd then
+		options.cwd = cwd
+	end
+
+	pcall(rex.call, "session.new_layer", {
+		session_id = ctx.session_id,
+		bounds = { x = 0.05, y = 0.05, w = 0.9, h = 0.9 },
+		focus = true,
+		layout = {
+			block = {
+				flavor = "com.superlogical.terminal.shell",
+				label = "tuicr",
+				options = options,
+			},
+		},
+	})
+	return true
+end
+
+-- Ctrl+T: review the working tree.
+rex.bind("ctrl+t", function(ctx)
+	if not ctx.session_id then
+		return false
+	end
+	return tuicr_layer(ctx, { "tuicr", "--working-tree" })
+end)
+
+-- Ctrl+Shift+T: review the branch's open PR. iOS keeps Raptor's worktree action.
+rex.bind("ctrl+shift+t", function(ctx)
+	if ctx.client_id ~= nil then
+		local clients = rex.call("client.list")
+		for _, client in ipairs(clients and clients.clients or {}) do
+			if client.client_id == ctx.client_id and client.info ~= nil and client.info.platform == "ios" then
+				rex.invoke("raptor_worktree_new")
+				return true
+			end
+		end
+	end
+	if not ctx.session_id then
+		return false
+	end
+	return tuicr_layer(ctx, {
+		"sh", "-c",
+		'n="$(gh pr view --json number --jq .number)" && exec tuicr pr "$n" || { echo "no open PR for this branch"; exit 1; }',
+	})
+end)
 
 -- >>> resh >>>
 local resh_dir = os.getenv("HOME") .. "/Library/Application Support/resh"
