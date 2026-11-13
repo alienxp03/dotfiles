@@ -26,14 +26,8 @@
   "enabledModels": [
     "openai-codex/gpt-6-astra",
     "openai-codex/gpt-6.1-sol",
-    "openai-codex/gpt-6-luna",
-    "zai/glm-5.3",
-    "zai/glm-5.3-flash"
+    "openai-codex/gpt-6-luna"
   ],
-  "modelThinkingLevels": {
-    "zai/glm-5.3": "max",
-    "zai/glm-5.3-flash": "max"
-  },
   "hideThinkingBlock": false,
   "doubleEscapeAction": "none",
   "extensions": [],
