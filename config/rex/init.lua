@@ -9,6 +9,11 @@ rex.bind("shift+cmd+n", "raptor_worktree_new")
 rex.bind("ctrl+shift+n", "raptor_worktree_agent")
 rex.bind("cmd+p", "raptor_session_last")
 
+-- Jump to pinned sessions by stable slot (Raptor manages the slots).
+for slot = 1, 9 do
+	rex.bind("ctrl+cmd+" .. slot, "raptor_pin_" .. slot)
+end
+
 -- Only iOS clients get the Ctrl alternatives to Raptor's Cmd shortcuts.
 local function ios_bind(key, action)
 	rex.bind(key, function(ctx)
