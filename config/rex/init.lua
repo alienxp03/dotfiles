@@ -3,7 +3,7 @@ rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
 -- raptor: START
-dofile(os.getenv("HOME") .. "/.config/rex/raptor/init.lua").setup({})
+dofile(os.getenv("HOME") .. "/.config/rex/raptor/init.lua").setup({ open_animation = false })
 rex.bind("cmd+shift+o", "raptor")
 rex.bind("shift+cmd+n", "raptor_worktree_new")
 rex.bind("ctrl+shift+n", "raptor_worktree_agent")
