@@ -118,7 +118,7 @@ The zsh `pi` wrapper reads `~/.dotfiles/pi/startup-models.local.json`
 shared startup model selection through `--models`:
 
 ```json
-["openai-codex/gpt-6-astra", "openai-codex/gpt-6.1-sol", "openai-codex/gpt-6-luna"]
+["openai-codex/gpt-6.2-astra", "openai-codex/gpt-6.2-sol", "openai-codex/gpt-6-luna"]
 ```
 
 Without this file, shared settings apply. Explicit `pi --models ...` takes

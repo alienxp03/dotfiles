@@ -8,13 +8,13 @@
   {
     "label": "Sol · high",
     "provider": "openai-codex",
-    "modelId": "gpt-6.1-sol",
+    "modelId": "gpt-6.2-sol",
     "thinkingLevel": "medium"
   },
   {
     "label": "Astra · medium",
     "provider": "openai-codex",
-    "modelId": "gpt-6-astra",
+    "modelId": "gpt-6.2-astra",
     "thinkingLevel": "medium"
   }
 ]

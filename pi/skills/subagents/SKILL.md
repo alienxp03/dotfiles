@@ -21,7 +21,7 @@ Pi can use any model shown by `pi --list-models`. Prefer `provider/model-id`; a 
 | `zai/glm-5.3`             | no     | `max`              |
 | `zai/glm-5.3-flash`       | yes    | `max`              |
 | `openai-codex/gpt-6-luna` | yes    | `xhigh`            |
-| `openai-codex/gpt-6.1-sol` | yes    | `high`             |
+| `openai-codex/gpt-6.2-sol` | yes    | `high`             |
 
 **Thinking budgets:** `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. These map directly to pi thinking levels.
 
@@ -31,12 +31,12 @@ Pi can use any model shown by `pi --list-models`. Prefer `provider/model-id`; a 
 
 **Harness:** `codex`
 **Prompt nicknames:** “codex”, “Codex CLI”, “codex agent”, “codex subagent”
-**Best default:** `gpt-6-luna` with `xhigh` effort for coding work. Stick to `gpt-6-luna`/`gpt-6.1-sol` unless the user specifically asks for another model.
+**Best default:** `gpt-6-luna` with `xhigh` effort for coding work. Stick to `gpt-6-luna`/`gpt-6.2-sol` unless the user specifically asks for another model.
 
 | Model        | Recommended effort |
 | ------------ | ------------------ |
 | `gpt-6-luna` | `xhigh`            |
-| `gpt-6.1-sol` | `high`             |
+| `gpt-6.2-sol` | `high`             |
 
 **Thinking budgets accepted by the extension:** `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Codex maps these to the nearest effort supported by the selected model; `off`/`minimal` become `minimal`, while `max` becomes the highest extension-supported Codex effort.
 
