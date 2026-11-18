@@ -1,18 +1,18 @@
 [
   {
-    "label": "Luna · xhigh",
+    "label": "Luna 6 · xhigh",
     "provider": "openai-codex",
     "modelId": "gpt-6-luna",
     "thinkingLevel": "xhigh"
   },
   {
-    "label": "Sol · high",
+    "label": "Sol 6.2 · medium",
     "provider": "openai-codex",
     "modelId": "gpt-6.2-sol",
     "thinkingLevel": "medium"
   },
   {
-    "label": "Astra · medium",
+    "label": "Astra 6.2 · medium",
     "provider": "openai-codex",
     "modelId": "gpt-6.2-astra",
     "thinkingLevel": "medium"
