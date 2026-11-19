@@ -44,6 +44,12 @@ rex.bind("ctrl+j", "pane.focus.down")
 rex.bind("ctrl+k", "pane.focus.up")
 rex.bind("ctrl+l", "pane.focus.right")
 
+-- Swap pane with its neighbor in that direction (mirrors ⇧⌥⌘+arrow).
+rex.bind("cmd+opt+h", "pane.move.left")
+rex.bind("cmd+opt+j", "pane.move.down")
+rex.bind("cmd+opt+k", "pane.move.up")
+rex.bind("cmd+opt+l", "pane.move.right")
+
 -- Open Activity in the quick switcher.
 rex.bind("cmd+shift+.", "pane.view_activity")
 
