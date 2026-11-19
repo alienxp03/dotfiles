@@ -2,6 +2,7 @@
 typeset -U path fpath
 path=("${(@)path:#${MISE_DATA_DIR:-$HOME/.local/share/mise}/installs/*}")
 source "$HOME/.config/zsh/env.zsh"
+[[ -r "$HOME/.env.local" ]] && source "$HOME/.env.local"
 case $OSTYPE in
 darwin*) source "$HOME/.config/zsh/env.darwin.zsh" ;;
 linux*) source "$HOME/.config/zsh/env.linux.zsh" ;;
