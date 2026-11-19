@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import install from "../extensions/kitty-tree.ts";
@@ -26,7 +26,7 @@ async function harness(t, { idle = true, code = 0 } = {}) {
 	const notices = [];
 	const commands = new Map();
 	const entries = [
-		{ type: "message", id: "a", message: { role: "assistant", content: "Done" } },
+		{ type: "message", id: "a", message: { role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Done" }] } },
 		{ type: "message", id: "b", message: { role: "user", content: "Next" } },
 	];
 	install({
@@ -47,11 +47,11 @@ async function harness(t, { idle = true, code = 0 } = {}) {
 			getBranch: () => entries,
 		},
 	};
-	return { calls, notices, entries, run: args => commands.get("kclone").handler(args, ctx) };
+	return { calls, notices, entries, directory, run: args => commands.get("kclone").handler(args, ctx) };
 }
 
-for (const [input, direction] of [["", "down"], ["top", "up"], ["left", "left"], ["r", "right"]]) {
-	test(`cmux clones ${input || "bottom"} from the caller surface`, async t => {
+for (const [input, direction] of [["", "right"], ["bottom", "down"], ["top", "up"], ["left", "left"], ["r", "right"]]) {
+	test(`cmux clones ${input || "right by default"} from the caller surface`, async t => {
 		const h = await harness(t);
 		await h.run(input);
 		assert.equal(h.calls.length, 1);
@@ -63,13 +63,13 @@ for (const [input, direction] of [["", "down"], ["top", "up"], ["left", "left"],
 		const path = call.args[7].split(" && pi --session '")[1].slice(0, -1);
 		const [header, ...entries] = (await readFile(path, "utf8")).trim().split("\n").map(line => JSON.parse(line));
 		assert.equal(header.parentSession, "/parent.jsonl");
-		assert.deepEqual(entries, h.entries);
+		assert.deepEqual(entries, h.entries.slice(0, 1));
 		assert.equal(h.notices.at(-1).level, "info");
 	});
 }
 
-for (const [input, direction] of [["", "below"], ["t", "above"], ["left", "left"], ["right", "right"]]) {
-	test(`Rex clones ${input || "bottom"} from the caller block`, async t => {
+for (const [input, direction] of [["", "right"], ["bottom", "below"], ["t", "above"], ["left", "left"], ["right", "right"]]) {
+	test(`Rex clones ${input || "right by default"} from the caller block`, async t => {
 		const h = await harness(t);
 		Object.assign(process.env, { REX_SESSION: "session-test", REX_BLOCK: "block-test", HERDR_ENV: "1" });
 		await h.run(input);
@@ -82,7 +82,7 @@ for (const [input, direction] of [["", "below"], ["t", "above"], ["left", "left"
 		]);
 		const [header, ...entries] = (await readFile(call.args.at(-1), "utf8")).trim().split("\n").map(line => JSON.parse(line));
 		assert.equal(header.parentSession, "/parent.jsonl");
-		assert.deepEqual(entries, h.entries);
+		assert.deepEqual(entries, h.entries.slice(0, 1));
 		assert.equal(h.notices.at(-1).level, "info");
 	});
 }
@@ -104,7 +104,7 @@ test("Rex excludes the live prompt when busy", async t => {
 	await h.run("");
 	const entries = (await readFile(h.calls[0].args.at(-1), "utf8")).trim().split("\n").slice(1).map(line => JSON.parse(line));
 	assert.deepEqual(entries, h.entries.slice(0, 1));
-	assert.match(h.notices.at(-1).text, /live response not included/);
+	assert.match(h.notices.at(-1).text, /last completed reply/);
 });
 
 test("Rex reports split errors and keeps the snapshot", async t => {
@@ -121,7 +121,7 @@ test("cmux excludes the live prompt when busy", async t => {
 	const path = h.calls[0].args[7].split(" && pi --session '")[1].slice(0, -1);
 	const entries = (await readFile(path, "utf8")).trim().split("\n").slice(1).map(line => JSON.parse(line));
 	assert.deepEqual(entries, h.entries.slice(0, 1));
-	assert.match(h.notices.at(-1).text, /live response not included/);
+	assert.match(h.notices.at(-1).text, /last completed reply/);
 });
 
 test("cmux rejects a missing surface before making a snapshot", async t => {
@@ -131,6 +131,50 @@ test("cmux rejects a missing surface before making a snapshot", async t => {
 	assert.equal(h.calls.length, 0);
 	assert.equal(h.notices.at(-1).level, "error");
 });
+
+for (const idle of [true, false]) {
+	for (const stopReason of ["toolUse", "aborted", "error", "length"]) {
+		test(`checkpoint skips ${stopReason} replies (idle=${idle})`, async t => {
+			const h = await harness(t, { idle });
+			h.entries.push({ type: "message", id: "c", message: { role: "assistant", stopReason, content: [] } });
+			await h.run("");
+			const path = h.calls[0].args[7].split(" && pi --session '")[1].slice(0, -1);
+			const entries = (await readFile(path, "utf8")).trim().split("\n").slice(1).map(JSON.parse);
+			assert.deepEqual(entries, h.entries.slice(0, 1));
+		});
+	}
+}
+
+test("no completed reply creates neither snapshot nor pane", async t => {
+	const h = await harness(t);
+	h.entries.shift();
+	await h.run("");
+	assert.equal(h.calls.length, 0);
+	assert.deepEqual(await readdir(h.directory), []);
+	assert.match(h.notices.at(-1).text, /No completed reply/);
+});
+
+for (const input of ["latest", "latest left"]) {
+	test(`${input} copies all saved entries without a completed reply`, async t => {
+		const h = await harness(t, { idle: false });
+		h.entries.shift();
+		await h.run(input);
+		assert.equal(h.calls[0].args[1], input.endsWith("left") ? "left" : "right");
+		const path = h.calls[0].args[7].split(" && pi --session '")[1].slice(0, -1);
+		const entries = (await readFile(path, "utf8")).trim().split("\n").slice(1).map(JSON.parse);
+		assert.deepEqual(entries, h.entries);
+		assert.match(h.notices.at(-1).text, /current snapshot/);
+	});
+}
+
+for (const input of ["unknown", "left latest", "latest right extra"]) {
+	test(`rejects invalid arguments: ${input}`, async t => {
+		const h = await harness(t);
+		await h.run(input);
+		assert.equal(h.calls.length, 0);
+		assert.match(h.notices.at(-1).text, /Usage:/);
+	});
+}
 
 test("cmux reports split errors and keeps the snapshot", async t => {
 	const h = await harness(t, { code: 1 });

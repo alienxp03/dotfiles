@@ -22,9 +22,13 @@ const DIRECTION_ALIASES: Record<string, Direction> = {
 	right: "right",
 };
 
-function parseDirection(args: string): Direction | undefined {
-	const value = args.trim().split(/\s+/, 1)[0]?.toLowerCase() || "bottom";
-	return DIRECTION_ALIASES[value];
+function parseOptions(args: string): { direction: Direction; latest: boolean } | undefined {
+	const tokens = args.trim().toLowerCase().split(/\s+/).filter(Boolean);
+	const latest = tokens[0] === "latest";
+	if (latest) tokens.shift();
+	const direction = DIRECTION_ALIASES[tokens[0] || "right"];
+	if (!direction || tokens.length > 1) return undefined;
+	return { direction, latest };
 }
 
 function getKittyLocation(direction: Direction): "hsplit" | "vsplit" {
@@ -86,24 +90,26 @@ function getCreatedPaneId(response: HerdrResponse): string {
 
 function getDirectionCompletions(prefix: string): AutocompleteItem[] | null {
 	const normalizedPrefix = prefix.toLowerCase();
-	const items = DIRECTIONS.map((value) => ({ value, label: value }));
+	const items = [...DIRECTIONS, "latest", ...DIRECTIONS.map(direction => `latest ${direction}`)]
+		.map((value) => ({ value, label: value }));
 	const filtered = items.filter((item) => item.value.startsWith(normalizedPrefix));
 	return filtered.length > 0 ? filtered : null;
 }
 
 function getCloneBranch(
 	sessionManager: ReadonlySessionManager,
-	running: boolean,
+	latest: boolean,
 ) {
 	const entries = sessionManager.getBranch();
-	if (!running) return entries;
+	if (latest) return entries;
 
-	// When the parent is streaming, exclude the current user prompt and the
-	// incomplete assistant response. Clone the conversation through the last
-	// completed assistant reply instead.
+	// A saved assistant message can be a tool call or an interrupted reply.
+	// Only a successful final reply is a safe default checkpoint.
 	for (let index = entries.length - 1; index >= 0; index--) {
 		const entry = entries[index];
-		if (entry.type === "message" && entry.message.role === "assistant") {
+		if (entry.type === "message" && entry.message.role === "assistant"
+			&& entry.message.stopReason === "stop"
+			&& !entry.message.content.some(block => block.type === "toolCall")) {
 			return entries.slice(0, index + 1);
 		}
 	}
@@ -327,11 +333,12 @@ async function cloneInHerdr(
 
 export default function (pi: ExtensionAPI) {
 	const cloneHandler = async (args: string, ctx: ExtensionCommandContext) => {
-		const direction = parseDirection(args);
-		if (!direction) {
-			ctx.ui.notify("Usage: /kclone [bottom|top|left|right]", "error");
+		const options = parseOptions(args);
+		if (!options) {
+			ctx.ui.notify("Usage: /kclone [latest] [bottom|top|left|right]", "error");
 			return;
 		}
+		const { direction, latest } = options;
 
 		const rex = Boolean(process.env.REX_SESSION || process.env.REX_BLOCK);
 		if (rex && (!process.env.REX_SESSION || !process.env.REX_BLOCK)) {
@@ -353,14 +360,13 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Extension commands run immediately, even while the parent is streaming.
-		// Snapshot the committed branch now; the live response is intentionally
-		// not copied into the new pane.
-		const running = !ctx.isIdle();
-		const sessionPath = await cloneCurrentConversation(
-			ctx.sessionManager,
-			getCloneBranch(ctx.sessionManager, running),
-		);
+		const entries = getCloneBranch(ctx.sessionManager, latest);
+		if (!latest && entries.length === 0) {
+			ctx.ui.notify("No completed reply to clone. Use /kclone latest for the current snapshot.", "warning");
+			return;
+		}
+		// Launch with a session only, never a prompt or --continue.
+		const sessionPath = await cloneCurrentConversation(ctx.sessionManager, entries);
 
 		let cloneResult: CloneResult;
 		try {
@@ -391,9 +397,9 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		ctx.ui.notify(
-			running
-				? `Cloned conversation ${direction} (live response not included)`
-				: `Cloned conversation ${direction}`,
+			latest
+				? `Cloned current snapshot ${direction} (live response not included). Files are shared.`
+				: `Cloned through last completed reply ${direction}. Files are shared.`,
 			"info",
 		);
 	};
