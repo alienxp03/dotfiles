@@ -248,3 +248,6 @@ source "$HOME/.config/zsh/git-prompt.zsh"
 # Syntax highlighting must load after widgets and other input plugins.
 [[ ! -r ${_zsh_plugin_root}zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] || source "${_zsh_plugin_root}zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 unset _zsh_plugin_root
+
+# Hermes Agent command
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
