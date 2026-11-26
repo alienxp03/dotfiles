@@ -2,6 +2,7 @@
 rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
+--[=[ Legacy Raptor disabled; retained for rollback.
 -- raptor: START
 dofile(os.getenv("HOME") .. "/.config/rex/raptor/init.lua").setup({ open_animation = false })
 rex.bind("cmd+shift+o", "raptor")
@@ -37,6 +38,14 @@ ios_bind("ctrl+shift+o", "raptor")
 -- raptor_worktree_new on iOS clients.
 
 -- raptor: END
+]=]
+
+-- Native Lua launcher. Both shortcuts use three keys; no Raptor binary.
+dofile(os.getenv("HOME") .. "/.config/rex/lua/raptor.lua").setup({
+	zoxide = os.getenv("HOME") .. "/.local/share/mise/shims/zoxide",
+})
+rex.bind("cmd+shift+o", "raptor_lua") -- Switch open sessions.
+rex.bind("cmd+shift+n", "raptor_lua_open") -- Zoxide projects / new session.
 
 -- Move between panes with the Neovim-style home row.
 rex.bind("ctrl+h", "pane.focus.left")
@@ -107,8 +116,9 @@ rex.bind("ctrl+t", function(ctx)
 	return tuicr_layer(ctx, { "tuicr", "--working-tree" })
 end)
 
--- Ctrl+Shift+T: review the branch's open PR. iOS keeps Raptor's worktree action.
+-- Ctrl+Shift+T: review the branch's open PR.
 rex.bind("ctrl+shift+t", function(ctx)
+	--[=[ Legacy iOS Raptor fallback disabled with the old plugin.
 	if ctx.client_id ~= nil then
 		local clients = rex.call("client.list")
 		for _, client in ipairs(clients and clients.clients or {}) do
@@ -118,11 +128,13 @@ rex.bind("ctrl+shift+t", function(ctx)
 			end
 		end
 	end
+	]=]
 	if not ctx.session_id then
 		return false
 	end
 	return tuicr_layer(ctx, {
-		"sh", "-c",
+		"sh",
+		"-c",
 		'n="$(gh pr view --json number --jq .number)" && exec tuicr pr "$n" || { echo "no open PR for this branch"; exit 1; }',
 	})
 end)
