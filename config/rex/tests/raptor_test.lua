@@ -95,14 +95,18 @@ local function check(case)
 					end
 				else
 					assert(options.title == "Switch session" and options.allow_other == false)
-					assert(#rows == 2 and rows[1].title == "Origin" and rows[1].detail == "Current")
+					assert(#rows == 3 and rows[1].title == "Origin" and rows[1].detail == "Current")
+					assert(rows[3].id == "manage-pins" and rows[3].title == "Manage pins…")
 					assert(rows[2].title == "app" and rows[2].subtitle == nil)
 				end
 				return case.choice, case.why
 			end,
 		},
 	}
-	dofile("config/rex/lua/raptor.lua").setup({ zoxide = "/tool/zoxide" })
+	dofile("config/rex/lua/raptor.lua").setup({
+		zoxide = "/tool/zoxide",
+		pins_file = "/nonexistent/raptor-tests/pins.json",
+	})
 	assert(actions.raptor_lua_search == nil)
 	local run = actions[case.projects and "raptor_lua_open" or "raptor_lua"]
 	local ok, result = pcall(run, case.remote and { server = "remote", client_id = "C" } or ctx)

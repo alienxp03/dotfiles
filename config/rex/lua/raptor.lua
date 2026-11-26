@@ -1,4 +1,4 @@
--- Standalone Rex-native session/project launcher. No Raptor binary or state.
+-- Standalone Rex-native session/project launcher. No Raptor binary or legacy state.
 -- dofile("/path/to/raptor.lua").setup{ zoxide = "/path/to/zoxide" }
 -- Bind named actions directly: raptor_lua (switch), raptor_lua_open (project).
 local M = {}
@@ -11,6 +11,11 @@ local config = {
 }
 local remembered = {}
 local home = os.getenv("HOME") or ""
+local state_home = os.getenv("XDG_STATE_HOME")
+if not state_home or state_home == "" then
+	state_home = home .. "/.local/state"
+end
+config.pins_file = state_home .. "/rex/raptor-pins.json"
 
 local function fail(message)
 	error("raptor_lua: " .. tostring(message), 0)
@@ -122,19 +127,80 @@ local function open_projects(live)
 	return opened
 end
 
+local function load_pins()
+	local file, err, code = io.open(config.pins_file, "r")
+	if not file then
+		if code == 2 or (err and err:lower():find("no such file", 1, true)) then
+			return {}
+		end
+		fail("cannot read pins: " .. tostring(err))
+	end
+	local contents = file:read("*a")
+	file:close()
+	local ok, state = pcall(rex.json.decode, contents or "")
+	if not ok or type(state) ~= "table" or state.version ~= 1 or type(state.sessions) ~= "table" then
+		fail("invalid pin state; inspect " .. config.pins_file)
+	end
+	for id, pinned in pairs(state.sessions) do
+		if type(id) ~= "string" or pinned ~= true then
+			fail("invalid pin state; inspect " .. config.pins_file)
+		end
+	end
+	return state.sessions
+end
+local function save_pins(pins)
+	local payload, encode_error = rex.json.encode({ version = 1, sessions = pins })
+	if not payload then
+		fail("cannot encode pins: " .. tostring(encode_error))
+	end
+	local dir = config.pins_file:match("^(.*)/[^/]+$") or "."
+	local made, mkdir_error = exec({ "mkdir", "-p", dir })
+	if not made or not made.ok then
+		fail(mkdir_error or "cannot create pin state directory")
+	end
+	-- Stage beside the destination so rename is atomic and failed saves preserve it.
+	local temporary = config.pins_file .. ".tmp-" .. os.time() .. "-" .. math.random(1, 1000000000)
+	local file, open_error = io.open(temporary, "w")
+	if not file then
+		fail("cannot save pins: " .. tostring(open_error))
+	end
+	local wrote, write_error = file:write(payload .. "\n")
+	local closed, close_error = file:close()
+	if not wrote or not closed then
+		os.remove(temporary)
+		fail("cannot save pins: " .. tostring(write_error or close_error))
+	end
+	local renamed, rename_error = os.rename(temporary, config.pins_file)
+	if not renamed then
+		os.remove(temporary)
+		fail("cannot save pins: " .. tostring(rename_error))
+	end
+end
+local function session_entries(ctx, live, pins)
+	local entries = {}
+	-- Stable partition, not a sort by label: preserve Rex's order within each group.
+	for _, pinned_group in ipairs({ true, false }) do
+		for _, session in ipairs(live) do
+			local pinned = pins[session.session_id] == true
+			if pinned == pinned_group then
+				entries[#entries + 1] = {
+					kind = "session",
+					session_id = session.session_id,
+					title = text(session.label or session.session_id),
+					detail = session.session_id == ctx.session_id and "Current" or nil,
+					icon = pinned and "star" or nil,
+				}
+			end
+		end
+	end
+	return entries
+end
+
 local function catalog(ctx, mode)
 	local entries, seen = {}, {}
 	local live = sessions()
 	if mode == "sessions" then
-		for _, session in ipairs(live) do
-			entries[#entries + 1] = {
-				kind = "session",
-				session_id = session.session_id,
-				title = text(session.label or session.session_id),
-				detail = session.session_id == ctx.session_id and "Current" or nil,
-			}
-		end
-		return entries
+		return session_entries(ctx, live, load_pins())
 	end
 	local opened = open_projects(live)
 	local result, err = exec({ config.zoxide, "query", "--list" })
@@ -205,51 +271,114 @@ local function guard(ctx)
 		fail("requires Rex native UI (API revision 17+)")
 	end
 end
-local function run(ctx, mode)
-	guard(ctx)
-	local entries = catalog(ctx, mode)
-	local rows, by_id = {}, {}
-	for index, entry in ipairs(entries) do
-		if index > 2000 then
-			warn("showing the first 2,000 results")
-			break
-		end
-		local id = "row:" .. index
-		by_id[id] = entry
-		rows[#rows + 1] = { id = id, title = entry.title, subtitle = entry.subtitle, detail = entry.detail }
+local function manage_pins(ctx)
+	local live, pins = sessions(), load_pins()
+	if #live > 2000 then
+		fail("too many sessions to edit pins in one native picker")
 	end
-	local choice, why, detail = rex.ui.pick({
-		title = mode == "sessions" and "Switch session" or "Open project",
-		placeholder = mode == "sessions" and "Find an open session" or "Find a project or type ~/path",
+	local rows, offered = {}, {}
+	for _, entry in ipairs(session_entries(ctx, live, pins)) do
+		offered[entry.session_id] = true
+		rows[#rows + 1] = {
+			id = entry.session_id,
+			title = entry.title,
+			detail = entry.detail,
+			icon = entry.icon,
+			selected = pins[entry.session_id] == true,
+		}
+	end
+	local selected, why, detail = rex.ui.pick({
+		title = "Manage pins",
+		placeholder = "Select sessions to pin",
 		items = rows,
-		allow_other = mode == "projects",
+		multiple = true,
+		confirm = "Save pins",
 	})
-	if choice == nil then
+	if selected == nil then
 		if why ~= "cancelled" then
 			fail(tostring(why) .. " " .. (detail or ""))
 		end
 		return
 	end
-	if type(choice) == "table" then
-		if mode ~= "projects" then
-			fail("choose an open session")
-		end
-		return open_directory(ctx, choice.text)
+	if type(selected) ~= "table" then
+		fail("invalid pin selection")
 	end
-	local entry = by_id[choice]
-	if not entry then
-		fail("unknown selection")
-	end
-	if entry.kind == "dir" then
-		return open_directory(ctx, entry.path)
-	end
-	-- A session may have closed while the palette was open.
+	local active, updated = {}, {}
 	for _, session in ipairs(sessions()) do
-		if session.session_id == entry.session_id then
-			return select_session(entry.session_id, entry.window_id)
+		active[session.session_id] = true
+	end
+	for _, id in ipairs(selected) do
+		if not offered[id] then
+			fail("unknown session in pin selection")
+		end
+		if active[id] then
+			updated[id] = true
 		end
 	end
-	fail("session has closed; reopen the picker")
+	save_pins(updated)
+end
+
+local function run(ctx, mode)
+	guard(ctx)
+	while true do
+		local entries = catalog(ctx, mode)
+		local rows, by_id = {}, {}
+		local limit = mode == "sessions" and 1999 or 2000
+		for index, entry in ipairs(entries) do
+			if index > limit then
+				warn("showing the first " .. limit .. " results")
+				break
+			end
+			local id = "row:" .. index
+			by_id[id] = entry
+			rows[#rows + 1] = {
+				id = id,
+				title = entry.title,
+				subtitle = entry.subtitle,
+				detail = entry.detail,
+				icon = entry.icon,
+			}
+		end
+		if mode == "sessions" then
+			rows[#rows + 1] = { id = "manage-pins", title = "Manage pins…" }
+		end
+		local choice, why, detail = rex.ui.pick({
+			title = mode == "sessions" and "Switch session" or "Open project",
+			placeholder = mode == "sessions" and "Find an open session" or "Find a project or type ~/path",
+			items = rows,
+			allow_other = mode == "projects",
+		})
+		if choice == nil then
+			if why ~= "cancelled" then
+				fail(tostring(why) .. " " .. (detail or ""))
+			end
+			return
+		end
+		if mode == "sessions" and choice == "manage-pins" then
+			manage_pins(ctx)
+		-- Return to a fresh session picker after Save or Cancel, without navigation.
+		else
+			if type(choice) == "table" then
+				if mode ~= "projects" then
+					fail("choose an open session")
+				end
+				return open_directory(ctx, choice.text)
+			end
+			local entry = by_id[choice]
+			if not entry then
+				fail("unknown selection")
+			end
+			if entry.kind == "dir" then
+				return open_directory(ctx, entry.path)
+			end
+			for _, session in ipairs(sessions()) do
+				if session.session_id == entry.session_id then
+					return select_session(entry.session_id, entry.window_id)
+				end
+			end
+			fail("session has closed; reopen the picker")
+		end
+	end
 end
 
 local function git(repo, ...)

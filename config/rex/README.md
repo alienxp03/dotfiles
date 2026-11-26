@@ -4,6 +4,7 @@
 - `lua/raptor.lua`: standalone native session/project launcher.
 - `tests/raptor_test.lua`: session/project regression tests.
 - `tests/worktree_test.lua`: worktree action regression tests.
+- `tests/pins_test.lua`: persistent session-pin regression tests.
 
 Mise dotfiles links `init.lua` and `lua/` into `~/.config/rex/` separately,
 leaving installed plugins untouched. The Lua launcher does not depend on the
@@ -33,9 +34,27 @@ to instead. New sessions teach zoxide.
 
 The original Raptor plugin setup/bindings and its iOS review fallback are
 commented out in `init.lua` for rollback. Its files remain installed, but its
-pins, last-session, PR, and instant-agent actions are inactive. Worktree creation
-is provided by the Lua actions described below; the other legacy features are
-not implemented.
+numbered pin shortcuts, last-session, PR, and instant-agent actions are inactive.
+Session pins and worktree creation are provided by the Lua actions described below;
+the other legacy features are not implemented.
+
+## Session pins
+
+In **⇧⌘O**, choose **Manage pins…** at the bottom. The native multi-select picker
+starts with saved pins checked. Toggle sessions, then press **⌘Return** to save.
+Save or Cancel returns to the session picker; it does not switch sessions.
+Pinned sessions have a subtle native star and are supplied first, preserving Rex’s
+original order within pinned/unpinned groups. Rex still controls search scoring.
+There is no extra shortcut or inline pin handler.
+
+Pins live in `$XDG_STATE_HOME/rex/raptor-pins.json`, defaulting to
+`~/.local/state/rex/raptor-pins.json`. The `pins_file` setup option overrides this.
+State is independent of the legacy Raptor pins and is saved by atomic rename.
+Pins use session IDs, surviving config reloads and session renames—not deletion
+and recreation under the same label. Closed sessions are hidden; saving the pin
+editor drops closed IDs. Clearing all checkboxes removes all pins. Cancel changes
+nothing. Unreadable/corrupt state or failed saves report an error rather than
+silently replacing the file. Only sessions are pinnable, not project directories.
 
 ## Worktree creation
 
