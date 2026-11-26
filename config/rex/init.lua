@@ -40,12 +40,17 @@ ios_bind("ctrl+shift+o", "raptor")
 -- raptor: END
 ]=]
 
--- Native Lua launcher. Both shortcuts use three keys; no Raptor binary.
+-- Native Lua launcher. All shortcuts use three keys; no Raptor binary.
 dofile(os.getenv("HOME") .. "/.config/rex/lua/raptor.lua").setup({
 	zoxide = os.getenv("HOME") .. "/.local/share/mise/shims/zoxide",
+	wt = "/opt/homebrew/bin/wt",
+	git = "/opt/homebrew/bin/git",
+	uuidgen = "/usr/bin/uuidgen",
 })
 rex.bind("cmd+shift+o", "raptor_lua") -- Switch open sessions.
 rex.bind("cmd+shift+n", "raptor_lua_open") -- Zoxide projects / new session.
+rex.bind("ctrl+shift+n", "raptor_lua_worktree_instant") -- Random worktree from HEAD.
+rex.bind("cmd+opt+n", "raptor_lua_worktree_named") -- Prompt for worktree branch name.
 
 -- Move between panes with the Neovim-style home row.
 rex.bind("ctrl+h", "pane.focus.left")

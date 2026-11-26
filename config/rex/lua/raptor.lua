@@ -2,7 +2,13 @@
 -- dofile("/path/to/raptor.lua").setup{ zoxide = "/path/to/zoxide" }
 -- Bind named actions directly: raptor_lua (switch), raptor_lua_open (project).
 local M = {}
-local config = { zoxide = "zoxide" }
+local config = {
+	zoxide = "zoxide",
+	git = "git",
+	wt = "wt",
+	uuidgen = "uuidgen",
+	shell = os.getenv("SHELL") or "/bin/sh",
+}
 local remembered = {}
 local home = os.getenv("HOME") or ""
 
@@ -75,7 +81,7 @@ local function cwd(session_id, block_id)
 		block_id = block_id,
 		method = "process",
 	})
-	return result and result.foreground and result.foreground.cwd
+	return result and ((result.foreground and result.foreground.cwd) or (result.child and result.child.cwd))
 end
 local function warn(message)
 	rex.log("warn", "raptor_lua: " .. tostring(message))
@@ -245,6 +251,159 @@ local function run(ctx, mode)
 	end
 	fail("session has closed; reopen the picker")
 end
+
+local function git(repo, ...)
+	local argv = { config.git, "-C", repo }
+	for _, value in ipairs({ ... }) do
+		argv[#argv + 1] = value
+	end
+	local result, err = exec(argv)
+	if not result then
+		fail(err or "could not start git")
+	end
+	return result
+end
+local function checked_output(result, message)
+	if not result.ok then
+		fail(message .. ": " .. text(result.stderr or ""))
+	end
+	return (result.stdout or ""):gsub("\r?\n$", "")
+end
+local function branch_exists(repo, branch)
+	local result = git(repo, "show-ref", "--verify", "--quiet", "refs/heads/" .. branch)
+	if result.ok then
+		return true
+	end
+	if result.code ~= 1 then
+		fail("could not check branch: " .. text(result.stderr or ""))
+	end
+	return false
+end
+local function create_worktree(ctx, named)
+	guard(ctx)
+	local origin = cwd(ctx.session_id, ctx.block_id)
+	if not origin then
+		fail("cannot determine the origin pane's working directory")
+	end
+	origin = canonical(origin)
+	local repo = checked_output(git(origin, "rev-parse", "--show-toplevel"), "not a Git working tree")
+	if repo == "" then
+		fail("not a Git working tree")
+	end
+	-- Freeze the originating checkout's HEAD, not Worktrunk's default branch.
+	local base = checked_output(git(repo, "rev-parse", "--verify", "HEAD^{commit}"), "HEAD has no commit")
+	if not base:match("^%x+$") then
+		fail("invalid HEAD commit")
+	end
+	local available, err = exec({ config.wt, "--version" })
+	if not available or not available.ok then
+		fail(err or "Worktrunk (wt) is unavailable")
+	end
+	local branch
+	if named then
+		local why, detail
+		branch, why, detail = rex.ui.input({
+			title = "New worktree · " .. text(basename(repo)),
+			placeholder = "Branch name",
+			confirm = "Create worktree",
+		})
+		if branch == nil then
+			if why ~= "cancelled" then
+				fail(tostring(why) .. " " .. (detail or ""))
+			end
+			return
+		end
+		branch = branch:gsub("^%s+", ""):gsub("%s+$", "")
+		if branch == "" then
+			return
+		end
+		if branch:sub(1, 1) == "-" or branch == "@" or branch:find("[%z\1-\31\127]") then
+			fail("invalid branch name")
+		end
+		local validated = checked_output(git(repo, "check-ref-format", "--branch", branch), "invalid branch name")
+		if validated ~= branch then
+			fail("use a literal branch name, not a checkout shortcut")
+		end
+		if branch_exists(repo, branch) then
+			fail("branch already exists: " .. text(branch))
+		end
+	else
+		for _ = 1, 8 do
+			local result, random_error = exec({ config.uuidgen })
+			if not result or not result.ok then
+				fail(random_error or "cannot generate a random branch name")
+			end
+			local uuid = (result.stdout or ""):gsub("[\r\n]", ""):lower()
+			if not uuid:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+				fail("invalid random identifier")
+			end
+			local candidate = "task-" .. uuid:sub(1, 8)
+			if not branch_exists(repo, candidate) then
+				branch = candidate
+				break
+			end
+		end
+		if not branch then
+			fail("could not find an unused random branch name")
+		end
+	end
+	-- Worktrunk owns creation, path templates and approvals. Run it in the new
+	-- terminal, never a hidden rex.exec: hook output/errors stay visible. Only
+	-- success starts a shell in the destination; failed panes remain readable.
+	local created = call("session.create", {
+		label = text(basename(repo) .. " · " .. branch):sub(1, 128),
+		initial_windows = {
+			{
+				window_label = branch:sub(1, 128),
+				layout = rex.layout.block({
+					flavor = "com.superlogical.terminal.shell",
+					options = {
+						cwd = repo,
+						shell = "none",
+						exit = { on_completion = false },
+						command = {
+							config.wt,
+							"-C",
+							repo,
+							"switch",
+							"--create",
+							"--no-cd",
+							"--base",
+							base,
+							"--execute",
+							config.shell,
+							branch,
+						},
+					},
+				}),
+			},
+		},
+	})
+	if not created.session_id then
+		fail("session creation returned no identity; inspect Rex before retrying")
+	end
+	local window_id = created.initial_windows and created.initial_windows[1] and created.initial_windows[1].window_id
+	return select_session(created.session_id, window_id)
+end
+
+rex.action({
+	name = "raptor_lua_worktree_instant",
+	title = "Raptor Lua: Instant Worktree",
+	category = "Navigate",
+	description = "Create a random task branch from this pane's HEAD, then open a session. Worktrunk hooks run visibly.",
+	run = function(ctx)
+		return create_worktree(ctx, false)
+	end,
+})
+rex.action({
+	name = "raptor_lua_worktree_named",
+	title = "Raptor Lua: New Worktree…",
+	category = "Navigate",
+	description = "Name a new worktree branch from this pane's HEAD, then open a session.",
+	run = function(ctx)
+		return create_worktree(ctx, true)
+	end,
+})
 
 rex.action({
 	name = "raptor_lua",

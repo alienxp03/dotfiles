@@ -45,6 +45,7 @@ test: lint test-rex
 
 test-rex:
 	lua config/rex/tests/raptor_test.lua
+	lua config/rex/tests/worktree_test.lua
 
 update-all:
 	$(MISE_RUN) run update-all
