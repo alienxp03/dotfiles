@@ -29,9 +29,9 @@ pnpm           = "12.18.0"
 
 # AI agents
 "npm:ccusage"                         = "20.0.50"
-"npm:@anthropic-ai/claude-code"       = { version = "2.1.328", npm_args = "--ignore-scripts=false" }
-"npm:@earendil-works/pi-coding-agent" = "1.5.2"
-"npm:@openai/codex"                   = "0.170.0"
+"npm:@anthropic-ai/claude-code"       = { version = "2.1.332", npm_args = "--ignore-scripts=false" }
+"npm:@earendil-works/pi-coding-agent" = "1.6.1"
+"npm:@openai/codex"                   = "0.172.0"
 "npm:happy"                           = { version = "1.2.6", npm_args = "--ignore-scripts=false" }
 "npm:opencode-ai"                     = { version = "1.19.6", npm_args = "--ignore-scripts=false" }
 "npm:tmux-team"                       = "4.3.0"
