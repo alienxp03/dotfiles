@@ -141,7 +141,12 @@ export default function (pi: ExtensionAPI) {
 							: `${theme.fg(contextColor, formatTokens(context.tokens))} ${theme.fg("dim", "/")} ${theme.fg(contextColor, formatTokens(contextWindow))} ${theme.fg("dim", `(${context.percent?.toFixed(1) ?? "?"}%)`)}`;
 
 					const separator = theme.fg("dim", " | ");
-					const extensionStatus = [...footerData.getExtensionStatuses().values()].join(separator);
+					const statuses = footerData.getExtensionStatuses();
+					const fastStatus = statuses.get("fast");
+					const extensionStatus = [...statuses]
+						.filter(([key]) => key !== "fast")
+						.map(([, status]) => status)
+						.join(separator);
 					const reasoningColors = {
 						off: "thinkingOff",
 						minimal: "thinkingMinimal",
@@ -153,6 +158,7 @@ export default function (pi: ExtensionAPI) {
 					} as const;
 					const primaryLine = [
 						`${theme.fg("muted", model)} ${theme.fg(reasoningColors[reasoning], `(${reasoning})`)}`,
+						fastStatus ? theme.fg("warning", fastStatus) : "",
 						contextUsage,
 						theme.fg("muted", formatElapsed(Date.now() - startedAt)),
 						extensionStatus,
