@@ -2,6 +2,7 @@
 rex.bind("cmd+k", "pane.send_key", { key = "ctrl+l" })
 rex.bind("shift+cmd+k", "session.switch")
 
+--[=[ Legacy Raptor disabled; retained for rollback.
 -- raptor: START
 dofile(os.getenv("HOME") .. "/.config/rex/raptor/init.lua").setup({ open_animation = false })
 rex.bind("cmd+shift+o", "raptor")
@@ -37,12 +38,31 @@ ios_bind("ctrl+shift+o", "raptor")
 -- raptor_worktree_new on iOS clients.
 
 -- raptor: END
+]=]
+
+-- Native Lua launcher. All shortcuts use three keys; no Raptor binary.
+dofile(os.getenv("HOME") .. "/.config/rex/lua/raptor.lua").setup({
+	zoxide = os.getenv("HOME") .. "/.local/share/mise/shims/zoxide",
+	wt = "/opt/homebrew/bin/wt",
+	git = "/opt/homebrew/bin/git",
+	uuidgen = "/usr/bin/uuidgen",
+})
+rex.bind("cmd+shift+o", "raptor_lua") -- Switch open sessions.
+rex.bind("cmd+shift+n", "raptor_lua_open") -- Zoxide projects / new session.
+rex.bind("ctrl+shift+n", "raptor_lua_worktree_instant") -- Random worktree from HEAD.
+rex.bind("cmd+opt+n", "raptor_lua_worktree_named") -- Prompt for worktree branch name.
 
 -- Move between panes with the Neovim-style home row.
 rex.bind("ctrl+h", "pane.focus.left")
 rex.bind("ctrl+j", "pane.focus.down")
 rex.bind("ctrl+k", "pane.focus.up")
 rex.bind("ctrl+l", "pane.focus.right")
+
+-- Swap pane with its neighbor in that direction (mirrors ⇧⌥⌘+arrow).
+rex.bind("cmd+opt+h", "pane.move.left")
+rex.bind("cmd+opt+j", "pane.move.down")
+rex.bind("cmd+opt+k", "pane.move.up")
+rex.bind("cmd+opt+l", "pane.move.right")
 
 -- Open Activity in the quick switcher.
 rex.bind("cmd+shift+.", "pane.view_activity")
@@ -101,8 +121,9 @@ rex.bind("ctrl+t", function(ctx)
 	return tuicr_layer(ctx, { "tuicr", "--working-tree" })
 end)
 
--- Ctrl+Shift+T: review the branch's open PR. iOS keeps Raptor's worktree action.
+-- Ctrl+Shift+T: review the branch's open PR.
 rex.bind("ctrl+shift+t", function(ctx)
+	--[=[ Legacy iOS Raptor fallback disabled with the old plugin.
 	if ctx.client_id ~= nil then
 		local clients = rex.call("client.list")
 		for _, client in ipairs(clients and clients.clients or {}) do
@@ -112,11 +133,13 @@ rex.bind("ctrl+shift+t", function(ctx)
 			end
 		end
 	end
+	]=]
 	if not ctx.session_id then
 		return false
 	end
 	return tuicr_layer(ctx, {
-		"sh", "-c",
+		"sh",
+		"-c",
 		'n="$(gh pr view --json number --jq .number)" && exec tuicr pr "$n" || { echo "no open PR for this branch"; exit 1; }',
 	})
 end)

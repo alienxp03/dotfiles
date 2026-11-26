@@ -118,6 +118,9 @@ if (($+commands[atuin])); then
 		local cache_id=${commands[atuin]:A}
 		cache_id=${cache_id//\//_}
 		_cached_source "atuin-$cache_id" "$commands[atuin]" atuin init zsh || return
+		# Atuin hijacks normal-mode k for its up-search; option+k-style chords
+		# (ESC k) would open it. k is unused here, so restore vi's default.
+		bindkey -M vicmd 'k' up-line-or-history
 		# Older Atuin versions can omit optional widgets such as AI search.
 		local ai_widget=self-atuin-ai-question-mark
 		if [[ ${widgets[$ai_widget]} == user:_atuin_widget_init ]]; then
